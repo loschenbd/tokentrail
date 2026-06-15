@@ -11,6 +11,7 @@ export function runMigrations(db: Database.Database): void {
     // Idempotent ALTER TABLE — SQLite doesn't support ADD COLUMN IF NOT
     // EXISTS, so we probe pragma_table_info and skip when present.
     addColumnIfMissing(db, 'usage_events', 'project_dir', 'TEXT');
+    addColumnIfMissing(db, 'sessions', 'feature_override_name', 'TEXT');
   });
   tx();
 }

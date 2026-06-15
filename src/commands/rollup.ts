@@ -31,6 +31,8 @@ export async function runRollup(): Promise<RollupSummary> {
          COALESCE(e.project_dir, '')             AS project_dir,
          w.feature_key                            AS feature_key,
          w.feature_name                           AS feature_name,
+         s.feature_override                       AS override_key,
+         s.feature_override_name                  AS override_name,
          SUM(e.input_tokens)                      AS in_tokens,
          SUM(e.output_tokens)                     AS out_tokens,
          SUM(e.estimated_cost_usd)                AS cost,
@@ -38,7 +40,11 @@ export async function runRollup(): Promise<RollupSummary> {
        FROM usage_events e
        LEFT JOIN work_units w
          ON w.repo = e.repo AND w.branch = e.branch
-       GROUP BY date(e.timestamp), e.repo, e.branch, e.project_dir, w.feature_key, w.feature_name`
+       LEFT JOIN sessions s
+         ON s.session_id = e.session_id
+       GROUP BY date(e.timestamp), e.repo, e.branch, e.project_dir,
+                w.feature_key, w.feature_name,
+                s.feature_override, s.feature_override_name`
     )
     .all() as Array<{
     date: string;
@@ -47,6 +53,8 @@ export async function runRollup(): Promise<RollupSummary> {
     project_dir: string;
     feature_key: string | null;
     feature_name: string | null;
+    override_key: string | null;
+    override_name: string | null;
     in_tokens: number;
     out_tokens: number;
     cost: number;
@@ -69,24 +77,28 @@ export async function runRollup(): Promise<RollupSummary> {
 
   const buckets = new Map<string, Bucket>();
   for (const r of rows) {
-    let key = r.feature_key;
-    let name = r.feature_name;
-    if (!key || !name) {
-      // No work_units row — synthesize attribution so usage isn't dropped.
-      if (r.branch && r.repo) {
-        const a = attribute({ repo: r.repo, branch: r.branch });
-        key = a.featureKey;
-        name = a.featureName;
-      } else if (r.project_dir) {
-        // No repo/branch but we know which directory Claude ran in.
-        // Bucket by that directory for a more informative trail.
-        const b = bucketFromProjectDir(r.project_dir);
-        key = b.featureKey;
-        name = b.featureName;
-      } else {
-        key = 'untracked';
-        name = 'Untracked sessions';
-      }
+    let key: string | null;
+    let name: string | null;
+    // Per-session override beats everything else. This is how you label
+    // sessions that don't map cleanly to repo+branch — e.g. exploratory
+    // work outside any git repo, or a feature you didn't branch for.
+    if (r.override_key) {
+      key = r.override_key;
+      name = r.override_name ?? r.override_key;
+    } else if (r.feature_key && r.feature_name) {
+      key = r.feature_key;
+      name = r.feature_name;
+    } else if (r.branch && r.repo) {
+      const a = attribute({ repo: r.repo, branch: r.branch });
+      key = a.featureKey;
+      name = a.featureName;
+    } else if (r.project_dir) {
+      const b = bucketFromProjectDir(r.project_dir);
+      key = b.featureKey;
+      name = b.featureName;
+    } else {
+      key = 'untracked';
+      name = 'Untracked sessions';
     }
     const id = `${r.date}::${key}`;
     let b = buckets.get(id);

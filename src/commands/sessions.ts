@@ -13,6 +13,8 @@ type Row = {
   repo: string | null;
   branch: string | null;
   feature_key: string | null;
+  override_key: string | null;
+  override_name: string | null;
   cost: number;
   events: number;
   first_seen_at: string | null;
@@ -30,7 +32,13 @@ export async function runSessions(opts: SessionsOptions): Promise<void> {
     filterClauses.push(`(e.repo IS NULL OR e.repo = '')`);
   }
   if (opts.feature) {
-    filterClauses.push(`COALESCE(w.feature_key, '') LIKE '%' || @feature || '%'`);
+    // Match against the session's override OR its work-unit-derived key,
+    // so the filter agrees with what `tokentrail report` uses as the
+    // bucket name.
+    filterClauses.push(
+      `(COALESCE(s.feature_override, '') LIKE '%' || @feature || '%'
+        OR COALESCE(w.feature_key, '') LIKE '%' || @feature || '%')`
+    );
   }
   const where = filterClauses.length ? `WHERE ${filterClauses.join(' AND ')}` : '';
 
@@ -40,6 +48,8 @@ export async function runSessions(opts: SessionsOptions): Promise<void> {
          s.session_id,
          s.title,
          s.project_dir,
+         s.feature_override AS override_key,
+         s.feature_override_name AS override_name,
          e.repo,
          e.branch,
          w.feature_key,
@@ -70,7 +80,10 @@ export async function runSessions(opts: SessionsOptions): Promise<void> {
       ? `${r.repo}#${r.branch ?? '?'}`
       : trimHome(r.project_dir) ?? '(no project dir)';
     const title = r.title ?? '(no first prompt)';
-    console.log(`${date}  ${cost.padStart(10)}  ${bucket}`);
+    const labelTag = r.override_key
+      ? `  [label: ${r.override_key}]`
+      : '';
+    console.log(`${date}  ${cost.padStart(10)}  ${bucket}${labelTag}`);
     console.log(`           ${r.session_id.slice(0, 8)}…  ${title}`);
     console.log('');
   }

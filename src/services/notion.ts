@@ -186,8 +186,20 @@ const MAX_SESSIONS_IN_BODY = 30;
 const MAX_COMMITS_IN_BODY = 30;
 const MAX_PRS_IN_BODY = 20;
 
-export function buildRollupBody(ctx: RollupBodyContext): NotionBlock[] {
+export function buildRollupBody(ctx: RollupBodyContext, opts?: { dashboardUrl?: string }): NotionBlock[] {
   const blocks: NotionBlock[] = [];
+
+  if (opts?.dashboardUrl) {
+    blocks.push({
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: [
+          { type: 'text', text: { content: 'View on dashboard →', link: { url: opts.dashboardUrl } } },
+        ],
+      },
+    });
+  }
 
   // Sessions section.
   if (ctx.sessions.length > 0) {

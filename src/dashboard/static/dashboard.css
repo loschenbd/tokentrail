@@ -125,3 +125,32 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 
 /* uPlot color overrides */
 .u-legend { font-family: var(--font-sans); font-size: var(--size-small); color: var(--color-ink-muted); }
+
+.single-col { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-l); }
+.session-row {
+  display: grid;
+  grid-template-columns: 56px 96px 80px 1fr auto;
+  gap: var(--space-s);
+  padding: 6px 4px;
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(139,111,71,0.2);
+  font-size: var(--size-body);
+}
+.session-row:hover { background: rgba(255,255,255,0.4); }
+.session-details {
+  display: none;
+  padding: var(--space-s) var(--space-m) var(--space-m) var(--space-m);
+  background: rgba(255,255,255,0.3);
+  border-bottom: 1px dashed rgba(139,111,71,0.2);
+}
+.session-details.open { display: block; }
+.sub-label {
+  font-family: var(--font-serif);
+  font-size: var(--size-label);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--color-ink-muted);
+  margin-top: var(--space-s);
+  margin-bottom: 4px;
+}
+.pr-row { font-size: var(--size-small); padding: 3px 0; }

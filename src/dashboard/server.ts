@@ -7,6 +7,8 @@ import { buildOverview } from './data/overview.js';
 import { renderOverview } from './render/overview.js';
 import { renderShell } from './render/shell.js';
 import { tokensCss } from './tokens.js';
+import { buildFeatureDetail } from './data/feature.js';
+import { renderFeature } from './render/feature.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
 
@@ -21,6 +23,18 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     const body = renderOverview(vm);
     reply.type('text/html; charset=utf-8');
     return renderShell({ title: 'Tokentrail · Overview', activeTab: 'overview', days }, body);
+  });
+
+  app.get<{ Params: { key: string } }>('/feature/:key', async (req, reply) => {
+    const days = parseDays(req.query, opts.defaultDays);
+    const vm = buildFeatureDetail(getDb(), { featureKey: req.params.key, days });
+    if (!vm) {
+      reply.code(404).type('text/html; charset=utf-8');
+      return renderShell({ title: 'Feature not found', days, showBack: true }, '<div class="card"><div class="hero">Not found</div></div>');
+    }
+    const body = renderFeature(vm);
+    reply.type('text/html; charset=utf-8');
+    return renderShell({ title: `${vm.featureName} · Tokentrail`, activeTab: 'feature', days, showBack: true }, body);
   });
 
   // Static asset serving — small bespoke handler instead of @fastify/static

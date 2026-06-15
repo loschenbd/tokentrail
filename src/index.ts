@@ -18,6 +18,36 @@ program
   });
 
 program
+  .command('report')
+  .description('Follow token usage across recent work.')
+  .option('--days <n>', 'Number of days to include (default 30)', '30')
+  .option('--repo <slug>', 'Filter to a specific repo (substring match).')
+  .option('--feature <key>', 'Filter to a specific feature (substring match).')
+  .action(async (opts: { days?: string; repo?: string; feature?: string }) => {
+    const { runReport } = await import('./commands/report.js');
+    await runReport({
+      days: Number.parseInt(opts.days ?? '30', 10),
+      repo: opts.repo,
+      feature: opts.feature,
+    });
+  });
+
+program
+  .command('trail')
+  .description('Alias for `report`.')
+  .option('--days <n>', 'Number of days to include (default 30)', '30')
+  .option('--repo <slug>', 'Filter to a specific repo (substring match).')
+  .option('--feature <key>', 'Filter to a specific feature (substring match).')
+  .action(async (opts: { days?: string; repo?: string; feature?: string }) => {
+    const { runReport } = await import('./commands/report.js');
+    await runReport({
+      days: Number.parseInt(opts.days ?? '30', 10),
+      repo: opts.repo,
+      feature: opts.feature,
+    });
+  });
+
+program
   .command('rollup')
   .description('Aggregate events into daily feature rollups.')
   .action(async () => {

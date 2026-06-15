@@ -29,6 +29,7 @@ tokentrail rollup      # Aggregate events into daily feature rollups.
 tokentrail report      # Follow token usage across recent work.
 tokentrail sessions    # List sessions by cost to scan for attribution.
 tokentrail commits     # Capture or show git commits authored per session.
+tokentrail prs         # Capture or show GitHub PRs linked to each session.
 tokentrail label       # Set, clear, or list per-session feature overrides.
 tokentrail sync        # Sync the latest ledger entries to Notion.
 tokentrail run-all     # Walk the full trail end-to-end.
@@ -73,6 +74,27 @@ Required properties (names are exact):
 By default `sync` only re-pushes rollups whose `updated_at` is newer than
 their last successful Notion sync. Use `--force` to re-push everything,
 or `--days N` to restrict to a recent window.
+
+### Page bodies
+
+On page **create**, Tokentrail writes a structured body to each Notion
+rollup page with three sections:
+
+- **Sessions** — title and cost of each session in the rollup.
+- **Pull Requests** — PR title/state with a link to GitHub.
+- **Commits** — commit subject with a link to the SHA on GitHub.
+
+Page **updates** leave the body alone by default (rewriting on every
+sync would burn through Notion's rate limit). When you want to refresh
+existing bodies — e.g. after `tokentrail commits --backfill` or
+`tokentrail prs --backfill` — pass `--rebuild-bodies`:
+
+```
+tokentrail sync --force --rebuild-bodies
+```
+
+This lists, deletes, and re-appends every page's body content. Slow,
+but only needed occasionally.
 
 ## Hook setup
 

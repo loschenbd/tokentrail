@@ -1,10 +1,20 @@
 import { getDb } from '../db/db.js';
-import { NotionService, type RollupPagePayload } from '../services/notion.js';
+import {
+  NotionService,
+  buildRollupBody,
+  type RollupBodyContext,
+  type RollupPagePayload,
+} from '../services/notion.js';
 
 export type SyncOptions = {
   days?: number;
   force?: boolean;
   delayMs?: number;
+  // Re-write the page BODY (Sessions / PRs / Commits sections) for
+  // every rollup synced this run. Heavy — issues list+delete+append
+  // per page. Use when adding the body feature for the first time or
+  // after substantial data changes; not needed for routine syncs.
+  rebuildBodies?: boolean;
 };
 
 export type SyncSummary = {
@@ -50,7 +60,7 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
       `SELECT
          id, date, feature_key, feature_name, repo, branches,
          total_input_tokens, total_output_tokens, total_cost_usd,
-         sessions_count, notion_page_id, commit_summary
+         sessions_count, notion_page_id, commit_summary, session_ids
        FROM feature_rollups
        WHERE ${where}
        ORDER BY date DESC, total_cost_usd DESC`
@@ -68,6 +78,7 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
     sessions_count: number;
     notion_page_id: string | null;
     commit_summary: string | null;
+    session_ids: string | null;
   }>;
 
   if (rows.length === 0) {
@@ -79,12 +90,37 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
   const markSynced = db.prepare(`
     UPDATE feature_rollups
     SET notion_page_id = @page_id,
-        synced_to_notion_at = datetime('now')
+        synced_to_notion_at = datetime('now'),
+        body_synced_at = COALESCE(@body_synced_at, body_synced_at)
     WHERE id = @id
+  `);
+
+  // Prepared statements for body context lookup.
+  const sessionsForRollup = db.prepare(`
+    SELECT s.session_id, s.title,
+           (SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM usage_events e
+            WHERE e.session_id = s.session_id) AS cost
+    FROM sessions s
+    WHERE s.session_id IN (SELECT value FROM json_each(?))
+    ORDER BY cost DESC
+  `);
+  const commitsForRollup = db.prepare(`
+    SELECT commit_sha AS sha, subject, repo
+    FROM session_commits
+    WHERE session_id IN (SELECT value FROM json_each(?))
+    ORDER BY authored_at
+  `);
+  const prsForRollup = db.prepare(`
+    SELECT repo, pr_number AS prNumber, pr_title AS title,
+           pr_url AS url, pr_state AS state
+    FROM session_prs
+    WHERE session_id IN (SELECT value FROM json_each(?))
+    ORDER BY repo, pr_number
   `);
 
   let upserted = 0;
   let skipped = 0;
+  let bodiesWritten = 0;
   const delayMs = opts.delayMs ?? 350;
 
   for (const r of rows) {
@@ -105,21 +141,109 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
     if (!pageId) {
       pageId = await notion.findExistingPage(r.feature_key, r.date);
     }
-    const writtenId = await notion.upsertPage(payload, pageId);
-    if (writtenId) {
-      markSynced.run({ id: r.id, page_id: writtenId });
-      upserted++;
-    } else {
+
+    // Build body context once per row — both the create path (children)
+    // and the rebuild path (rebuildPageBody) use the same shape.
+    const sessionIds = (r.session_ids ?? '')
+      .split(',')
+      .filter((s) => s.length > 0);
+    const body = sessionIds.length > 0
+      ? buildBodyContext(sessionIds, {
+          sessionsForRollup,
+          commitsForRollup,
+          prsForRollup,
+        })
+      : null;
+    const children = body ? buildRollupBody(body) : [];
+
+    const result = await notion.upsertPage(
+      payload,
+      pageId,
+      children.length > 0 ? children : undefined
+    );
+    if (!result) {
       skipped++;
+      if (delayMs > 0) await sleep(delayMs);
+      continue;
     }
+
+    let bodySyncedAt: string | null = null;
+    if (result.created) {
+      // pages.create already wrote the children — stamp body_synced_at.
+      bodySyncedAt = new Date().toISOString();
+      bodiesWritten++;
+    } else if (opts.rebuildBodies && children.length > 0) {
+      // For existing pages, rebuild the body when explicitly requested.
+      const ok = await notion.rebuildPageBody(result.pageId, children);
+      if (ok) {
+        bodySyncedAt = new Date().toISOString();
+        bodiesWritten++;
+      }
+      // Heavy operation — give Notion extra breathing room afterward.
+      if (delayMs > 0) await sleep(delayMs);
+    }
+
+    markSynced.run({
+      id: r.id,
+      page_id: result.pageId,
+      body_synced_at: bodySyncedAt,
+    });
+    upserted++;
     if (delayMs > 0) await sleep(delayMs);
   }
 
+  const bodyNote = bodiesWritten > 0
+    ? ` (${bodiesWritten} ${bodiesWritten === 1 ? 'body' : 'bodies'} written)`
+    : '';
   console.log(
     `Notion sync complete: ${upserted} page${upserted === 1 ? '' : 's'} ` +
-      `upserted, ${skipped} skipped.`
+      `upserted, ${skipped} skipped${bodyNote}.`
   );
   return { scanned: rows.length, upserted, skipped };
+}
+
+function buildBodyContext(
+  sessionIds: string[],
+  prepared: {
+    sessionsForRollup: ReturnType<typeof getDb>['prepare'] extends (s: string) => infer R
+      ? R
+      : never;
+    commitsForRollup: ReturnType<typeof getDb>['prepare'] extends (s: string) => infer R
+      ? R
+      : never;
+    prsForRollup: ReturnType<typeof getDb>['prepare'] extends (s: string) => infer R
+      ? R
+      : never;
+  }
+): RollupBodyContext {
+  const json = JSON.stringify(sessionIds);
+  const sessions = (prepared.sessionsForRollup.all(json) as Array<{
+    session_id: string;
+    title: string | null;
+    cost: number;
+  }>).map((r) => ({
+    sessionId: r.session_id,
+    title: r.title,
+    cost: r.cost ?? 0,
+  }));
+  const commits = (prepared.commitsForRollup.all(json) as Array<{
+    sha: string;
+    subject: string;
+    repo: string | null;
+  }>).map((r) => ({ sha: r.sha, subject: r.subject, repo: r.repo }));
+  // Dedupe PRs across sessions (multiple sessions can point at the same PR).
+  const prMap = new Map<string, RollupBodyContext['prs'][number]>();
+  for (const p of prepared.prsForRollup.all(json) as Array<{
+    repo: string;
+    prNumber: number;
+    title: string;
+    url: string;
+    state: string;
+  }>) {
+    const k = `${p.repo}#${p.prNumber}`;
+    if (!prMap.has(k)) prMap.set(k, p);
+  }
+  return { sessions, commits, prs: [...prMap.values()] };
 }
 
 function sleep(ms: number): Promise<void> {

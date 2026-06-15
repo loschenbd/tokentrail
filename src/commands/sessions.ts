@@ -20,6 +20,7 @@ type Row = {
   first_seen_at: string | null;
   commit_count: number;
   first_commit_subject: string | null;
+  pr_count: number;
 };
 
 export async function runSessions(opts: SessionsOptions): Promise<void> {
@@ -60,7 +61,8 @@ export async function runSessions(opts: SessionsOptions): Promise<void> {
          MIN(e.timestamp) AS first_seen_at,
          (SELECT COUNT(*) FROM session_commits c WHERE c.session_id = s.session_id) AS commit_count,
          (SELECT c.subject FROM session_commits c WHERE c.session_id = s.session_id
-            ORDER BY c.authored_at LIMIT 1) AS first_commit_subject
+            ORDER BY c.authored_at LIMIT 1) AS first_commit_subject,
+         (SELECT COUNT(*) FROM session_prs p WHERE p.session_id = s.session_id) AS pr_count
        FROM usage_events e
        JOIN sessions s ON s.session_id = e.session_id
        LEFT JOIN work_units w ON w.repo = e.repo AND w.branch = e.branch
@@ -93,6 +95,11 @@ export async function runSessions(opts: SessionsOptions): Promise<void> {
     if (r.commit_count > 0 && r.first_commit_subject) {
       const more = r.commit_count > 1 ? ` (+${r.commit_count - 1} more)` : '';
       console.log(`           commits: ${r.first_commit_subject}${more}`);
+    }
+    if (r.pr_count > 0) {
+      console.log(
+        `           PRs: ${r.pr_count} linked`
+      );
     }
     console.log('');
   }

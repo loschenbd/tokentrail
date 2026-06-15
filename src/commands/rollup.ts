@@ -140,11 +140,11 @@ export async function runRollup(): Promise<RollupSummary> {
     INSERT INTO feature_rollups (
       id, date, feature_key, feature_name, repo, branches,
       total_input_tokens, total_output_tokens, total_cost_usd, sessions_count,
-      commit_summary
+      commit_summary, session_ids
     ) VALUES (
       @id, @date, @feature_key, @feature_name, @repo, @branches,
       @total_input_tokens, @total_output_tokens, @total_cost_usd, @sessions_count,
-      @commit_summary
+      @commit_summary, @session_ids
     )
     ON CONFLICT(date, feature_key) DO UPDATE SET
       feature_name        = excluded.feature_name,
@@ -155,6 +155,7 @@ export async function runRollup(): Promise<RollupSummary> {
       total_cost_usd      = excluded.total_cost_usd,
       sessions_count      = excluded.sessions_count,
       commit_summary      = excluded.commit_summary,
+      session_ids         = excluded.session_ids,
       updated_at          = datetime('now')
   `);
 
@@ -207,6 +208,7 @@ export async function runRollup(): Promise<RollupSummary> {
         total_cost_usd: round2(b.cost),
         sessions_count: b.sessions,
         commit_summary: commitSummary,
+        session_ids: [...b.sessionIds].sort().join(','),
       });
       rowsUpserted++;
     }

@@ -48,6 +48,11 @@ export class GitHubService {
         linkedIssue: parseLinkedIssue(pr.body),
       };
     } catch (err) {
+      // 404 from this endpoint just means "no PR with that head" — common
+      // for branches that were merged + deleted, or never PR'd. Silence
+      // those; surface only unexpected failures (auth, rate limit, etc.).
+      const status = (err as { status?: number })?.status;
+      if (status === 404) return null;
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`  github: ${owner}/${repo}#${branch} lookup failed: ${msg}`);
       return null;

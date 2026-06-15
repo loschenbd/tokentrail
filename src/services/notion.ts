@@ -1,5 +1,30 @@
 import { Client } from '@notionhq/client';
 
+// Notion block-children types we need. We keep them as a loose `any`
+// payload type because @notionhq/client's generated types are heavy
+// and we're only ever constructing a handful of block shapes.
+export type NotionBlock = Record<string, unknown>;
+
+export type SessionRef = {
+  sessionId: string;
+  title: string | null;
+  cost: number;
+};
+
+export type CommitRef = {
+  sha: string;
+  subject: string;
+  repo: string | null;
+};
+
+export type PrRef = {
+  repo: string;
+  prNumber: number;
+  title: string;
+  url: string;
+  state: string;
+};
+
 // Property names in the target Notion database. Update here if the
 // schema differs from what's documented in the README.
 export const NOTION_PROPS = {
@@ -68,8 +93,9 @@ export class NotionService {
 
   async upsertPage(
     payload: RollupPagePayload,
-    existingPageId: string | null
-  ): Promise<string | null> {
+    existingPageId: string | null,
+    children?: NotionBlock[]
+  ): Promise<{ pageId: string; created: boolean } | null> {
     const properties = buildProperties(payload);
     try {
       if (existingPageId) {
@@ -77,13 +103,15 @@ export class NotionService {
           page_id: existingPageId,
           properties,
         });
-        return existingPageId;
+        return { pageId: existingPageId, created: false };
       }
       const res = await this.client.pages.create({
         parent: { database_id: this.databaseId },
         properties,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        children: (children ?? []) as any,
       });
-      return res.id;
+      return { pageId: res.id, created: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(
@@ -92,6 +120,161 @@ export class NotionService {
       return null;
     }
   }
+
+  // Delete all top-level children of a page, then append new ones. Used
+  // by `tokentrail sync --rebuild-bodies` to refresh existing pages whose
+  // body was empty (created before this feature) or stale.
+  async rebuildPageBody(
+    pageId: string,
+    children: NotionBlock[]
+  ): Promise<boolean> {
+    try {
+      // List + delete existing children. Notion paginates; loop until done.
+      let cursor: string | undefined;
+      const toDelete: string[] = [];
+      do {
+        const res = await this.client.blocks.children.list({
+          block_id: pageId,
+          start_cursor: cursor,
+          page_size: 100,
+        });
+        for (const block of res.results) {
+          if ('id' in block && typeof block.id === 'string') {
+            toDelete.push(block.id);
+          }
+        }
+        cursor = res.has_more ? res.next_cursor ?? undefined : undefined;
+      } while (cursor);
+
+      for (const blockId of toDelete) {
+        await this.client.blocks.delete({ block_id: blockId });
+      }
+
+      // Append in batches of 100 (Notion API cap).
+      for (let i = 0; i < children.length; i += 100) {
+        const slice = children.slice(i, i + 100);
+        await this.client.blocks.children.append({
+          block_id: pageId,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          children: slice as any,
+        });
+      }
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`  notion: rebuild body failed for ${pageId}: ${msg}`);
+      return false;
+    }
+  }
+}
+
+// ─── Page body builder ──────────────────────────────────────────────
+
+export type RollupBodyContext = {
+  sessions: SessionRef[];
+  commits: CommitRef[];
+  prs: PrRef[];
+};
+
+const MAX_SESSIONS_IN_BODY = 30;
+const MAX_COMMITS_IN_BODY = 30;
+const MAX_PRS_IN_BODY = 20;
+
+export function buildRollupBody(ctx: RollupBodyContext): NotionBlock[] {
+  const blocks: NotionBlock[] = [];
+
+  // Sessions section.
+  if (ctx.sessions.length > 0) {
+    blocks.push(heading('Sessions'));
+    const shown = ctx.sessions.slice(0, MAX_SESSIONS_IN_BODY);
+    for (const s of shown) {
+      const cost = '$' + s.cost.toFixed(2);
+      const title = s.title?.trim() || '(no first prompt)';
+      const idShort = s.sessionId.slice(0, 8);
+      blocks.push(bullet([plain(`${cost} · ${idShort} — ${truncate(title, 200)}`)]));
+    }
+    if (ctx.sessions.length > shown.length) {
+      blocks.push(
+        bullet([plain(`(+${ctx.sessions.length - shown.length} more sessions)`)])
+      );
+    }
+  }
+
+  // Pull Requests section.
+  if (ctx.prs.length > 0) {
+    blocks.push(heading('Pull Requests'));
+    const shown = ctx.prs.slice(0, MAX_PRS_IN_BODY);
+    for (const pr of shown) {
+      blocks.push(
+        bullet([
+          plain(`[${pr.state}] `),
+          link(`${pr.repo}#${pr.prNumber}`, pr.url),
+          plain(`  ${truncate(pr.title, 180)}`),
+        ])
+      );
+    }
+    if (ctx.prs.length > shown.length) {
+      blocks.push(
+        bullet([plain(`(+${ctx.prs.length - shown.length} more PRs)`)])
+      );
+    }
+  }
+
+  // Commits section.
+  if (ctx.commits.length > 0) {
+    blocks.push(heading('Commits'));
+    const shown = ctx.commits.slice(0, MAX_COMMITS_IN_BODY);
+    for (const c of shown) {
+      const shaShort = c.sha.slice(0, 8);
+      const url = c.repo
+        ? `https://github.com/${c.repo}/commit/${c.sha}`
+        : null;
+      const runs = [];
+      if (url) {
+        runs.push(link(shaShort, url));
+      } else {
+        runs.push(plain(shaShort));
+      }
+      runs.push(plain(`  ${truncate(c.subject, 200)}`));
+      blocks.push(bullet(runs));
+    }
+    if (ctx.commits.length > shown.length) {
+      blocks.push(
+        bullet([plain(`(+${ctx.commits.length - shown.length} more commits)`)])
+      );
+    }
+  }
+
+  return blocks;
+}
+
+function heading(text: string): NotionBlock {
+  return {
+    object: 'block',
+    type: 'heading_2',
+    heading_2: { rich_text: [plain(text)] },
+  };
+}
+
+function bullet(richText: NotionBlock[]): NotionBlock {
+  return {
+    object: 'block',
+    type: 'bulleted_list_item',
+    bulleted_list_item: { rich_text: richText },
+  };
+}
+
+function plain(content: string): NotionBlock {
+  return { type: 'text', text: { content } };
+}
+
+function link(content: string, url: string): NotionBlock {
+  return { type: 'text', text: { content, link: { url } } };
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1).trimEnd() + '…';
 }
 
 function buildProperties(p: RollupPagePayload) {

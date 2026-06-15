@@ -77,17 +77,10 @@ export function buildOverview(
 
   const recentCommits = db
     .prepare(`
-      SELECT sc.commit_sha AS sha, sc.subject,
-             sp.repo,
-             sc.authored_at AS authoredAt
-      FROM session_commits sc
-      LEFT JOIN (
-        SELECT session_id, MIN(repo) AS repo
-        FROM session_prs
-        GROUP BY session_id
-      ) sp ON sp.session_id = sc.session_id
-      WHERE sc.authored_at IS NOT NULL
-      ORDER BY sc.authored_at DESC
+      SELECT commit_sha AS sha, subject, repo, authored_at AS authoredAt
+      FROM session_commits
+      WHERE authored_at IS NOT NULL
+      ORDER BY authored_at DESC
       LIMIT 10
     `)
     .all() as OverviewVM['recentCommits'];

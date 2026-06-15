@@ -9,6 +9,8 @@ import { renderShell } from './render/shell.js';
 import { tokensCss } from './tokens.js';
 import { buildFeatureDetail } from './data/feature.js';
 import { renderFeature } from './render/feature.js';
+import { buildWorthALook } from './data/worth-a-look.js';
+import { renderWorthALook } from './render/worth-a-look.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
 
@@ -35,6 +37,12 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     const body = renderFeature(vm);
     reply.type('text/html; charset=utf-8');
     return renderShell({ title: `${vm.featureName} · Tokentrail`, activeTab: 'feature', days, showBack: true }, body);
+  });
+
+  app.get('/worth-a-look', async (_req, reply) => {
+    const vm = buildWorthALook(getDb());
+    reply.type('text/html; charset=utf-8');
+    return renderShell({ title: 'Worth a look · Tokentrail', activeTab: 'worth-a-look', days: opts.defaultDays, showBack: true }, renderWorthALook(vm));
   });
 
   // Static asset serving — small bespoke handler instead of @fastify/static

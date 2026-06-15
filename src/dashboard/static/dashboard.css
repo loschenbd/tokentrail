@@ -154,3 +154,13 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   margin-bottom: 4px;
 }
 .pr-row { font-size: var(--size-small); padding: 3px 0; }
+
+.anomaly-full {
+  display: grid;
+  grid-template-columns: 100px 110px 1fr 2fr;
+  gap: var(--space-s);
+  padding: 6px 4px;
+  border-bottom: 1px dashed rgba(139,111,71,0.2);
+  font-size: var(--size-body);
+}
+.anomaly-kind { color: var(--color-ink-muted); font-family: var(--font-mono); font-size: var(--size-small); }

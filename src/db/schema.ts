@@ -115,4 +115,25 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
 
   `CREATE INDEX IF NOT EXISTS idx_session_prs_session
     ON session_prs (session_id)`,
+
+  // Anomalies are derived from feature_rollups + usage_events at rollup time.
+  // Recomputed from scratch each rollup run except for rows with a non-null
+  // dismissed_at, which are preserved.
+  `CREATE TABLE IF NOT EXISTS anomalies (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind            TEXT NOT NULL,
+    date            TEXT NOT NULL,
+    feature_key     TEXT,
+    session_id      TEXT,
+    amount          REAL NOT NULL,
+    baseline        REAL NOT NULL,
+    multiplier      REAL NOT NULL,
+    reason          TEXT NOT NULL,
+    dismissed_at    TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(kind, date, feature_key, session_id)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_anomalies_date ON anomalies (date)`,
+  `CREATE INDEX IF NOT EXISTS idx_anomalies_active ON anomalies (dismissed_at)`,
 ];

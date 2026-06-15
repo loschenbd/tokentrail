@@ -17,4 +17,17 @@ program
     await runIngest();
   });
 
+program
+  .command('enrich')
+  .description('Pull PR metadata from GitHub for branches we have seen.')
+  .option('--force', 'Re-enrich rows that have already been enriched.')
+  .option('--delay <ms>', 'Sleep between GitHub requests (default 250)', '250')
+  .action(async (opts: { force?: boolean; delay?: string }) => {
+    const { runEnrich } = await import('./commands/enrich.js');
+    await runEnrich({
+      force: opts.force ?? false,
+      delayMs: Number.parseInt(opts.delay ?? '250', 10),
+    });
+  });
+
 program.parseAsync(process.argv);

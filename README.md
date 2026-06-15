@@ -90,6 +90,30 @@ To install, for each repo you want tracked:
 The hook is read-only with respect to your repo: it only reads `git
 rev-parse` output and appends to its own log file.
 
+## Automation
+
+`tokentrail run-all` walks the full trail in one command: ingest, enrich,
+roll up, and sync.
+
+```
+tokentrail run-all                # everything
+tokentrail run-all --skip-sync    # local-only (no Notion)
+tokentrail run-all --skip-enrich  # skip GitHub PR lookup too
+```
+
+For an unattended refresh, point cron (or a launchd job) at
+`scripts/cron.sh`. The wrapper sources `.env`, normalizes `PATH` so node
+is reachable when launchd strips the user environment, and stamps a log
+line on start and end.
+
+```
+# Every 30 minutes, append to ~/.tokentrail.cron.log
+*/30 * * * * /ABSOLUTE/PATH/TO/tokentrail/scripts/cron.sh >> $HOME/.tokentrail.cron.log 2>&1
+```
+
+Set `TOKENTRAIL_FLAGS=--skip-sync` in the crontab line for a local-only
+refresh.
+
 ## Limits and caveats
 
 - All dollar values are **estimated**, computed from the configured rate card.

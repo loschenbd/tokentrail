@@ -83,4 +83,17 @@ program
     });
   });
 
+program
+  .command('run-all')
+  .description('Walk the full trail: ingest → enrich → rollup → sync.')
+  .option('--skip-sync', 'Stop before the Notion sync step.')
+  .option('--skip-enrich', 'Skip the GitHub enrichment step.')
+  .action(async (opts: { skipSync?: boolean; skipEnrich?: boolean }) => {
+    const { runAll } = await import('./commands/run-all.js');
+    await runAll({
+      skipSync: opts.skipSync ?? false,
+      skipEnrich: opts.skipEnrich ?? false,
+    });
+  });
+
 program.parseAsync(process.argv);

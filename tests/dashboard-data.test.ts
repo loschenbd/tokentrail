@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import type DatabaseType from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';
 import { buildOverview } from '../src/dashboard/data/overview.js';
+import { buildFeatureDetail } from '../src/dashboard/data/feature.js';
 
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3') as typeof DatabaseType;
@@ -71,6 +72,38 @@ describe('buildOverview', () => {
     assert.ok(totals.includes(10));
     assert.ok(totals.includes(20));
     assert.equal(totals.filter((t) => t === 0).length, 5);
+  });
+});
+
+describe('buildFeatureDetail', () => {
+  test('returns null when feature has no rollups', () => {
+    const db = makeDb();
+    const vm = buildFeatureDetail(db, { featureKey: 'missing', days: 30 });
+    assert.equal(vm, null);
+  });
+
+  test('aggregates rollups, sessions, commits, PRs for a feature', () => {
+    const db = makeDb();
+    db.exec(`
+      INSERT INTO feature_rollups (id, date, feature_key, feature_name, total_cost_usd, sessions_count, session_ids, branches)
+      VALUES ('r1', date('now','-1 days'), 'rag', 'Local RAG', 100, 1, 's1', 'feat/rag');
+      INSERT INTO sessions (session_id, title, project_dir, first_seen_at, last_seen_at)
+      VALUES ('s1', 'Build the RAG', '/repo/rag', date('now','-1 days'), date('now','-1 days'));
+      INSERT INTO usage_events (id, session_id, timestamp, model, estimated_cost_usd)
+      VALUES ('e1', 's1', datetime('now','-1 days'), 'opus', 100);
+      INSERT INTO session_commits (session_id, commit_sha, subject, authored_at, repo)
+      VALUES ('s1', 'abcdef0', 'Add retriever', datetime('now','-1 days'), 'me/rag');
+      INSERT INTO session_prs (session_id, repo, pr_number, pr_title, pr_url, pr_state, head_branch)
+      VALUES ('s1', 'me/rag', 7, 'Add retriever', 'https://github.com/me/rag/pull/7', 'open', 'feat/rag');
+    `);
+    const vm = buildFeatureDetail(db, { featureKey: 'rag', days: 30 });
+    assert.ok(vm);
+    assert.equal(vm!.featureKey, 'rag');
+    assert.equal(vm!.totalUsd, 100);
+    assert.equal(vm!.sessions.length, 1);
+    assert.equal(vm!.sessions[0]!.commits.length, 1);
+    assert.equal(vm!.sessions[0]!.prs.length, 1);
+    assert.equal(vm!.sessions[0]!.prs[0]!.prNumber, 7);
   });
 });
 

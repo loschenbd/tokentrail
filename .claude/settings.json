@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/benjaminloschen/Projects/tokentrail/src/hooks/session-end.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

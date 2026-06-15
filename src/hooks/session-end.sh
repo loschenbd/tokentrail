@@ -29,25 +29,38 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 CWD="$PWD"
-TS="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+# macOS `date` doesn't support %3N (millisecond precision), so we try
+# nanosecond %N first and fall back. The bare format also works on
+# busybox / coreutils on Linux.
+if TS="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ 2>/dev/null)" && [[ "$TS" != *"%N"* ]] && [[ "$TS" != *NZ ]]; then
+  : # got nanoseconds
+else
+  TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+fi
 
 # Use jq when available for safe JSON construction; fall back to a
 # minimal hand-built object if jq is missing.
 if command -v jq >/dev/null 2>&1; then
-  jq -n \
+  # PAYLOAD may be empty or not valid JSON (defensive); default to null so
+  # --argjson doesn't abort the script under `set -e`.
+  if ! echo "${PAYLOAD:-}" | jq -e . >/dev/null 2>&1; then
+    PAYLOAD="null"
+  fi
+  # -c (compact) keeps each record on a single line — required for JSONL.
+  jq -c -n \
     --arg ts "$TS" \
     --arg cwd "$CWD" \
     --arg branch "$BRANCH" \
     --arg commit "$COMMIT" \
     --arg remote "$REMOTE" \
-    --argjson payload "${PAYLOAD:-null}" \
+    --argjson payload "$PAYLOAD" \
     '{
       type: "stop",
       timestamp: $ts,
       cwd: $cwd,
-      branch: ($branch | select(. != "")),
-      commit_sha: ($commit | select(. != "")),
-      remote: ($remote | select(. != "")),
+      branch: (if $branch == "" then null else $branch end),
+      commit_sha: (if $commit == "" then null else $commit end),
+      remote: (if $remote == "" then null else $remote end),
       payload: $payload
     }' >> "$LOG_FILE"
 else

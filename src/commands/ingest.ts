@@ -2,11 +2,14 @@ import { getDb } from '../db/db.js';
 import { listSessionFiles, readUsageEvents } from '../services/jsonl-reader.js';
 import { decodeProjectDir, repoContextFor } from '../services/git.js';
 import { estimateCostUsd } from '../lib/cost.js';
+import { refreshWorkUnits } from '../services/work-units.js';
 
 export type IngestSummary = {
   newEvents: number;
   sessionsTouched: number;
   filesScanned: number;
+  workUnitsInserted: number;
+  workUnitsUpdated: number;
 };
 
 export async function runIngest(): Promise<IngestSummary> {
@@ -15,7 +18,13 @@ export async function runIngest(): Promise<IngestSummary> {
     console.log(
       'No Claude session logs found. Trail is empty — nothing to ingest.'
     );
-    return { newEvents: 0, sessionsTouched: 0, filesScanned: 0 };
+    return {
+      newEvents: 0,
+      sessionsTouched: 0,
+      filesScanned: 0,
+      workUnitsInserted: 0,
+      workUnitsUpdated: 0,
+    };
   }
 
   const db = getDb();
@@ -86,15 +95,22 @@ export async function runIngest(): Promise<IngestSummary> {
   }
   if (batch.length > 0) tx(batch);
 
+  const { inserted, updated } = refreshWorkUnits(db);
+
   console.log(
     `Trail updated: ${newEvents} new usage event${newEvents === 1 ? '' : 's'} ` +
       `from ${sessions.size} session${sessions.size === 1 ? '' : 's'} ` +
       `across ${files.length} file${files.length === 1 ? '' : 's'}.`
+  );
+  console.log(
+    `Work units: ${inserted} new, ${updated} updated.`
   );
 
   return {
     newEvents,
     sessionsTouched: sessions.size,
     filesScanned: files.length,
+    workUnitsInserted: inserted,
+    workUnitsUpdated: updated,
   };
 }

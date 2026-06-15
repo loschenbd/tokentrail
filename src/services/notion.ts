@@ -127,6 +127,61 @@ export class NotionService {
     }
   }
 
+  async findDigestPage(weekStart: string): Promise<string | null> {
+    try {
+      const res = await this.client.databases.query({
+        database_id: this.databaseId,
+        page_size: 1,
+        filter: {
+          and: [
+            { property: NOTION_PROPS.type, select: { equals: 'Digest' } },
+            { property: NOTION_PROPS.date, date: { equals: weekStart } },
+          ],
+        },
+      });
+      const page = res.results[0];
+      return page?.id ?? null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`  notion: digest lookup failed for ${weekStart}: ${msg}`);
+      return null;
+    }
+  }
+
+  async upsertDigestPage(
+    weekStart: string,
+    weekTotalUsd: number,
+    body: NotionBlock[]
+  ): Promise<string | null> {
+    try {
+      const existing = await this.findDigestPage(weekStart);
+      const props: Record<string, unknown> = {
+        [NOTION_PROPS.name]: { title: [{ type: 'text', text: { content: `Week of ${weekStart}` } }] },
+        [NOTION_PROPS.date]: { date: { start: weekStart } },
+        [NOTION_PROPS.type]: { select: { name: 'Digest' } },
+        [NOTION_PROPS.totalCostUsd]: { number: weekTotalUsd },
+        [NOTION_PROPS.syncedAt]: { date: { start: new Date().toISOString() } },
+      };
+      if (existing) {
+        await this.client.pages.update({ page_id: existing, properties: props as never });
+        await this.rebuildPageBody(existing, body);
+        return existing;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res = await this.client.pages.create({
+        parent: { database_id: this.databaseId },
+        properties: props as never,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        children: body as any,
+      });
+      return res.id;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`  notion: digest upsert failed for ${weekStart}: ${msg}`);
+      return null;
+    }
+  }
+
   // Delete all top-level children of a page, then append new ones. Used
   // by `tokentrail sync --rebuild-bodies` to refresh existing pages whose
   // body was empty (created before this feature) or stale.

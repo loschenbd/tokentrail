@@ -40,6 +40,9 @@ export const NOTION_PROPS = {
   sessions: 'Sessions',
   syncedAt: 'Synced At',
   commits: 'Commits',
+  type: 'Type',
+  anomaly: 'Anomaly',
+  anomalyReason: 'Anomaly reason',
 } as const;
 
 export type RollupPagePayload = {
@@ -53,6 +56,9 @@ export type RollupPagePayload = {
   totalCostUsd: number;
   sessions: number;
   commitSummary: string | null;
+  isAnomaly: boolean;
+  anomalyReason: string | null;
+  type: 'Rollup' | 'Digest';
 };
 
 export class NotionService {
@@ -277,6 +283,15 @@ function truncate(s: string, max: number): string {
   return s.slice(0, max - 1).trimEnd() + '…';
 }
 
+// One-time Notion schema setup (manual via Notion UI, or via the
+// notion-update-data-source MCP tool — see
+// docs/superpowers/specs/2026-06-15-tokentrail-visualization-design.md):
+//
+//   ALTER COLUMN "Type"           SET SELECT WITH OPTIONS "Rollup", "Digest"
+//   ALTER COLUMN "Anomaly"        SET CHECKBOX
+//   ALTER COLUMN "Anomaly reason" SET RICH_TEXT
+//
+// Sync will silently warn-and-continue until these columns exist.
 function buildProperties(p: RollupPagePayload) {
   const props: Record<string, unknown> = {
     [NOTION_PROPS.name]: {
@@ -303,6 +318,11 @@ function buildProperties(p: RollupPagePayload) {
       rich_text: [
         { type: 'text', text: { content: p.commitSummary ?? '' } },
       ],
+    },
+    [NOTION_PROPS.type]: { select: { name: p.type } },
+    [NOTION_PROPS.anomaly]: { checkbox: p.isAnomaly },
+    [NOTION_PROPS.anomalyReason]: {
+      rich_text: [{ type: 'text', text: { content: p.anomalyReason ?? '' } }],
     },
   };
   // Repo is multi_select — one rollup can span multiple repos when the same

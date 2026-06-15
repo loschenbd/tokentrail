@@ -27,6 +27,9 @@ tokentrail ingest      # Load new usage events into the local ledger.
 tokentrail enrich      # Pull PR metadata for branches we've seen.
 tokentrail rollup      # Aggregate events into daily feature rollups.
 tokentrail report      # Follow token usage across recent work.
+tokentrail sessions    # List sessions by cost to scan for attribution.
+tokentrail commits     # Capture or show git commits authored per session.
+tokentrail label       # Set, clear, or list per-session feature overrides.
 tokentrail sync        # Sync the latest ledger entries to Notion.
 tokentrail run-all     # Walk the full trail end-to-end.
 ```
@@ -65,6 +68,7 @@ Required properties (names are exact):
 | Total Output Tokens   | Number    |                                    |
 | Sessions              | Number    |                                    |
 | Synced At             | Date      | Timestamp                          |
+| Commits               | Rich Text | Top 5 commit subjects from sessions in this rollup |
 
 By default `sync` only re-pushes rollups whose `updated_at` is newer than
 their last successful Notion sync. Use `--force` to re-push everything,

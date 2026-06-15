@@ -50,7 +50,7 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
       `SELECT
          id, date, feature_key, feature_name, repo, branches,
          total_input_tokens, total_output_tokens, total_cost_usd,
-         sessions_count, notion_page_id
+         sessions_count, notion_page_id, commit_summary
        FROM feature_rollups
        WHERE ${where}
        ORDER BY date DESC, total_cost_usd DESC`
@@ -67,6 +67,7 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
     total_cost_usd: number;
     sessions_count: number;
     notion_page_id: string | null;
+    commit_summary: string | null;
   }>;
 
   if (rows.length === 0) {
@@ -97,6 +98,7 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
       totalOutputTokens: r.total_output_tokens,
       totalCostUsd: r.total_cost_usd,
       sessions: r.sessions_count,
+      commitSummary: r.commit_summary,
     };
 
     let pageId = r.notion_page_id;

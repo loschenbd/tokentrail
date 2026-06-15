@@ -80,4 +80,21 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     last_seen_at  TEXT,
     feature_override TEXT
   )`,
+
+  // Commits authored in a session's time window inside its project dir
+  // (or the nearest git root). Populated by \`tokentrail commits --backfill\`
+  // and exposed in \`tokentrail sessions\` to surface what was being built.
+  `CREATE TABLE IF NOT EXISTS session_commits (
+    session_id   TEXT NOT NULL,
+    commit_sha   TEXT NOT NULL,
+    subject      TEXT,
+    body         TEXT,
+    authored_at  TEXT,
+    author_email TEXT,
+    branch       TEXT,
+    PRIMARY KEY (session_id, commit_sha)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_session_commits_session
+    ON session_commits (session_id)`,
 ];

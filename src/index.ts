@@ -48,6 +48,33 @@ program
   });
 
 program
+  .command('commits')
+  .description('Capture or show git commits authored during each session.')
+  .argument('[session]', 'Optional session id prefix to show commits for.')
+  .option('--backfill', 'Walk all sessions and populate session_commits.')
+  .option('--force', 'With --backfill, re-scan sessions that already have commits cached.')
+  .option('--author <email>', 'Override the default author filter (git config user.email). Empty disables.')
+  .action(
+    async (
+      session: string | undefined,
+      opts: { backfill?: boolean; force?: boolean; author?: string }
+    ) => {
+      const { backfillCommits, showCommits } = await import('./commands/commits.js');
+      if (opts.backfill) {
+        await backfillCommits({ force: opts.force, author: opts.author });
+        return;
+      }
+      if (!session) {
+        console.error('Usage: tokentrail commits --backfill');
+        console.error('       tokentrail commits <session-id-prefix>');
+        process.exitCode = 1;
+        return;
+      }
+      await showCommits(session);
+    }
+  );
+
+program
   .command('label')
   .description('Set, clear, or list per-session feature overrides.')
   .argument('[session]', 'Session id prefix (≥4 chars) or "list".')

@@ -68,4 +68,16 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
 
   `CREATE INDEX IF NOT EXISTS idx_feature_rollups_date
     ON feature_rollups (date)`,
+
+  // Per-session metadata. Derived from JSONL — title = first user prompt
+  // text (truncated). Used by \`tokentrail sessions\` to scan high-cost
+  // sessions and decide whether to label them with a feature override.
+  `CREATE TABLE IF NOT EXISTS sessions (
+    session_id    TEXT PRIMARY KEY,
+    title         TEXT,
+    project_dir   TEXT,
+    first_seen_at TEXT,
+    last_seen_at  TEXT,
+    feature_override TEXT
+  )`,
 ];

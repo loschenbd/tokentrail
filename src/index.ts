@@ -48,6 +48,21 @@ program
   });
 
 program
+  .command('sessions')
+  .description('List sessions by cost so you can attribute them.')
+  .option('--top <n>', 'How many sessions to show (default 20)', '20')
+  .option('--outside-only', 'Show only sessions with no detected repo.')
+  .option('--feature <key>', 'Filter to a specific feature key (substring).')
+  .action(async (opts: { top?: string; outsideOnly?: boolean; feature?: string }) => {
+    const { runSessions } = await import('./commands/sessions.js');
+    await runSessions({
+      top: Number.parseInt(opts.top ?? '20', 10),
+      outsideOnly: opts.outsideOnly ?? false,
+      feature: opts.feature,
+    });
+  });
+
+program
   .command('rollup')
   .description('Aggregate events into daily feature rollups.')
   .action(async () => {

@@ -1,5 +1,9 @@
 import { getDb } from '../db/db.js';
-import { listSessionFiles, readUsageEvents } from '../services/jsonl-reader.js';
+import {
+  listSessionFiles,
+  readSessionMetas,
+  readUsageEvents,
+} from '../services/jsonl-reader.js';
 import { decodeProjectDir, repoContextFor } from '../services/git.js';
 import { estimateCostUsd } from '../lib/cost.js';
 import { refreshWorkUnits } from '../services/work-units.js';
@@ -146,6 +150,48 @@ export async function runIngest(): Promise<IngestSummary> {
     }
   }
   if (batch.length > 0) tx(batch);
+
+  // Walk JSONL once more for session metadata (title, time bounds).
+  // Cheap: each file is reopened but parsing is local; no cross-file state.
+  const upsertSession = db.prepare(`
+    INSERT INTO sessions (session_id, title, project_dir, first_seen_at, last_seen_at)
+    VALUES (@session_id, @title, @project_dir, @first_seen_at, @last_seen_at)
+    ON CONFLICT(session_id) DO UPDATE SET
+      -- Always rewrite title from the JSONL on re-ingest so improved
+      -- title extraction (e.g. stripping noise wrappers) takes effect.
+      -- Falls back to the prior value only if extraction returned NULL.
+      title = COALESCE(excluded.title, sessions.title),
+      project_dir = COALESCE(excluded.project_dir, sessions.project_dir),
+      first_seen_at = MIN(sessions.first_seen_at, excluded.first_seen_at),
+      last_seen_at  = MAX(sessions.last_seen_at, excluded.last_seen_at)
+  `);
+  let sessionsIndexed = 0;
+  const sessionTx = db.transaction(
+    (metas: Array<Record<string, unknown>>) => {
+      for (const m of metas) {
+        upsertSession.run(m);
+        sessionsIndexed++;
+      }
+    }
+  );
+  const metaBatch: Array<Record<string, unknown>> = [];
+  for await (const m of readSessionMetas(files)) {
+    const dir = m.projectDirEncoded
+      ? decodeProjectDir(m.projectDirEncoded)
+      : null;
+    metaBatch.push({
+      session_id: m.sessionId,
+      title: m.title,
+      project_dir: dir,
+      first_seen_at: m.firstSeenAt,
+      last_seen_at: m.lastSeenAt,
+    });
+    if (metaBatch.length >= 200) {
+      sessionTx(metaBatch);
+      metaBatch.length = 0;
+    }
+  }
+  if (metaBatch.length > 0) sessionTx(metaBatch);
 
   // Merge Stop-hook snapshots before computing work_units. Hook data is
   // a stronger branch signal than ingest-time HEAD, so apply it first.

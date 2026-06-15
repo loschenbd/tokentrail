@@ -10,3 +10,4 @@ data/*.db-shm
 *.log
 
 .superpowers/
+.worktrees/

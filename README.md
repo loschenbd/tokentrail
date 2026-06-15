@@ -58,7 +58,7 @@ Required properties (names are exact):
 | Date                  | Date      | Rollup date                        |
 | Feature Key           | Rich Text | Stable slug                        |
 | Feature Name          | Rich Text | Human-readable name                |
-| Repo                  | Select    | `owner/repo`                       |
+| Repo                  | Multi-Select | One tag per `owner/repo`. Multi-select because a single rollup can span more than one repo. |
 | Branches              | Rich Text | Comma-separated list               |
 | Total Cost USD        | Number    | Estimated spend                    |
 | Total Input Tokens    | Number    |                                    |

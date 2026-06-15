@@ -72,9 +72,23 @@ or `--days N` to restrict to a recent window.
 
 ## Hook setup
 
-See Phase 7. A small `Stop` hook can be registered with Claude Code so each
-session adds a snapshot to the local hook log; this improves branch
-attribution accuracy for recent sessions.
+A small `Stop` hook fires at the end of every Claude Code session and writes
+a JSONL snapshot of `session_id`, `branch`, `commit_sha`, and `remote` to
+`~/.claude-cost-tracker/session-hooks.jsonl`. On the next `tokentrail ingest`
+run, snapshots backfill the branch on any usage event whose ingest-time
+HEAD was missing or sitting on a mainline branch — giving you accurate
+branch attribution even for sessions where you've since switched branches.
+
+To install, for each repo you want tracked:
+
+1. Copy `examples/claude-settings.example.json` to that repo's
+   `.claude/settings.json`.
+2. Replace `/ABSOLUTE/PATH/TO/tokentrail/src/hooks/session-end.sh` with the
+   actual absolute path of the hook script on your machine.
+3. (Optional) Override the log location with `TRACKER_LOG_DIR`.
+
+The hook is read-only with respect to your repo: it only reads `git
+rev-parse` output and appends to its own log file.
 
 ## Limits and caveats
 

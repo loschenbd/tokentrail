@@ -1,0 +1,16 @@
+{
+  "_comment": "Example Claude Code settings.json for repos you want Tokentrail to track. Copy this into <repo>/.claude/settings.json and set TOKENTRAIL_HOOK to the absolute path of tokentrail's session-end.sh script (e.g. /Users/you/Projects/tokentrail/src/hooks/session-end.sh). Claude Code will fire the Stop hook at session end, and the next `tokentrail ingest` run can merge those snapshots for sharper branch attribution.",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/ABSOLUTE/PATH/TO/tokentrail/src/hooks/session-end.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

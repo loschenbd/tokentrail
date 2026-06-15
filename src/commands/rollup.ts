@@ -36,7 +36,8 @@ export async function runRollup(): Promise<RollupSummary> {
          SUM(e.input_tokens)                      AS in_tokens,
          SUM(e.output_tokens)                     AS out_tokens,
          SUM(e.estimated_cost_usd)                AS cost,
-         COUNT(DISTINCT e.session_id)             AS sessions
+         COUNT(DISTINCT e.session_id)             AS sessions,
+         GROUP_CONCAT(DISTINCT e.session_id)       AS session_ids
        FROM usage_events e
        LEFT JOIN work_units w
          ON w.repo = e.repo AND w.branch = e.branch
@@ -59,6 +60,7 @@ export async function runRollup(): Promise<RollupSummary> {
     out_tokens: number;
     cost: number;
     sessions: number;
+    session_ids: string | null;
   }>;
 
   // Bucket by (date, feature_key). A feature can pull from multiple
@@ -69,6 +71,7 @@ export async function runRollup(): Promise<RollupSummary> {
     featureName: string;
     repos: Set<string>;
     branches: Set<string>;
+    sessionIds: Set<string>;
     inTokens: number;
     outTokens: number;
     cost: number;
@@ -109,6 +112,7 @@ export async function runRollup(): Promise<RollupSummary> {
         featureName: name,
         repos: new Set(),
         branches: new Set(),
+        sessionIds: new Set(),
         inTokens: 0,
         outTokens: 0,
         cost: 0,
@@ -118,6 +122,11 @@ export async function runRollup(): Promise<RollupSummary> {
     }
     if (r.repo) b.repos.add(r.repo);
     if (r.branch) b.branches.add(r.branch);
+    if (r.session_ids) {
+      for (const sid of r.session_ids.split(',')) {
+        if (sid) b.sessionIds.add(sid);
+      }
+    }
     b.inTokens += r.in_tokens ?? 0;
     b.outTokens += r.out_tokens ?? 0;
     b.cost += r.cost ?? 0;
@@ -130,10 +139,12 @@ export async function runRollup(): Promise<RollupSummary> {
   const upsert = db.prepare(`
     INSERT INTO feature_rollups (
       id, date, feature_key, feature_name, repo, branches,
-      total_input_tokens, total_output_tokens, total_cost_usd, sessions_count
+      total_input_tokens, total_output_tokens, total_cost_usd, sessions_count,
+      commit_summary
     ) VALUES (
       @id, @date, @feature_key, @feature_name, @repo, @branches,
-      @total_input_tokens, @total_output_tokens, @total_cost_usd, @sessions_count
+      @total_input_tokens, @total_output_tokens, @total_cost_usd, @sessions_count,
+      @commit_summary
     )
     ON CONFLICT(date, feature_key) DO UPDATE SET
       feature_name        = excluded.feature_name,
@@ -143,8 +154,15 @@ export async function runRollup(): Promise<RollupSummary> {
       total_output_tokens = excluded.total_output_tokens,
       total_cost_usd      = excluded.total_cost_usd,
       sessions_count      = excluded.sessions_count,
+      commit_summary      = excluded.commit_summary,
       updated_at          = datetime('now')
   `);
+
+  const commitsForSessions = db.prepare(
+    `SELECT c.subject, c.authored_at FROM session_commits c
+     WHERE c.session_id IN (SELECT value FROM json_each(?))
+     ORDER BY c.authored_at`
+  );
 
   // Delete any rollup whose (date, feature_key) no longer appears in this
   // run — handles attribution-rule changes that move past usage from one
@@ -171,6 +189,12 @@ export async function runRollup(): Promise<RollupSummary> {
     for (const b of buckets.values()) {
       const reposCsv = [...b.repos].sort().join(',');
       const branchesCsv = [...b.branches].sort().join(',');
+      const commitSummary = buildCommitSummary(
+        commitsForSessions.all(JSON.stringify([...b.sessionIds])) as Array<{
+          subject: string;
+          authored_at: string;
+        }>
+      );
       upsert.run({
         id: randomUUID(),
         date: b.date,
@@ -182,6 +206,7 @@ export async function runRollup(): Promise<RollupSummary> {
         total_output_tokens: b.outTokens,
         total_cost_usd: round2(b.cost),
         sessions_count: b.sessions,
+        commit_summary: commitSummary,
       });
       rowsUpserted++;
     }
@@ -204,4 +229,28 @@ export async function runRollup(): Promise<RollupSummary> {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+// Build a compact commit summary for a rollup bucket. Dedupe subjects
+// (sessions in the same bucket often share commits across resume points),
+// cap at 5 + "N more" suffix, total ~1000 chars to stay under Notion's
+// Rich Text per-block limits.
+function buildCommitSummary(
+  commits: Array<{ subject: string; authored_at: string }>
+): string | null {
+  if (commits.length === 0) return null;
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const c of commits) {
+    const s = c.subject?.trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    unique.push(s);
+  }
+  if (unique.length === 0) return null;
+  const shown = unique.slice(0, 5);
+  const tail = unique.length > shown.length ? ` … (+${unique.length - shown.length} more)` : '';
+  let out = shown.map((s) => `• ${s}`).join('\n') + tail;
+  if (out.length > 1800) out = out.slice(0, 1797) + '…';
+  return out;
 }

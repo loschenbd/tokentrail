@@ -14,6 +14,7 @@ export const NOTION_PROPS = {
   totalOutputTokens: 'Total Output Tokens',
   sessions: 'Sessions',
   syncedAt: 'Synced At',
+  commits: 'Commits',
 } as const;
 
 export type RollupPagePayload = {
@@ -26,6 +27,7 @@ export type RollupPagePayload = {
   totalOutputTokens: number;
   totalCostUsd: number;
   sessions: number;
+  commitSummary: string | null;
 };
 
 export class NotionService {
@@ -114,6 +116,11 @@ function buildProperties(p: RollupPagePayload) {
     [NOTION_PROPS.totalOutputTokens]: { number: p.totalOutputTokens },
     [NOTION_PROPS.sessions]: { number: p.sessions },
     [NOTION_PROPS.syncedAt]: { date: { start: new Date().toISOString() } },
+    [NOTION_PROPS.commits]: {
+      rich_text: [
+        { type: 'text', text: { content: p.commitSummary ?? '' } },
+      ],
+    },
   };
   // Repo is multi_select — one rollup can span multiple repos when the same
   // feature key shows up in more than one repo on the same day. We always

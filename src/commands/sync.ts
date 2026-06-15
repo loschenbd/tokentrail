@@ -5,6 +5,7 @@ import {
   type RollupBodyContext,
   type RollupPagePayload,
 } from '../services/notion.js';
+import { chooseTopAnomaly, type DetectedAnomaly } from '../services/anomalies.js';
 
 export type SyncOptions = {
   days?: number;
@@ -117,6 +118,13 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
     WHERE session_id IN (SELECT value FROM json_each(?))
     ORDER BY repo, pr_number
   `);
+  const anomaliesForRollup = db.prepare(`
+    SELECT kind, date, feature_key, session_id, amount, baseline, multiplier, reason
+    FROM anomalies
+    WHERE dismissed_at IS NULL
+      AND ((feature_key = @feature_key AND date = @date)
+        OR (date = @date AND feature_key IS NULL))
+  `);
 
   let upserted = 0;
   let skipped = 0;
@@ -124,6 +132,32 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
   const delayMs = opts.delayMs ?? 350;
 
   for (const r of rows) {
+    const rowAnomalies = anomaliesForRollup.all({
+      feature_key: r.feature_key,
+      date: r.date,
+    }) as Array<{
+      kind: 'spike_day' | 'burning_feature' | 'hot_session';
+      date: string;
+      feature_key: string | null;
+      session_id: string | null;
+      amount: number;
+      baseline: number;
+      multiplier: number;
+      reason: string;
+    }>;
+    const top = chooseTopAnomaly(
+      rowAnomalies.map((a) => ({
+        kind: a.kind,
+        date: a.date,
+        feature_key: a.feature_key,
+        session_id: a.session_id,
+        amount: a.amount,
+        baseline: a.baseline,
+        multiplier: a.multiplier,
+        reason: a.reason,
+      })) as DetectedAnomaly[]
+    );
+
     const payload: RollupPagePayload = {
       date: r.date,
       featureKey: r.feature_key,
@@ -135,8 +169,8 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
       totalCostUsd: r.total_cost_usd,
       sessions: r.sessions_count,
       commitSummary: r.commit_summary,
-      isAnomaly: false,
-      anomalyReason: null,
+      isAnomaly: top !== null,
+      anomalyReason: top?.reason ?? null,
       type: 'Rollup',
     };
 
@@ -157,7 +191,8 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
           prsForRollup,
         })
       : null;
-    const children = body ? buildRollupBody(body) : [];
+    const dashboardUrl = `http://127.0.0.1:4920/feature/${encodeURIComponent(r.feature_key)}?days=30`;
+    const children = body ? buildRollupBody(body, { dashboardUrl }) : [];
 
     const result = await notion.upsertPage(
       payload,

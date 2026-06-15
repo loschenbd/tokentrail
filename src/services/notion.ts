@@ -115,8 +115,15 @@ function buildProperties(p: RollupPagePayload) {
     [NOTION_PROPS.sessions]: { number: p.sessions },
     [NOTION_PROPS.syncedAt]: { date: { start: new Date().toISOString() } },
   };
-  if (p.repo) {
-    props[NOTION_PROPS.repo] = { select: { name: p.repo } };
-  }
+  // Repo is multi_select — one rollup can span multiple repos when the same
+  // feature key shows up in more than one repo on the same day. We always
+  // emit an array (possibly empty) so Notion replaces, not merges.
+  const repoNames = (p.repo ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  props[NOTION_PROPS.repo] = {
+    multi_select: repoNames.map((name) => ({ name })),
+  };
   return props as Parameters<Client['pages']['create']>[0]['properties'];
 }

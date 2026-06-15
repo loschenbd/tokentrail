@@ -130,10 +130,18 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     multiplier      REAL NOT NULL,
     reason          TEXT NOT NULL,
     dismissed_at    TEXT,
-    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(kind, date, feature_key, session_id)
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
   `CREATE INDEX IF NOT EXISTS idx_anomalies_date ON anomalies (date)`,
   `CREATE INDEX IF NOT EXISTS idx_anomalies_active ON anomalies (dismissed_at)`,
+
+  // Expression-based UNIQUE index. SQLite treats NULLs as distinct in plain
+  // UNIQUE constraints, which means a dismissed `spike_day` (both feature_key
+  // and session_id are NULL) would silently duplicate on the next rollup
+  // recompute. COALESCE-to-empty-string is the standard workaround. Any
+  // ON CONFLICT clause writing to this table MUST use the same expressions
+  // in its conflict target — see src/services/anomalies-db.ts.
+  `CREATE UNIQUE INDEX IF NOT EXISTS uniq_anomalies_dedupe
+     ON anomalies (kind, date, COALESCE(feature_key, ''), COALESCE(session_id, ''))`,
 ];

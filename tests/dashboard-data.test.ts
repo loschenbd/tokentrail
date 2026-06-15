@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import type DatabaseType from 'better-sqlite3';
-import { SCHEMA_STATEMENTS } from '../src/db/schema.js';
+import { runMigrations } from '../src/db/migrations.js';
 import { buildOverview } from '../src/dashboard/data/overview.js';
 
 const require = createRequire(import.meta.url);
@@ -10,7 +10,7 @@ const Database = require('better-sqlite3') as typeof DatabaseType;
 
 function makeDb(): DatabaseType.Database {
   const db = new Database(':memory:');
-  for (const stmt of SCHEMA_STATEMENTS) db.exec(stmt);
+  runMigrations(db);   // runs SCHEMA_STATEMENTS internally, then idempotent ALTER TABLE additions
   return db;
 }
 

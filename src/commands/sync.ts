@@ -135,6 +135,9 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
       totalCostUsd: r.total_cost_usd,
       sessions: r.sessions_count,
       commitSummary: r.commit_summary,
+      isAnomaly: false,
+      anomalyReason: null,
+      type: 'Rollup',
     };
 
     let pageId = r.notion_page_id;

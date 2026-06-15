@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/db.js';
 import { attribute } from '../lib/attribution.js';
 import { bucketFromProjectDir } from '../lib/project-dir.js';
+import { computeAndPersistAnomalies } from '../services/anomalies-db.js';
 
 export type RollupSummary = {
   rowsUpserted: number;
@@ -224,6 +225,13 @@ export async function runRollup(): Promise<RollupSummary> {
       `${deletedSuffix}. ` +
       `Total: $${b.toFixed(2)} (events: $${a.toFixed(2)}; ` +
       `delta: $${Math.abs(b - a).toFixed(2)}).`
+  );
+
+  const anomalyResult = computeAndPersistAnomalies(db);
+  console.log(
+    `Anomalies: ${anomalyResult.active} active` +
+      (anomalyResult.preserved > 0 ? `, ${anomalyResult.preserved} dismissed preserved` : '') +
+      '.'
   );
 
   return { rowsUpserted };

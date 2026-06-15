@@ -75,6 +75,36 @@ program
   );
 
 program
+  .command('prs')
+  .description('Capture or show GitHub PRs associated with each session.')
+  .argument('[session]', 'Optional session id prefix to show PRs for.')
+  .option('--backfill', 'Walk all sessions and populate session_prs.')
+  .option('--force', 'With --backfill, re-scan sessions already covered.')
+  .option('--delay <ms>', 'Sleep between GitHub requests (default 200)', '200')
+  .action(
+    async (
+      session: string | undefined,
+      opts: { backfill?: boolean; force?: boolean; delay?: string }
+    ) => {
+      const { backfillPrs, showPrs } = await import('./commands/prs.js');
+      if (opts.backfill) {
+        await backfillPrs({
+          force: opts.force,
+          delayMs: Number.parseInt(opts.delay ?? '200', 10),
+        });
+        return;
+      }
+      if (!session) {
+        console.error('Usage: tokentrail prs --backfill');
+        console.error('       tokentrail prs <session-id-prefix>');
+        process.exitCode = 1;
+        return;
+      }
+      await showPrs(session);
+    }
+  );
+
+program
   .command('label')
   .description('Set, clear, or list per-session feature overrides.')
   .argument('[session]', 'Session id prefix (≥4 chars) or "list".')
@@ -143,15 +173,24 @@ program
   .description('Sync the latest ledger entries to Notion.')
   .option('--days <n>', 'Only sync rollups in the last N days.')
   .option('--force', 'Re-push every rollup, even if unchanged.')
+  .option('--rebuild-bodies', 'Also rewrite the Sessions/PRs/Commits page body — heavy.')
   .option('--delay <ms>', 'Sleep between Notion requests (default 350)', '350')
-  .action(async (opts: { days?: string; force?: boolean; delay?: string }) => {
-    const { runSync } = await import('./commands/sync.js');
-    await runSync({
-      days: opts.days ? Number.parseInt(opts.days, 10) : undefined,
-      force: opts.force ?? false,
-      delayMs: Number.parseInt(opts.delay ?? '350', 10),
-    });
-  });
+  .action(
+    async (opts: {
+      days?: string;
+      force?: boolean;
+      rebuildBodies?: boolean;
+      delay?: string;
+    }) => {
+      const { runSync } = await import('./commands/sync.js');
+      await runSync({
+        days: opts.days ? Number.parseInt(opts.days, 10) : undefined,
+        force: opts.force ?? false,
+        rebuildBodies: opts.rebuildBodies ?? false,
+        delayMs: Number.parseInt(opts.delay ?? '350', 10),
+      });
+    }
+  );
 
 program
   .command('enrich')

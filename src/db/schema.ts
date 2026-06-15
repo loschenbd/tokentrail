@@ -97,4 +97,22 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
 
   `CREATE INDEX IF NOT EXISTS idx_session_commits_session
     ON session_commits (session_id)`,
+
+  // PRs whose head branch matched a (repo, branch) seen in a session's
+  // commits. Populated by \`tokentrail prs --backfill\`. One session can
+  // have multiple PRs across repos.
+  `CREATE TABLE IF NOT EXISTS session_prs (
+    session_id   TEXT NOT NULL,
+    repo         TEXT NOT NULL,
+    pr_number    INTEGER NOT NULL,
+    pr_title     TEXT,
+    pr_url       TEXT,
+    pr_state     TEXT,
+    head_branch  TEXT,
+    merged_at    TEXT,
+    PRIMARY KEY (session_id, repo, pr_number)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_session_prs_session
+    ON session_prs (session_id)`,
 ];

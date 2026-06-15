@@ -5,6 +5,7 @@ import {
   gitConfigEmail,
   isDir,
 } from '../services/git-history.js';
+import { originUrl, parseRepoSlug } from '../services/git.js';
 
 export type CommitsBackfillOptions = {
   // Limit to sessions with no commits yet — default behavior. --force
@@ -54,11 +55,13 @@ export async function backfillCommits(
 
   // Cache git-root lookup per directory — most sessions share a root.
   const rootCache = new Map<string, string | null>();
+  // Cache repo slug per git root — one git config call instead of per-commit.
+  const repoSlugCache = new Map<string, string | null>();
   const insert = db.prepare(`
     INSERT OR REPLACE INTO session_commits (
-      session_id, commit_sha, subject, body, authored_at, author_email, branch
+      session_id, commit_sha, subject, body, authored_at, author_email, branch, repo
     ) VALUES (
-      @session_id, @commit_sha, @subject, @body, @authored_at, @author_email, @branch
+      @session_id, @commit_sha, @subject, @body, @authored_at, @author_email, @branch, @repo
     )
   `);
   const clearForSession = db.prepare(
@@ -88,6 +91,12 @@ export async function backfillCommits(
     );
     if (commits.length === 0) continue;
 
+    let repoSlug = repoSlugCache.get(root);
+    if (repoSlug === undefined) {
+      repoSlug = parseRepoSlug(originUrl(root));
+      repoSlugCache.set(root, repoSlug);
+    }
+
     const tx = db.transaction(() => {
       if (opts.force) clearForSession.run(s.session_id);
       for (const c of commits) {
@@ -99,6 +108,7 @@ export async function backfillCommits(
           authored_at: c.authoredAt,
           author_email: c.authorEmail,
           branch: c.branches,
+          repo: repoSlug ?? null,
         });
         commitsInserted++;
       }

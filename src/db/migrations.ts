@@ -13,6 +13,9 @@ export function runMigrations(db: Database.Database): void {
     addColumnIfMissing(db, 'usage_events', 'project_dir', 'TEXT');
     addColumnIfMissing(db, 'sessions', 'feature_override_name', 'TEXT');
     addColumnIfMissing(db, 'feature_rollups', 'commit_summary', 'TEXT');
+    addColumnIfMissing(db, 'session_commits', 'repo', 'TEXT');
+    addColumnIfMissing(db, 'feature_rollups', 'body_synced_at', 'TEXT');
+    addColumnIfMissing(db, 'feature_rollups', 'session_ids', 'TEXT');
   });
   tx();
 }

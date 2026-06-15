@@ -230,6 +230,21 @@ program
   });
 
 program
+  .command('dashboard')
+  .description('Open the local Tokentrail dashboard in your browser.')
+  .option('--port <n>', 'Port to bind (default 4920)', '4920')
+  .option('--no-open', "Don't launch the browser automatically.")
+  .option('--days <n>', 'Default time window in days (default 30)', '30')
+  .action(async (opts: { port?: string; open?: boolean; days?: string }) => {
+    const { runDashboard } = await import('./commands/dashboard.js');
+    await runDashboard({
+      port: Number.parseInt(opts.port ?? '4920', 10),
+      open: opts.open !== false,
+      days: Number.parseInt(opts.days ?? '30', 10),
+    });
+  });
+
+program
   .command('run-all')
   .description('Walk the full trail: ingest → enrich → rollup → sync.')
   .option('--skip-sync', 'Stop before the Notion sync step.')

@@ -40,20 +40,60 @@ export function parseRepoSlug(remoteUrl: string | null): string | null {
   return null;
 }
 
-// Decode `~/.claude/projects/<encoded-path>` back into a filesystem path.
-// Claude Code encodes "/" as "-". This decoder reconstructs the absolute
-// path and returns it if it exists on disk. Falls back to the raw encoded
-// form when the path doesn't resolve.
+// Decode `~/.claude/projects/<encoded>` back into a filesystem path.
+//
+// Claude Code's encoding replaces both "/" and "." with "-", which is lossy:
+// "foo-bar" could originally be "foo-bar", "foo/bar", "foo.bar" or "foo/.bar".
+// The naive dash→slash replacement destroys folder names containing hyphens
+// (e.g. "gemify-universal/.claude/worktrees/feat/gem-memory-date").
+//
+// This decoder uses the filesystem as an oracle: walk encoded chunks, greedy-
+// extending each path segment to the longest existing directory. The "--"
+// pattern (slash before a hidden dir) is decoded into a "/." boundary.
+// Falls back to the naive form when nothing on disk matches — handles deleted
+// projects gracefully.
 export function decodeProjectDir(encoded: string): string {
-  // Claude's encoding is irreversible in general (folder names may contain "-"),
-  // but the leading "-" maps to "/", so try the simple replacement first.
-  const candidate = '/' + encoded.replace(/^-/, '').replaceAll('-', '/');
-  if (existsSync(candidate) && statSync(candidate).isDirectory()) {
-    return candidate;
+  const trimmed = encoded.replace(/^-/, '');
+  // Replace empty chunks (from "--") with a sentinel so we can distinguish
+  // "/.hidden" boundaries from regular slashes in the segment walk.
+  const chunks = trimmed.split('-');
+
+  let path = '/';
+  let i = 0;
+  while (i < chunks.length) {
+    // "--" in the encoded form → "/." in the decoded form (hidden dir).
+    // First chunk is empty, next chunk is the (hidden) dir's name body.
+    if (chunks[i] === '') {
+      i++;
+      if (i >= chunks.length) break;
+      const next = '.' + chunks[i];
+      path = joinPath(path, next);
+      i++;
+      continue;
+    }
+
+    // Greedy extend: find longest j s.t. chunks[i..j].join('-') is a real
+    // subdirectory of `path`. Hyphens inside the joined name are restored.
+    let bestJ = i;
+    for (let j = i; j < chunks.length; j++) {
+      if (chunks[j] === '') break; // next "--" boundary; stop here
+      const candidate = chunks.slice(i, j + 1).join('-');
+      const test = joinPath(path, candidate);
+      if (existsSync(test) && statSync(test).isDirectory()) {
+        bestJ = j;
+      }
+    }
+
+    const name = chunks.slice(i, bestJ + 1).join('-');
+    path = joinPath(path, name);
+    i = bestJ + 1;
   }
-  // Try a greedy reconstruction: walk segments and recover hyphens in the
-  // tail when the simple form doesn't exist.
-  return candidate;
+
+  return path;
+}
+
+function joinPath(base: string, name: string): string {
+  return base.endsWith('/') ? base + name : base + '/' + name;
 }
 
 export function repoContextFor(projectDir: string): RepoContext {

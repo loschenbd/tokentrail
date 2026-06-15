@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/db.js';
 import { attribute } from '../lib/attribution.js';
+import { bucketFromProjectDir } from '../lib/project-dir.js';
 
 export type RollupSummary = {
   rowsUpserted: number;
@@ -27,6 +28,7 @@ export async function runRollup(): Promise<RollupSummary> {
          date(e.timestamp)                       AS date,
          COALESCE(e.repo, '')                    AS repo,
          COALESCE(e.branch, '')                  AS branch,
+         COALESCE(e.project_dir, '')             AS project_dir,
          w.feature_key                            AS feature_key,
          w.feature_name                           AS feature_name,
          SUM(e.input_tokens)                      AS in_tokens,
@@ -36,12 +38,13 @@ export async function runRollup(): Promise<RollupSummary> {
        FROM usage_events e
        LEFT JOIN work_units w
          ON w.repo = e.repo AND w.branch = e.branch
-       GROUP BY date(e.timestamp), e.repo, e.branch, w.feature_key, w.feature_name`
+       GROUP BY date(e.timestamp), e.repo, e.branch, e.project_dir, w.feature_key, w.feature_name`
     )
     .all() as Array<{
     date: string;
     repo: string;
     branch: string;
+    project_dir: string;
     feature_key: string | null;
     feature_name: string | null;
     in_tokens: number;
@@ -70,11 +73,16 @@ export async function runRollup(): Promise<RollupSummary> {
     let name = r.feature_name;
     if (!key || !name) {
       // No work_units row — synthesize attribution so usage isn't dropped.
-      // Untracked/unknown branches still get a row.
       if (r.branch && r.repo) {
         const a = attribute({ repo: r.repo, branch: r.branch });
         key = a.featureKey;
         name = a.featureName;
+      } else if (r.project_dir) {
+        // No repo/branch but we know which directory Claude ran in.
+        // Bucket by that directory for a more informative trail.
+        const b = bucketFromProjectDir(r.project_dir);
+        key = b.featureKey;
+        name = b.featureName;
       } else {
         key = 'untracked';
         name = 'Untracked sessions';
@@ -126,8 +134,28 @@ export async function runRollup(): Promise<RollupSummary> {
       updated_at          = datetime('now')
   `);
 
+  // Delete any rollup whose (date, feature_key) no longer appears in this
+  // run — handles attribution-rule changes that move past usage from one
+  // bucket to another (e.g. an event re-bucketed from "untracked" to
+  // "outside:foo"). We keep upsert semantics so notion_page_id and
+  // synced_to_notion_at survive on rows that still exist.
+  const aliveKeys = new Set<string>();
+  for (const b of buckets.values()) aliveKeys.add(`${b.date}::${b.featureKey}`);
+
+  const allExisting = db
+    .prepare(`SELECT id, date, feature_key FROM feature_rollups`)
+    .all() as Array<{ id: string; date: string; feature_key: string }>;
+  const deleteStmt = db.prepare(`DELETE FROM feature_rollups WHERE id = ?`);
+
   let rowsUpserted = 0;
+  let rowsDeleted = 0;
   const tx = db.transaction(() => {
+    for (const existing of allExisting) {
+      if (!aliveKeys.has(`${existing.date}::${existing.feature_key}`)) {
+        deleteStmt.run(existing.id);
+        rowsDeleted++;
+      }
+    }
     for (const b of buckets.values()) {
       const reposCsv = [...b.repos].sort().join(',');
       const branchesCsv = [...b.branches].sort().join(',');
@@ -151,8 +179,10 @@ export async function runRollup(): Promise<RollupSummary> {
   // Verification: rollup total should equal event-level total.
   const a = (db.prepare(`SELECT SUM(estimated_cost_usd) AS s FROM usage_events`).get() as { s: number | null }).s ?? 0;
   const b = (db.prepare(`SELECT SUM(total_cost_usd) AS s FROM feature_rollups`).get() as { s: number | null }).s ?? 0;
+  const deletedSuffix = rowsDeleted > 0 ? `, ${rowsDeleted} stale removed` : '';
   console.log(
-    `Rollup written: ${rowsUpserted} (date, feature) row${rowsUpserted === 1 ? '' : 's'}. ` +
+    `Rollup written: ${rowsUpserted} (date, feature) row${rowsUpserted === 1 ? '' : 's'}` +
+      `${deletedSuffix}. ` +
       `Total: $${b.toFixed(2)} (events: $${a.toFixed(2)}; ` +
       `delta: $${Math.abs(b - a).toFixed(2)}).`
   );

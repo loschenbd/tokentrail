@@ -5,7 +5,7 @@ export function renderFeature(vm: FeatureDetailVM): string {
   return `
 <div class="single-col">
   <div class="card">
-    <div class="label">${escapeHtml(vm.featureKey)} · ${vm.sessionCount} sessions · ${vm.branches.join(', ') || 'no branches'}</div>
+    <div class="label">${escapeHtml(vm.featureKey)} · ${vm.sessionCount} sessions · ${vm.branches.length === 0 ? 'no branches' : vm.branches.map((b) => escapeHtml(b)).join(', ')}</div>
     <div class="hero">${escapeHtml(vm.featureName)}</div>
     <div class="kicker">$${vm.totalUsd.toFixed(0)}</div>
     <div class="delta ${vm.deltaPct >= 0 ? 'up' : 'down'}">${vm.deltaPct >= 0 ? '▲' : '▼'} ${Math.abs(vm.deltaPct)}% vs prior</div>
@@ -54,7 +54,9 @@ function renderCommitsBlock(commits: FeatureDetailVM['sessions'][number]['commit
     .map((c) => {
       const shaShort = c.sha.slice(0, 8);
       const url = c.repo ? `https://github.com/${c.repo}/commit/${c.sha}` : null;
-      const sha = url ? `<a class="sha" href="${url}" target="_blank" rel="noopener">${shaShort}</a>` : `<span class="sha">${shaShort}</span>`;
+      const sha = url
+        ? `<a class="sha" href="${escapeHtml(url)}" target="_blank" rel="noopener">${shaShort}</a>`
+        : `<span class="sha">${shaShort}</span>`;
       return `<div class="commit-row">${sha} <span class="subject">${escapeHtml(c.subject)}</span></div>`;
     })
     .join('');

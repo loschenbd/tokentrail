@@ -206,6 +206,30 @@ program
   });
 
 program
+  .command('anomaly')
+  .description('List or dismiss anomalies.')
+  .argument('[action]', '"list" (default) or "dismiss".')
+  .argument('[id]', 'Anomaly id when dismissing.')
+  .action(async (action: string | undefined, id: string | undefined) => {
+    const { dismissAnomaly, listAnomalies } = await import('./commands/anomaly.js');
+    if (!action || action === 'list') {
+      listAnomalies();
+      return;
+    }
+    if (action === 'dismiss') {
+      if (!id) {
+        console.error('Usage: tokentrail anomaly dismiss <id>');
+        process.exitCode = 1;
+        return;
+      }
+      dismissAnomaly(Number.parseInt(id, 10));
+      return;
+    }
+    console.error(`Unknown anomaly action: ${action}`);
+    process.exitCode = 1;
+  });
+
+program
   .command('run-all')
   .description('Walk the full trail: ingest → enrich → rollup → sync.')
   .option('--skip-sync', 'Stop before the Notion sync step.')

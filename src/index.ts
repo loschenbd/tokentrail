@@ -48,6 +48,47 @@ program
   });
 
 program
+  .command('label')
+  .description('Set, clear, or list per-session feature overrides.')
+  .argument('[session]', 'Session id prefix (≥4 chars) or "list".')
+  .argument('[feature_key]', 'Stable slug; required when setting a label.')
+  .option('--name <name>', 'Human-readable feature name.')
+  .option('--clear', 'Clear the label on this session.')
+  .action(
+    async (
+      session: string | undefined,
+      featureKey: string | undefined,
+      opts: { name?: string; clear?: boolean }
+    ) => {
+      const { setLabel, clearLabel, listLabels } = await import(
+        './commands/label.js'
+      );
+      if (!session || session === 'list') {
+        await listLabels();
+        return;
+      }
+      if (opts.clear) {
+        await clearLabel({ sessionPrefix: session });
+        return;
+      }
+      if (!featureKey) {
+        console.error(
+          'Usage: tokentrail label <session-id-prefix> <feature-key> [--name "Display"]'
+        );
+        console.error('       tokentrail label <session-id-prefix> --clear');
+        console.error('       tokentrail label list');
+        process.exitCode = 1;
+        return;
+      }
+      await setLabel({
+        sessionPrefix: session,
+        featureKey,
+        featureName: opts.name,
+      });
+    }
+  );
+
+program
   .command('sessions')
   .description('List sessions by cost so you can attribute them.')
   .option('--top <n>', 'How many sessions to show (default 20)', '20')

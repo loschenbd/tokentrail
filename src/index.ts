@@ -18,6 +18,14 @@ program
   });
 
 program
+  .command('rollup')
+  .description('Aggregate events into daily feature rollups.')
+  .action(async () => {
+    const { runRollup } = await import('./commands/rollup.js');
+    await runRollup();
+  });
+
+program
   .command('enrich')
   .description('Pull PR metadata from GitHub for branches we have seen.')
   .option('--force', 'Re-enrich rows that have already been enriched.')

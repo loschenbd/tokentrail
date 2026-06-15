@@ -3,6 +3,10 @@ import { listSessionFiles, readUsageEvents } from '../services/jsonl-reader.js';
 import { decodeProjectDir, repoContextFor } from '../services/git.js';
 import { estimateCostUsd } from '../lib/cost.js';
 import { refreshWorkUnits } from '../services/work-units.js';
+import {
+  applyHookSnapshots,
+  loadLatestHookSnapshots,
+} from '../services/hook-snapshots.js';
 
 export type IngestSummary = {
   newEvents: number;
@@ -95,6 +99,11 @@ export async function runIngest(): Promise<IngestSummary> {
   }
   if (batch.length > 0) tx(batch);
 
+  // Merge Stop-hook snapshots before computing work_units. Hook data is
+  // a stronger branch signal than ingest-time HEAD, so apply it first.
+  const snapshots = await loadLatestHookSnapshots();
+  const hookResult = applyHookSnapshots(db, snapshots);
+
   const { inserted, updated } = refreshWorkUnits(db);
 
   console.log(
@@ -102,6 +111,12 @@ export async function runIngest(): Promise<IngestSummary> {
       `from ${sessions.size} session${sessions.size === 1 ? '' : 's'} ` +
       `across ${files.length} file${files.length === 1 ? '' : 's'}.`
   );
+  if (hookResult.sessionsCovered > 0) {
+    console.log(
+      `Hook backfill: refined ${hookResult.updated} event${hookResult.updated === 1 ? '' : 's'} ` +
+        `across ${hookResult.sessionsCovered} session${hookResult.sessionsCovered === 1 ? '' : 's'}.`
+    );
+  }
   console.log(
     `Work units: ${inserted} new, ${updated} updated.`
   );

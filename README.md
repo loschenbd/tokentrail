@@ -35,8 +35,40 @@ See `tokentrail <command> --help` for flags.
 
 ## Notion sync
 
-See `docs/notion.md` (or the Notion sync section in this README, once it
-lands in Phase 6) for the database schema and setup steps.
+Set up:
+
+1. Create a Notion integration at <https://www.notion.so/profile/integrations>
+   and copy the internal integration token.
+2. Create a Notion database with the properties listed below.
+3. Share the database with your integration (Share → Connections → add your
+   integration).
+4. Copy the database id from its URL — `notion.so/<workspace>/<database-id>?v=…`.
+5. Add to `.env`:
+   ```
+   NOTION_TOKEN=secret_…
+   NOTION_DATABASE_ID=…
+   ```
+6. Run `tokentrail sync`.
+
+Required properties (names are exact):
+
+| Property Name         | Type      | Notes                              |
+|-----------------------|-----------|------------------------------------|
+| Name                  | Title     | `{feature_key} · {date}`           |
+| Date                  | Date      | Rollup date                        |
+| Feature Key           | Rich Text | Stable slug                        |
+| Feature Name          | Rich Text | Human-readable name                |
+| Repo                  | Select    | `owner/repo`                       |
+| Branches              | Rich Text | Comma-separated list               |
+| Total Cost USD        | Number    | Estimated spend                    |
+| Total Input Tokens    | Number    |                                    |
+| Total Output Tokens   | Number    |                                    |
+| Sessions              | Number    |                                    |
+| Synced At             | Date      | Timestamp                          |
+
+By default `sync` only re-pushes rollups whose `updated_at` is newer than
+their last successful Notion sync. Use `--force` to re-push everything,
+or `--days N` to restrict to a recent window.
 
 ## Hook setup
 

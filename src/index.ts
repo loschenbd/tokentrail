@@ -56,6 +56,21 @@ program
   });
 
 program
+  .command('sync')
+  .description('Sync the latest ledger entries to Notion.')
+  .option('--days <n>', 'Only sync rollups in the last N days.')
+  .option('--force', 'Re-push every rollup, even if unchanged.')
+  .option('--delay <ms>', 'Sleep between Notion requests (default 350)', '350')
+  .action(async (opts: { days?: string; force?: boolean; delay?: string }) => {
+    const { runSync } = await import('./commands/sync.js');
+    await runSync({
+      days: opts.days ? Number.parseInt(opts.days, 10) : undefined,
+      force: opts.force ?? false,
+      delayMs: Number.parseInt(opts.delay ?? '350', 10),
+    });
+  });
+
+program
   .command('enrich')
   .description('Pull PR metadata from GitHub for branches we have seen.')
   .option('--force', 'Re-enrich rows that have already been enriched.')

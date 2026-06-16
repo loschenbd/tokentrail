@@ -1,8 +1,13 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';
-import { buildToday } from '../src/dashboard/data/api.js';
+import { buildToday, type TodayResponse } from '../src/dashboard/data/api.js';
+import { buildServer } from '../src/dashboard/server.js';
+import { closeDb } from '../src/db/db.js';
 
 function makeDb() {
   const db = new Database(':memory:');
@@ -86,5 +91,32 @@ describe('buildToday', () => {
     const r = buildToday(db);
 
     assert.equal(r.topFeatures[0]!.href, 'http://127.0.0.1:4920/feature/repo%3Aowner%2Fname');
+  });
+});
+
+describe('GET /api/today', () => {
+  test('returns 200 with JSON content-type and TodayResponse shape', async () => {
+    // Isolate from the dev DB at data/tracker.db — getDb() reads TRACKER_DB_PATH
+    // on first call, so set it before buildServer() touches the singleton.
+    const originalPath = process.env.TRACKER_DB_PATH;
+    const tmpDir = mkdtempSync(join(tmpdir(), 'tokentrail-api-test-'));
+    process.env.TRACKER_DB_PATH = join(tmpDir, 'test.db');
+
+    const app = buildServer({ defaultDays: 30 });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/today' });
+      assert.equal(res.statusCode, 200);
+      assert.match(res.headers['content-type'] as string, /^application\/json/);
+      const body = res.json() as TodayResponse;
+      assert.equal(typeof body.todayUsd, 'number');
+      assert.ok(Array.isArray(body.topFeatures));
+      assert.equal(typeof body.anomalyCount, 'number');
+      assert.match(body.asOf, /^\d{4}-\d{2}-\d{2}T/);
+    } finally {
+      await app.close();
+      closeDb();
+      if (originalPath === undefined) delete process.env.TRACKER_DB_PATH;
+      else process.env.TRACKER_DB_PATH = originalPath;
+    }
   });
 });

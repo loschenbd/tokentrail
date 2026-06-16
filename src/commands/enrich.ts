@@ -26,11 +26,14 @@ export async function runEnrich(opts: EnrichOptions = {}): Promise<EnrichSummary
   }
 
   const db = getDb();
+  // Skip local/* repos — they have no GitHub presence, so PR lookup is a
+  // guaranteed 404. Branch-prefix attribution still runs for them at rollup.
   const rows = db
     .prepare(
       `SELECT id, repo, branch, github_enriched_at
        FROM work_units
-       ${opts.force ? '' : 'WHERE github_enriched_at IS NULL'}
+       WHERE repo NOT LIKE 'local/%'
+         ${opts.force ? '' : 'AND github_enriched_at IS NULL'}
        ORDER BY last_seen_at DESC`
     )
     .all() as Array<{

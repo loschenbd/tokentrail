@@ -89,6 +89,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 }
 .feature-row .name { font-family: var(--font-serif); }
 .feature-row .amt { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--color-ink); }
+.feature-row .share { font-weight: 400; margin-left: 4px; }
 .bar {
   height: 4px;
   background: rgba(139, 111, 71, 0.15);

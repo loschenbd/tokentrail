@@ -8,6 +8,23 @@ Tokentrail is a local-first CLI for tracing Claude Code token usage across
 branches, features, and pull requests. It follows the trail from raw session
 logs to feature-level cost rollups, then optionally syncs that ledger to Notion.
 
+## Quickstart
+
+```bash
+git clone https://github.com/loschenbd/tokentrail.git
+cd tokentrail
+npm install
+cp .env.example .env       # optional — only needed for Notion sync and PR enrich
+npm run tokentrail -- run-all --skip-sync --skip-enrich
+npm run tokentrail -- dashboard
+```
+
+That ingests your existing Claude Code session logs from `~/.claude/projects/`,
+rolls them into daily per-feature totals, and opens the dashboard at
+`http://127.0.0.1:4920`. Add a `GITHUB_TOKEN` to `.env` to enrich PR data,
+and `NOTION_TOKEN` + `NOTION_DATABASE_ID` to mirror to Notion (see
+**Notion sync** below).
+
 ## What Tokentrail does
 
 - Reads Claude Code's local JSONL session logs.
@@ -161,6 +178,10 @@ Tokentrail overview. Flags:
 
 The dashboard is read-only. Labeling, anomaly dismissal, and sync stay on the
 CLI. Stop it with Ctrl-C.
+
+<p align="center">
+  <img src="docs/dashboard.png" alt="Tokentrail dashboard" width="900">
+</p>
 
 ### Anomalies
 

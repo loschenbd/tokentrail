@@ -79,7 +79,7 @@ function renderCommits(items: OverviewVM['recentCommits']): string {
       const shaShort = c.sha.slice(0, 8);
       const url = c.repo ? `https://github.com/${c.repo}/commit/${c.sha}` : null;
       const sha = url
-        ? `<a class="sha" href="${url}" target="_blank" rel="noopener">${shaShort}</a>`
+        ? `<a class="sha" href="${escapeHtml(url)}" target="_blank" rel="noopener">${shaShort}</a>`
         : `<span class="sha">${shaShort}</span>`;
       return `<div class="commit-row">${sha} <span class="subject">${escapeHtml(c.subject)}</span></div>`;
     })

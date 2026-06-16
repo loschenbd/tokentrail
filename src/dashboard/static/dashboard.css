@@ -82,6 +82,41 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   font-weight: 500;
 }
 .feature-row:hover { background: rgba(255,255,255,0.4); }
+.feature-row.sub {
+  grid-template-columns: 1fr auto;
+  padding: 4px 0 4px 36px;
+  font-weight: 400;
+  font-size: var(--size-small);
+  border-bottom: 1px dashed rgba(139,111,71,0.12);
+}
+.feature-row.sub:last-child { border-bottom: none; }
+
+.project-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto auto;
+  gap: var(--space-s);
+  padding: 6px 0;
+  text-decoration: none;
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  font-weight: 600;
+  align-items: baseline;
+}
+.project-row:hover { background: rgba(255,255,255,0.4); }
+.project-row.expandable { cursor: pointer; }
+.project-row .chev {
+  font-size: 12px;
+  color: var(--color-ink-subtle);
+  transition: transform 0.15s ease;
+}
+.project-row.open .chev { transform: rotate(90deg); }
+.project-features {
+  display: none;
+  margin-left: 24px;
+  padding: 4px 0 6px 0;
+  border-left: 1px dashed rgba(139,111,71,0.25);
+}
+.project-features.open { display: block; }
 .feature-row .mile {
   color: var(--color-ink-subtle);
   font-family: var(--font-serif);
@@ -174,6 +209,31 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   margin-bottom: 4px;
 }
 .pr-row { font-size: var(--size-small); padding: 3px 0; }
+
+.cluster-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "name meta" "bar bar";
+  column-gap: var(--space-s);
+  row-gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px dashed rgba(139,111,71,0.2);
+}
+.cluster-row:last-child { border-bottom: none; }
+.cluster-row .cluster-name {
+  grid-area: name;
+  font-family: var(--font-serif);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.cluster-row .cluster-meta {
+  grid-area: meta;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--size-small);
+}
+.cluster-row .bar { grid-area: bar; margin-left: 0; }
+.cluster-row:hover { background: rgba(255,255,255,0.4); }
+.session-row.flash { background: rgba(245, 222, 179, 0.6); transition: background 1.2s ease-out; }
 
 .anomaly-full {
   display: grid;

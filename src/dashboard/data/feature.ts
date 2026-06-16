@@ -8,6 +8,12 @@ export type FeatureDetailVM = {
   sessionCount: number;
   branches: string[];
   dailySeries: Array<{ date: string; total: number; commits: number; prs: number }>;
+  clusters: Array<{
+    name: string;
+    sessionIds: string[];
+    sessionCount: number;
+    totalUsd: number;
+  }>;
   sessions: Array<{
     sessionId: string;
     title: string | null;
@@ -114,6 +120,38 @@ export function buildFeatureDetail(
     prs: prStmt.all(s.sessionId) as FeatureDetailVM['sessions'][number]['prs'],
   }));
 
+  const clusterRows = db
+    .prepare(
+      `SELECT cluster_name AS name, session_ids AS sessionIdsCsv,
+              session_count AS sessionCount, total_usd AS totalUsd
+       FROM feature_clusters
+       WHERE feature_key = ?
+       ORDER BY rank ASC`
+    )
+    .all(opts.featureKey) as Array<{
+      name: string;
+      sessionIdsCsv: string;
+      sessionCount: number;
+      totalUsd: number;
+    }>;
+  // Scope each cluster's sessionIds to the in-window session set so a
+  // 30d view doesn't surface sessions that fall outside the window.
+  const windowSessionSet = new Set(sessionIds);
+  const clusters: FeatureDetailVM['clusters'] = clusterRows
+    .map((c) => {
+      const ids = c.sessionIdsCsv
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => windowSessionSet.has(s));
+      return {
+        name: c.name,
+        sessionIds: ids,
+        sessionCount: ids.length,
+        totalUsd: round2(c.totalUsd),
+      };
+    })
+    .filter((c) => c.sessionCount > 0);
+
   return {
     featureKey: opts.featureKey,
     featureName: head.featureName ?? opts.featureKey,
@@ -122,6 +160,7 @@ export function buildFeatureDetail(
     sessionCount: head.sessionCount,
     branches: uniqueBranches,
     dailySeries,
+    clusters,
     sessions,
   };
 }

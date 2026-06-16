@@ -3,6 +3,7 @@ import { getDb } from '../db/db.js';
 import { attribute } from '../lib/attribution.js';
 import { bucketFromProjectDir } from '../lib/project-dir.js';
 import { computeAndPersistAnomalies } from '../services/anomalies-db.js';
+import { recomputeClusters } from '../services/clustering.js';
 
 export type RollupSummary = {
   rowsUpserted: number;
@@ -234,6 +235,25 @@ export async function runRollup(): Promise<RollupSummary> {
       (anomalyResult.preserved > 0 ? `, ${anomalyResult.preserved} dismissed preserved` : '') +
       '.'
   );
+
+  // Topic clustering: cheap when nothing has changed (it short-circuits per
+  // feature on session-set fingerprint), so it's safe to run on every rollup.
+  try {
+    const clusters = await recomputeClusters(db);
+    if (clusters.featuresConsidered > 0) {
+      console.log(
+        `Clusters: ${clusters.featuresClustered} feature${clusters.featuresClustered === 1 ? '' : 's'} re-clustered, ` +
+          `${clusters.featuresSkipped} unchanged` +
+          (clusters.featuresFailed > 0 ? `, ${clusters.featuresFailed} failed` : '') +
+          ` (${clusters.llmCalls} LLM call${clusters.llmCalls === 1 ? '' : 's'}).`
+      );
+    }
+  } catch (err) {
+    console.error(
+      'Cluster step failed (rollup itself still wrote):',
+      err instanceof Error ? err.message : err
+    );
+  }
 
   return { rowsUpserted };
 }

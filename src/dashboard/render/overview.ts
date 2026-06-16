@@ -13,7 +13,7 @@ export function renderOverview(vm: OverviewVM): string {
 
     <div class="card">
       <div class="label">Top burn paths</div>
-      ${renderTopFeatures(vm.topFeatures, vm.totalUsd)}
+      ${renderTopProjects(vm.topProjects, vm.totalUsd)}
     </div>
   </section>
 
@@ -45,23 +45,47 @@ export function renderOverview(vm: OverviewVM): string {
   `;
 }
 
-function renderTopFeatures(items: OverviewVM['topFeatures'], totalUsd: number): string {
-  if (items.length === 0) return '<div class="muted">No feature activity yet.</div>';
+function renderTopProjects(items: OverviewVM['topProjects'], totalUsd: number): string {
+  if (items.length === 0) return '<div class="muted">No project activity yet.</div>';
   const denom = totalUsd > 0 ? totalUsd : 1;
-  const roman = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+  const roman = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
   return items
-    .map((f, i) => {
-      const share = (f.totalUsd / denom) * 100;
-      // Round visually but clamp to a 1% min so tiny bars stay visible.
+    .map((p, i) => {
+      const share = (p.totalUsd / denom) * 100;
       const pct = Math.max(1, Math.round(share));
-      const href = `/feature/${encodeURIComponent(f.featureKey)}`;
+      const singleFeature = p.features.length === 1;
+      // If a project has only one feature, link the header straight to that
+      // feature — no point making the user expand it just to click through.
+      const headerHref = singleFeature
+        ? `/feature/${encodeURIComponent(p.features[0]!.featureKey)}`
+        : null;
+      const projectRow = headerHref
+        ? `<a class="project-row" href="${headerHref}">
+             <span class="mile">${roman[i] ?? ''}</span>
+             <span class="name">${escapeHtml(p.projectName)}</span>
+             <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
+           </a>`
+        : `<div class="project-row expandable" data-project-toggle="${escapeHtml(p.projectKey)}">
+             <span class="mile">${roman[i] ?? ''}</span>
+             <span class="name">${escapeHtml(p.projectName)} <span class="muted">· ${p.features.length} features</span></span>
+             <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
+             <span class="chev">▸</span>
+           </div>`;
+      const featureBlock = singleFeature
+        ? ''
+        : `<div class="project-features" id="project-${escapeHtml(p.projectKey)}">
+             ${p.features.map((f) => {
+               const fShare = (f.totalUsd / (p.totalUsd || 1)) * 100;
+               return `<a class="feature-row sub" href="/feature/${encodeURIComponent(f.featureKey)}">
+                 <span class="name">${escapeHtml(f.featureName || f.featureKey)}</span>
+                 <span class="amt">$${f.totalUsd.toFixed(0)} <span class="muted share">· ${fShare.toFixed(0)}%</span></span>
+               </a>`;
+             }).join('')}
+           </div>`;
       return `
-        <a class="feature-row" href="${href}">
-          <span class="mile">${roman[i] ?? ''}</span>
-          <span class="name">${escapeHtml(f.featureName || f.featureKey)}</span>
-          <span class="amt">$${f.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
-        </a>
+        ${projectRow}
         <div class="bar"><span style="width:${pct}%"></span></div>
+        ${featureBlock}
       `;
     })
     .join('');

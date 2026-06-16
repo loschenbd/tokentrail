@@ -8,6 +8,12 @@ export type OverviewVM = {
   weekUsd: number;
   weekSessions: number;
   topFeatures: Array<{ featureKey: string; featureName: string; totalUsd: number }>;
+  topProjects: Array<{
+    projectKey: string;
+    projectName: string;
+    totalUsd: number;
+    features: Array<{ featureKey: string; featureName: string; totalUsd: number }>;
+  }>;
   dailySeries: Array<{ date: string; total: number; commits: number; prs: number }>;
   anomalies: Array<{
     id: number;
@@ -54,6 +60,46 @@ export function buildOverview(
       LIMIT 10
     `)
     .all() as OverviewVM['topFeatures'];
+
+  // Project grouping: a project is the repo (e.g. loschenbd/archi → "archi")
+  // when a feature has one, otherwise the feature itself is its own project
+  // (so "outside:" buckets like Anamnesis stand on their own). MAX(repo)
+  // collapses the CSV reasonably for single-repo features; mixed-repo
+  // features get the lexicographically-first repo.
+  const projectRows = db
+    .prepare(`
+      SELECT feature_key AS featureKey,
+             MAX(feature_name) AS featureName,
+             MAX(repo) AS repo,
+             ROUND(SUM(total_cost_usd), 2) AS totalUsd
+      FROM feature_rollups
+      WHERE date >= ${startExpr}
+      GROUP BY feature_key
+    `)
+    .all() as Array<{ featureKey: string; featureName: string; repo: string | null; totalUsd: number }>;
+
+  const projectMap = new Map<string, OverviewVM['topProjects'][number]>();
+  for (const r of projectRows) {
+    const { projectKey, projectName } = bucketProject(r);
+    let p = projectMap.get(projectKey);
+    if (!p) {
+      p = { projectKey, projectName, totalUsd: 0, features: [] };
+      projectMap.set(projectKey, p);
+    }
+    p.totalUsd = round2(p.totalUsd + r.totalUsd);
+    p.features.push({
+      featureKey: r.featureKey,
+      featureName: r.featureName,
+      totalUsd: r.totalUsd,
+    });
+  }
+  const topProjects = [...projectMap.values()]
+    .map((p) => ({
+      ...p,
+      features: p.features.sort((a, b) => b.totalUsd - a.totalUsd),
+    }))
+    .sort((a, b) => b.totalUsd - a.totalUsd)
+    .slice(0, 12);
 
   // Daily series — one row per day in window, zero-filled.
   const observed = db
@@ -112,9 +158,31 @@ export function buildOverview(
     weekUsd: round2(weekRow.total),
     weekSessions: weekRow.sessions,
     topFeatures,
+    topProjects,
     dailySeries,
     anomalies,
     recentCommits,
+  };
+}
+
+function bucketProject(r: { featureKey: string; featureName: string; repo: string | null }): { projectKey: string; projectName: string } {
+  if (r.repo && r.repo.trim()) {
+    // CSV-resilient: take the first non-empty repo string.
+    const firstRepo = r.repo.split(',').map((s) => s.trim()).find((s) => s.length > 0) ?? r.repo;
+    const owner = firstRepo.includes('/') ? firstRepo.split('/')[0] : '';
+    const name = firstRepo.split('/').pop() ?? firstRepo;
+    // local/<basename> reads better as just the basename; GitHub-style
+    // slugs keep the owner stripped so the eye lands on the project.
+    return {
+      projectKey: owner === 'local' ? `local:${name}` : `repo:${firstRepo}`,
+      projectName: name,
+    };
+  }
+  // No repo: the feature itself is its own project. Strip the "outside:"
+  // prefix from the key so the URL stays human-readable.
+  return {
+    projectKey: `feature:${r.featureKey}`,
+    projectName: r.featureName || r.featureKey,
   };
 }
 

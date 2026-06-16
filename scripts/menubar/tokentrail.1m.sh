@@ -1,12 +1,14 @@
 #!/bin/bash
 # Tokentrail SwiftBar plugin.
 #
-# Filename convention: `.5m.` tells SwiftBar to re-run this script every
-# 5 minutes. See https://github.com/swiftbar/SwiftBar#plugin-api.
+# Filename convention: `.1m.` tells SwiftBar to re-run this script every
+# minute. See https://github.com/swiftbar/SwiftBar#plugin-api. Pair with
+# a cron entry that re-ingests at least as often (see README · Automation)
+# for near-realtime totals.
 #
 # Requires the Tokentrail dashboard server on 127.0.0.1:4920. Install:
 #   brew install --cask swiftbar
-#   ln -s "$PWD/scripts/menubar/tokentrail.5m.sh" \
+#   ln -s "$PWD/scripts/menubar/tokentrail.1m.sh" \
 #     ~/Library/Application\ Support/SwiftBar/
 #
 # Why a bash wrapper and not `#!/usr/bin/env node`: SwiftBar launches
@@ -18,7 +20,7 @@
 #
 # <bitbar.title>Tokentrail</bitbar.title>
 # <bitbar.author>Tokentrail</bitbar.author>
-# <bitbar.desc>Today's Claude Code spend, refreshed every 5 minutes.</bitbar.desc>
+# <bitbar.desc>Today's Claude Code spend, refreshed every minute.</bitbar.desc>
 # <bitbar.environment>[PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin]</bitbar.environment>
 
 set -u
@@ -51,6 +53,15 @@ const ENDPOINT = `${DASHBOARD_URL}/api/today`;
 const REPO_URL = 'https://github.com/loschenbd/tokentrail#menu-bar-widget-swiftbar';
 const FETCH_TIMEOUT_MS = 2000;
 
+// Tree-glyph indent for nested feature rows under their project.
+const TREE_BRANCH = '├';
+const TREE_LAST = '└';
+
+// SwiftBar font params. Menlo-Bold is shipped with macOS — safe to assume.
+const PROJECT_FONT = 'font=Menlo-Bold size=13';
+const FEATURE_STYLE = 'color=#6b563d size=11';
+const META_STYLE = 'color=#6b563d size=11';
+
 function fmtUsd(n) {
   return `$${Number(n).toFixed(2)}`;
 }
@@ -80,23 +91,30 @@ function renderHappy(data) {
   lines.push('---');
 
   if (data.topProjects.length === 0) {
-    lines.push('TODAY · no activity yet | color=#6b563d size=11');
+    lines.push(`TODAY · no activity yet | ${META_STYLE}`);
   } else {
     lines.push(
       `TODAY · ${plural(data.topProjects.length, 'project', 'projects')} · ` +
-      `${plural(data.anomalyCount, 'anomaly', 'anomalies')} | color=#6b563d size=11`
+      `${plural(data.anomalyCount, 'anomaly', 'anomalies')} | ${META_STYLE}`
     );
     lines.push('---');
-    for (const p of data.topProjects) {
+    for (let i = 0; i < data.topProjects.length; i++) {
+      const p = data.topProjects[i];
       const projLabel = sanitizeLabel(`${p.name}  ${fmtUsd(p.usd)}`);
-      lines.push(`${projLabel} | href=${p.href}`);
+      lines.push(`${projLabel} | href=${p.href} ${PROJECT_FONT}`);
       // Single-feature projects: the indented sub-row would just duplicate
       // the project row's number. Skip it to keep the dropdown compact.
       if (p.features.length > 1) {
-        for (const f of p.features) {
-          const fLabel = sanitizeLabel(`  ${f.name}  ${fmtUsd(f.usd)}`);
-          lines.push(`${fLabel} | href=${f.href} color=#6b563d size=11`);
+        for (let j = 0; j < p.features.length; j++) {
+          const f = p.features[j];
+          const glyph = j === p.features.length - 1 ? TREE_LAST : TREE_BRANCH;
+          const fLabel = sanitizeLabel(`  ${glyph} ${f.name}  ${fmtUsd(f.usd)}`);
+          lines.push(`${fLabel} | href=${f.href} ${FEATURE_STYLE}`);
         }
+      }
+      // Divider between project groups (not after last project).
+      if (i < data.topProjects.length - 1) {
+        lines.push('---');
       }
     }
   }

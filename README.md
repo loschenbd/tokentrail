@@ -159,7 +159,9 @@ line on start and end.
 ```
 
 Set `TOKENTRAIL_FLAGS=--skip-sync` in the crontab line for a local-only
-refresh.
+refresh. If you're running the SwiftBar widget and want near-realtime
+totals, drop the cron interval to `*/1` (every minute) and set
+`TOKENTRAIL_FLAGS=--skip-sync --skip-enrich` so each tick stays cheap.
 
 ## Dashboard
 
@@ -186,14 +188,14 @@ Put today's spend in your macOS menu bar:
 ```bash
 brew install --cask swiftbar
 mkdir -p ~/Library/Application\ Support/SwiftBar
-ln -s "$PWD/scripts/menubar/tokentrail.5m.sh" \
+ln -s "$PWD/scripts/menubar/tokentrail.1m.sh" \
   ~/Library/Application\ Support/SwiftBar/
 ```
 
 Open SwiftBar from Spotlight; it picks up the plugin automatically. The
-widget shows today's spend (`$X.XX`) and refreshes every 5 minutes. Click
-it to see the top 3 features (each links into the dashboard) and an
-anomaly count.
+widget shows today's spend (`$X.XX`) and refreshes every minute. Click
+it to see today's top projects, each with its constituent features
+nested underneath and an anomaly count.
 
 Requires `tokentrail dashboard` to be running on port 4920. If it isn't,
 the widget shows `$—` and a "not running" hint instead of crashing.

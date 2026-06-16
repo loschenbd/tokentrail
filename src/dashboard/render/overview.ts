@@ -8,7 +8,7 @@ export function renderOverview(vm: OverviewVM): string {
     <div class="card chart-card">
       <div class="label">Trend · last ${vm.windowDays} days</div>
       <div id="trend-chart" style="width:100%;height:280px"></div>
-      <script type="application/json" id="trend-data">${escapeHtml(JSON.stringify(vm.dailySeries))}</script>
+      <script type="application/json" id="trend-data">${jsonForScriptTag(vm.dailySeries)}</script>
     </div>
 
     <div class="card">
@@ -84,4 +84,13 @@ function renderCommits(items: OverviewVM['recentCommits']): string {
       return `<div class="commit-row">${sha} <span class="subject">${escapeHtml(c.subject)}</span></div>`;
     })
     .join('');
+}
+
+// Serialize JSON for embedding inside a <script type="application/json"> tag.
+// The browser does NOT decode HTML entities inside <script> raw-text content,
+// so escapeHtml would produce literal "&quot;" that breaks JSON.parse. We
+// escape only "<" (preventing </script> breakout) by unicode-escaping it,
+// which JSON.parse accepts as a normal character.
+function jsonForScriptTag(data: unknown): string {
+  return JSON.stringify(data).replace(/</g, '\\u003c');
 }

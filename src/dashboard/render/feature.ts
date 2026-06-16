@@ -14,7 +14,7 @@ export function renderFeature(vm: FeatureDetailVM): string {
   <div class="card chart-card">
     <div class="label">Lifecycle</div>
     <div id="trend-chart" style="width:100%;height:240px"></div>
-    <script type="application/json" id="trend-data">${escapeHtml(JSON.stringify(vm.dailySeries))}</script>
+    <script type="application/json" id="trend-data">${jsonForScriptTag(vm.dailySeries)}</script>
   </div>
 
   <div class="card">
@@ -69,4 +69,9 @@ function renderPrsBlock(prs: FeatureDetailVM['sessions'][number]['prs']): string
       (p) => `<div class="pr-row"><a href="${escapeHtml(p.url)}" target="_blank" rel="noopener">${escapeHtml(p.repo)}#${p.prNumber}</a> <span class="muted">[${escapeHtml(p.state)}]</span> <span class="subject">${escapeHtml(p.title)}</span></div>`
     )
     .join('');
+}
+
+// See overview.ts for why we don't escapeHtml() JSON inside a <script> tag.
+function jsonForScriptTag(data: unknown): string {
+  return JSON.stringify(data).replace(/</g, '\\u003c');
 }

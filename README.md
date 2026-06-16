@@ -140,6 +140,50 @@ line on start and end.
 Set `TOKENTRAIL_FLAGS=--skip-sync` in the crontab line for a local-only
 refresh.
 
+## Dashboard
+
+```
+npm run tokentrail -- dashboard
+```
+
+Starts a local Fastify server on `127.0.0.1:4920` and opens your browser to the
+Tokentrail overview. Flags:
+
+```
+--port <n>     bind to a different port (default 4920)
+--no-open      print the URL but don't auto-launch the browser
+--days <n>     initial time window (default 30)
+```
+
+The dashboard is read-only. Labeling, anomaly dismissal, and sync stay on the
+CLI. Stop it with Ctrl-C.
+
+### Anomalies
+
+Anomalies are recomputed at the end of every `tokentrail rollup` and surfaced
+both in the dashboard sidebar / `/worth-a-look` page and in Notion (`Anomaly` /
+`Anomaly reason` columns + the weekly digest page). Dismiss one with:
+
+```
+tokentrail anomaly dismiss <id>
+```
+
+Dismissed anomalies survive future rollup runs.
+
+### Notion schema setup (one-time)
+
+The first time you sync to Notion after upgrading, you must add three new
+columns to your Tokentrail database (via the Notion UI or the
+`notion-update-data-source` MCP tool):
+
+- `Type` — Select with options `Rollup` and `Digest`
+- `Anomaly` — Checkbox
+- `Anomaly reason` — Rich text
+
+Without these columns, `tokentrail sync` will warn and continue. Existing rollup
+pages keep their bodies; new ones get a `Type=Rollup` tag and a "View on
+dashboard →" link at the top of the body.
+
 ## Limits and caveats
 
 - All dollar values are **estimated**, computed from the configured rate card.

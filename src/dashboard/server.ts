@@ -67,6 +67,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     'dashboard.js',
     'uPlot.iife.min.js',
     'uPlot.min.css',
+    'logo.png',
+    'favicon.svg',
   ]);
 
   app.get('/static/tokens.css', async (_req, reply) => {
@@ -80,6 +82,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     const data = await readFile(join(STATIC_DIR, name));
     if (name.endsWith('.css')) reply.type('text/css; charset=utf-8');
     else if (name.endsWith('.js')) reply.type('application/javascript; charset=utf-8');
+    else if (name.endsWith('.png')) reply.type('image/png');
+    else if (name.endsWith('.svg')) reply.type('image/svg+xml');
     return data;
   });
 

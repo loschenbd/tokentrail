@@ -69,23 +69,35 @@ function renderError(message) {
   ].join('\n');
 }
 
+function sanitizeLabel(s) {
+  // SwiftBar splits on ` | `, so the label may not contain that token.
+  return String(s).replace(/\s*\|\s*/g, ' ');
+}
+
 function renderHappy(data) {
   const lines = [];
   lines.push(`${fmtUsd(data.todayUsd)} | font=Menlo size=12`);
   lines.push('---');
 
-  if (data.topFeatures.length === 0) {
+  if (data.topProjects.length === 0) {
     lines.push('TODAY · no activity yet | color=#6b563d size=11');
   } else {
     lines.push(
-      `TODAY · ${plural(data.topFeatures.length, 'feature', 'features')} · ` +
+      `TODAY · ${plural(data.topProjects.length, 'project', 'projects')} · ` +
       `${plural(data.anomalyCount, 'anomaly', 'anomalies')} | color=#6b563d size=11`
     );
     lines.push('---');
-    for (const f of data.topFeatures) {
-      // SwiftBar splits on ` | `, so the label may not contain that token.
-      const label = `${f.name}  ${fmtUsd(f.usd)}`.replace(/\s*\|\s*/g, ' ');
-      lines.push(`${label} | href=${f.href}`);
+    for (const p of data.topProjects) {
+      const projLabel = sanitizeLabel(`${p.name}  ${fmtUsd(p.usd)}`);
+      lines.push(`${projLabel} | href=${p.href}`);
+      // Single-feature projects: the indented sub-row would just duplicate
+      // the project row's number. Skip it to keep the dropdown compact.
+      if (p.features.length > 1) {
+        for (const f of p.features) {
+          const fLabel = sanitizeLabel(`  ${f.name}  ${fmtUsd(f.usd)}`);
+          lines.push(`${fLabel} | href=${f.href} color=#6b563d size=11`);
+        }
+      }
     }
   }
 

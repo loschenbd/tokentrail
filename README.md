@@ -174,6 +174,21 @@ tokentrail anomaly dismiss <id>
 
 Dismissed anomalies survive future rollup runs.
 
+### Topic clusters
+
+For features with five or more sessions, Tokentrail groups them into a few
+named topics (e.g. "Sidebar redesign · 5 sessions · $420") on the Feature
+Detail page. Set `ANTHROPIC_API_KEY` in `.env` to enable. Re-clustering runs
+at the end of every `tokentrail rollup` and only re-calls the LLM for
+features whose session set has changed. Force a full re-cluster with:
+
+```
+tokentrail cluster --force
+```
+
+Without an `ANTHROPIC_API_KEY`, clustering is silently skipped — the rest of
+the dashboard works as before.
+
 ### Notion schema setup (one-time)
 
 The first time you sync to Notion after upgrading, you must add three new

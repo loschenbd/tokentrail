@@ -105,8 +105,24 @@
     });
   }
 
+  function setupClusterJumps() {
+    document.querySelectorAll('[data-cluster-sessions]').forEach((row) => {
+      row.addEventListener('click', () => {
+        const ids = (row.getAttribute('data-cluster-sessions') || '').trim().split(/\s+/);
+        if (!ids.length) return;
+        const first = document.getElementById(ids[0]);
+        if (!first) return;
+        first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        first.classList.add('flash');
+        setTimeout(() => first.classList.remove('flash'), 1200);
+      });
+      row.style.cursor = 'pointer';
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     renderTrend();
     setupRowExpanders();
+    setupClusterJumps();
   });
 })();

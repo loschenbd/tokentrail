@@ -18,6 +18,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
     "@notionhq/client": "^2.2.15",
     "@octokit/rest": "^21.0.2",
     "better-sqlite3": "^11.5.0",

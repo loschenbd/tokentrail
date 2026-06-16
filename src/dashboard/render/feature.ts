@@ -17,6 +17,12 @@ export function renderFeature(vm: FeatureDetailVM): string {
     <script type="application/json" id="trend-data">${jsonForScriptTag(vm.dailySeries)}</script>
   </div>
 
+  ${vm.clusters.length === 0 ? '' : `
+  <div class="card">
+    <div class="label">Topics</div>
+    ${renderClusters(vm.clusters, vm.totalUsd)}
+  </div>`}
+
   <div class="card">
     <div class="label">Sessions</div>
     ${vm.sessions.length === 0 ? '<div class="muted">No sessions in window.</div>' : renderSessions(vm.sessions)}
@@ -25,13 +31,31 @@ export function renderFeature(vm: FeatureDetailVM): string {
   `;
 }
 
+function renderClusters(clusters: FeatureDetailVM['clusters'], totalUsd: number): string {
+  const denom = totalUsd > 0 ? totalUsd : 1;
+  return clusters
+    .map((c, i) => {
+      const share = (c.totalUsd / denom) * 100;
+      const pct = Math.max(1, Math.round(share));
+      const sessionsById = c.sessionIds.map((id) => `session-${id}`).join(' ');
+      return `
+        <div class="cluster-row" data-cluster-sessions="${escapeHtml(sessionsById)}">
+          <span class="cluster-name">${escapeHtml(c.name)}</span>
+          <span class="cluster-meta muted">${c.sessionCount} session${c.sessionCount === 1 ? '' : 's'} · $${c.totalUsd.toFixed(0)} · ${share.toFixed(0)}%</span>
+          <div class="bar"><span style="width:${pct}%"></span></div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
 function renderSessions(items: FeatureDetailVM['sessions']): string {
   return items
     .map((s, i) => {
       const idShort = s.sessionId.slice(0, 8);
       const detailsId = `session-${i}-details`;
       return `
-        <div class="session-row" data-expand-target="${detailsId}">
+        <div class="session-row" id="session-${escapeHtml(s.sessionId)}" data-expand-target="${detailsId}">
           <span class="amt">$${s.cost.toFixed(0)}</span>
           <span class="muted">${escapeHtml(s.date ?? '')}</span>
           <span class="sha">${idShort}</span>

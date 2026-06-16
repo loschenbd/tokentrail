@@ -175,6 +175,31 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 }
 .pr-row { font-size: var(--size-small); padding: 3px 0; }
 
+.cluster-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "name meta" "bar bar";
+  column-gap: var(--space-s);
+  row-gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px dashed rgba(139,111,71,0.2);
+}
+.cluster-row:last-child { border-bottom: none; }
+.cluster-row .cluster-name {
+  grid-area: name;
+  font-family: var(--font-serif);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.cluster-row .cluster-meta {
+  grid-area: meta;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--size-small);
+}
+.cluster-row .bar { grid-area: bar; margin-left: 0; }
+.cluster-row:hover { background: rgba(255,255,255,0.4); }
+.session-row.flash { background: rgba(245, 222, 179, 0.6); transition: background 1.2s ease-out; }
+
 .anomaly-full {
   display: grid;
   grid-template-columns: 100px 110px 1fr 2fr;

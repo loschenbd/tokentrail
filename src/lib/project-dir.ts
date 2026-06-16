@@ -6,13 +6,15 @@ import { slugify } from './attribution.js';
 //
 // Examples (HOME = /Users/ben):
 //   /Users/ben                         → { key: 'outside:home',
-//                                          name: 'Outside repos · home' }
+//                                          name: 'Home' }
+//   /Users/ben/Projects/anamnesis      → { key: 'outside:projects-anamnesis',
+//                                          name: 'Anamnesis' }
 //   /Users/ben/Documents/Claude        → { key: 'outside:documents-claude',
-//                                          name: 'Outside repos · Documents/Claude' }
+//                                          name: 'Documents/Claude' }
 //   /Users/ben/Projects                → { key: 'outside:projects-root',
-//                                          name: 'Outside repos · Projects root' }
+//                                          name: 'Projects (root)' }
 //   /opt/some-tool                     → { key: 'outside:opt-some-tool',
-//                                          name: 'Outside repos · opt/some-tool' }
+//                                          name: 'opt/some-tool' }
 
 export type ProjectDirBucket = {
   featureKey: string;
@@ -26,7 +28,7 @@ export function bucketFromProjectDir(projectDir: string): ProjectDirBucket {
 
   // Strip the user's home prefix so paths read cleanly.
   if (path === home) {
-    return { featureKey: 'outside:home', featureName: 'Outside repos · home' };
+    return { featureKey: 'outside:home', featureName: 'Home' };
   }
   if (path.startsWith(home + '/')) {
     path = path.slice(home.length + 1);
@@ -39,14 +41,27 @@ export function bucketFromProjectDir(projectDir: string): ProjectDirBucket {
   // `CodexBar/ClaudeProbe` — informative without being mile-long.
   const segments = path.split('/').filter(Boolean);
   if (segments.length === 0) {
-    return { featureKey: 'outside:root', featureName: 'Outside repos · /' };
+    return { featureKey: 'outside:root', featureName: '/' };
   }
 
   // Special case: bare "Projects" — the parent dir of all your repos.
   if (segments.length === 1 && /^projects?$/i.test(segments[0] ?? '')) {
     return {
       featureKey: 'outside:projects-root',
-      featureName: 'Outside repos · Projects root',
+      featureName: 'Projects (root)',
+    };
+  }
+
+  // Subdirectory of the user's Projects folder — that subdirectory's name
+  // is the project's actual title. Use it directly instead of prefixing.
+  if (
+    segments.length >= 2 &&
+    /^projects?$/i.test(segments[segments.length - 2] ?? '')
+  ) {
+    const name = segments[segments.length - 1]!;
+    return {
+      featureKey: `outside:projects-${slugify(name)}`,
+      featureName: humanizeProjectName(name),
     };
   }
 
@@ -54,6 +69,15 @@ export function bucketFromProjectDir(projectDir: string): ProjectDirBucket {
   const slug = slugify(tail);
   return {
     featureKey: `outside:${slug}`,
-    featureName: `Outside repos · ${tail}`,
+    featureName: tail,
   };
+}
+
+function humanizeProjectName(s: string): string {
+  const cleaned = s.replace(/[-_]+/g, ' ').trim();
+  if (!cleaned) return 'Untitled';
+  return cleaned
+    .split(' ')
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(' ');
 }

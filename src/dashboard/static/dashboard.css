@@ -126,6 +126,24 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 /* uPlot color overrides */
 .u-legend { font-family: var(--font-sans); font-size: var(--size-small); color: var(--color-ink-muted); }
 
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--color-parchment-top);
+  border: 1px dashed var(--color-rule);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-family: var(--font-serif);
+  font-size: var(--size-small);
+  color: var(--color-ink);
+  box-shadow: 0 2px 6px rgba(61,47,31,0.15);
+  z-index: 5;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.chart-tooltip-date { color: var(--color-ink-muted); font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
+.chart-tooltip-value { font-weight: 600; font-size: var(--size-body); }
+
 .single-col { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-l); }
 .session-row {
   display: grid;

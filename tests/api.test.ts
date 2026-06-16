@@ -49,28 +49,40 @@ function insertAnomaly(db: Database.Database, opts: { date: string; dismissed: b
 }
 
 describe('buildToday', () => {
-  test('returns today total, top 3 features (with hrefs), and open anomaly count', () => {
+  test('groups features under their projects, sorted by project total desc', () => {
     const db = makeDb();
     const today = (db.prepare(`SELECT date('now','localtime') AS d`).get() as { d: string }).d;
 
-    insertRollup(db, { date: today, featureKey: 'feat-a', featureName: 'Feature A', repo: 'owner/repo', cost: 1.10, sessionIds: 'sA', sessions: 1 });
-    insertRollup(db, { date: today, featureKey: 'feat-b', featureName: 'Feature B', repo: 'owner/repo', cost: 0.80, sessionIds: 'sB', sessions: 1 });
-    insertRollup(db, { date: today, featureKey: 'feat-c', featureName: 'Feature C', repo: 'owner/repo', cost: 0.50, sessionIds: 'sC', sessions: 1 });
-    insertRollup(db, { date: today, featureKey: 'feat-d', featureName: 'Feature D', repo: 'owner/repo', cost: 0.20, sessionIds: 'sD', sessions: 1 });
+    // Two features in repo "loschenbd/alpha" (project total $1.90)
+    insertRollup(db, { date: today, featureKey: 'alpha-a', featureName: 'Alpha A', repo: 'loschenbd/alpha', cost: 1.10, sessionIds: 'sA', sessions: 1 });
+    insertRollup(db, { date: today, featureKey: 'alpha-b', featureName: 'Alpha B', repo: 'loschenbd/alpha', cost: 0.80, sessionIds: 'sB', sessions: 1 });
+    // One feature in repo "loschenbd/beta" (project total $0.50)
+    insertRollup(db, { date: today, featureKey: 'beta-a', featureName: 'Beta A', repo: 'loschenbd/beta', cost: 0.50, sessionIds: 'sC', sessions: 1 });
 
     insertAnomaly(db, { date: today, dismissed: false, featureKey: 'feat-anom-1' });
-    insertAnomaly(db, { date: today, dismissed: false, featureKey: 'feat-anom-2' });
-    insertAnomaly(db, { date: today, dismissed: true, featureKey: 'feat-anom-3' });   // dismissed → not counted
+    insertAnomaly(db, { date: today, dismissed: true, featureKey: 'feat-anom-2' });   // dismissed → not counted
 
     const r = buildToday(db);
 
-    assert.equal(r.todayUsd, 2.60);
-    assert.equal(r.topFeatures.length, 3);
-    assert.equal(r.topFeatures[0]!.key, 'feat-a');
-    assert.equal(r.topFeatures[0]!.name, 'Feature A');
-    assert.equal(r.topFeatures[0]!.usd, 1.10);
-    assert.equal(r.topFeatures[0]!.href, 'http://127.0.0.1:4920/feature/feat-a');
-    assert.equal(r.anomalyCount, 2);
+    assert.equal(r.todayUsd, 2.40);
+    assert.equal(r.topProjects.length, 2);
+
+    const alpha = r.topProjects[0]!;
+    assert.equal(alpha.name, 'alpha');
+    assert.equal(alpha.usd, 1.90);
+    assert.equal(alpha.href, 'http://127.0.0.1:4920/project/repo%3Aloschenbd%2Falpha');
+    assert.equal(alpha.features.length, 2);
+    assert.equal(alpha.features[0]!.key, 'alpha-a');
+    assert.equal(alpha.features[0]!.name, 'Alpha A');
+    assert.equal(alpha.features[0]!.usd, 1.10);
+    assert.equal(alpha.features[0]!.href, 'http://127.0.0.1:4920/feature/alpha-a');
+
+    const beta = r.topProjects[1]!;
+    assert.equal(beta.name, 'beta');
+    assert.equal(beta.usd, 0.50);
+    assert.equal(beta.features.length, 1);
+
+    assert.equal(r.anomalyCount, 1);
     assert.match(r.asOf, /^\d{4}-\d{2}-\d{2}T/);
   });
 
@@ -79,18 +91,43 @@ describe('buildToday', () => {
     const r = buildToday(db);
 
     assert.equal(r.todayUsd, 0);
-    assert.equal(r.topFeatures.length, 0);
+    assert.equal(r.topProjects.length, 0);
     assert.equal(r.anomalyCount, 0);
   });
 
-  test('URL-encodes feature keys with slashes or unusual characters', () => {
+  test('caps at 3 projects and 5 features per project', () => {
     const db = makeDb();
     const today = (db.prepare(`SELECT date('now','localtime') AS d`).get() as { d: string }).d;
-    insertRollup(db, { date: today, featureKey: 'repo:owner/name', featureName: 'Has slash', repo: null, cost: 1, sessionIds: 's', sessions: 1 });
+
+    // 4 distinct projects (one feature each) — only top 3 should appear.
+    for (let i = 0; i < 4; i++) {
+      insertRollup(db, { date: today, featureKey: `proj${i}-only`, featureName: `Proj${i} only`, repo: `loschenbd/proj${i}`, cost: 10 - i, sessionIds: `s${i}`, sessions: 1 });
+    }
+    // 6 features in a single project — only top 5 should appear nested.
+    for (let i = 0; i < 6; i++) {
+      insertRollup(db, { date: today, featureKey: `big-${i}`, featureName: `Big ${i}`, repo: 'loschenbd/big', cost: 100 + i, sessionIds: `b${i}`, sessions: 1 });
+    }
 
     const r = buildToday(db);
 
-    assert.equal(r.topFeatures[0]!.href, 'http://127.0.0.1:4920/feature/repo%3Aowner%2Fname');
+    assert.equal(r.topProjects.length, 3);
+    const big = r.topProjects[0]!;
+    assert.equal(big.name, 'big');
+    assert.equal(big.features.length, 5);
+    // Highest-cost feature should sort first.
+    assert.equal(big.features[0]!.key, 'big-5');
+  });
+
+  test('URL-encodes project and feature keys with slashes or unusual characters', () => {
+    const db = makeDb();
+    const today = (db.prepare(`SELECT date('now','localtime') AS d`).get() as { d: string }).d;
+    // No repo → bucketProject uses `feature:<key>` as the project key.
+    insertRollup(db, { date: today, featureKey: 'has/slash:colon', featureName: 'Has slash', repo: null, cost: 1, sessionIds: 's', sessions: 1 });
+
+    const r = buildToday(db);
+
+    assert.equal(r.topProjects[0]!.href, 'http://127.0.0.1:4920/project/feature%3Ahas%2Fslash%3Acolon');
+    assert.equal(r.topProjects[0]!.features[0]!.href, 'http://127.0.0.1:4920/feature/has%2Fslash%3Acolon');
   });
 });
 
@@ -109,7 +146,7 @@ describe('GET /api/today', () => {
       assert.match(res.headers['content-type'] as string, /^application\/json/);
       const body = res.json() as TodayResponse;
       assert.equal(typeof body.todayUsd, 'number');
-      assert.ok(Array.isArray(body.topFeatures));
+      assert.ok(Array.isArray(body.topProjects));
       assert.equal(typeof body.anomalyCount, 'number');
       assert.match(body.asOf, /^\d{4}-\d{2}-\d{2}T/);
     } finally {

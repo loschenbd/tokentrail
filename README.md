@@ -179,6 +179,25 @@ Tokentrail overview. Flags:
 The dashboard is read-only. Labeling, anomaly dismissal, and sync stay on the
 CLI. Stop it with Ctrl-C.
 
+### Menu bar widget (SwiftBar)
+
+Put today's spend in your macOS menu bar:
+
+```bash
+brew install --cask swiftbar
+mkdir -p ~/Library/Application\ Support/SwiftBar
+ln -s "$PWD/scripts/menubar/tokentrail.5m.sh" \
+  ~/Library/Application\ Support/SwiftBar/
+```
+
+Open SwiftBar from Spotlight; it picks up the plugin automatically. The
+widget shows today's spend (`$X.XX`) and refreshes every 5 minutes. Click
+it to see the top 3 features (each links into the dashboard) and an
+anomaly count.
+
+Requires `tokentrail dashboard` to be running on port 4920. If it isn't,
+the widget shows `$—` and a "not running" hint instead of crashing.
+
 ### Anomalies
 
 Anomalies are recomputed at the end of every `tokentrail rollup` and surfaced

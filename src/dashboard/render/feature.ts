@@ -50,7 +50,6 @@ function renderSessions(items: FeatureDetailVM['sessions']): string {
 function renderCommitsBlock(commits: FeatureDetailVM['sessions'][number]['commits']): string {
   if (commits.length === 0) return '';
   return `<div class="sub-label">Commits</div>` + commits
-    .slice(0, 5)
     .map((c) => {
       const shaShort = c.sha.slice(0, 8);
       const url = c.repo ? `https://github.com/${c.repo}/commit/${c.sha}` : null;

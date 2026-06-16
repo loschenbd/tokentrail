@@ -93,7 +93,12 @@ export async function backfillCommits(
 
     let repoSlug = repoSlugCache.get(root);
     if (repoSlug === undefined) {
-      repoSlug = parseRepoSlug(originUrl(root));
+      // Mirror repoContextFor's fallback: local-only repos get local/<basename>
+      // so their commits still surface under the same repo identity used by
+      // attribution and rollups.
+      const parsed = parseRepoSlug(originUrl(root));
+      const base = root.split('/').filter(Boolean).pop() ?? 'unknown';
+      repoSlug = parsed ?? `local/${base}`;
       repoSlugCache.set(root, repoSlug);
     }
 

@@ -1,21 +1,24 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type DatabaseType from 'better-sqlite3';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 // One LLM call per feature, grouped by feature_key. Each call returns a list
 // of named topic clusters covering every session in that feature.
 //
 // Design notes:
+//   - We hit OpenRouter via the OpenAI-compatible SDK. Override the model
+//     with OPENROUTER_MODEL if you want a different provider/model.
 //   - Triggered from the rollup tail; skipped when the session set hasn't
 //     changed since the last successful cluster run for that feature.
 //   - Minimum 5 sessions per feature — anything smaller is just the session
 //     list itself, no value in renaming.
 //   - Each session contributes its title + up to 3 commit subjects as signal.
-//   - Cost-defensive: Haiku 4.5 is cheap, but a missing ANTHROPIC_API_KEY or
+//   - Cost-defensive: Haiku is cheap, but a missing OPENROUTER_API_KEY or
 //     a network failure must not crash the rollup. Errors are logged and the
 //     run record is NOT written, so the next rollup retries.
 
-const MODEL = 'claude-haiku-4-5-20251001';
+const DEFAULT_MODEL = 'anthropic/claude-haiku-4.5';
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const MIN_SESSIONS_FOR_CLUSTERING = 5;
 const MAX_TITLES_PER_FEATURE = 80;
 const MAX_COMMITS_PER_SESSION = 3;
@@ -51,13 +54,14 @@ export async function recomputeClusters(
     llmCalls: 0,
   };
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     console.log(
-      'ANTHROPIC_API_KEY not set. Add it to .env to enable topic clustering.'
+      'OPENROUTER_API_KEY not set. Add it to .env to enable topic clustering.'
     );
     return summary;
   }
+  const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
 
   const features = db
     .prepare(
@@ -79,7 +83,16 @@ export async function recomputeClusters(
 
   if (features.length === 0) return summary;
 
-  const client = new Anthropic({ apiKey });
+  const client = new OpenAI({
+    apiKey,
+    baseURL: OPENROUTER_BASE_URL,
+    // OpenRouter recommends attribution headers — surface tokentrail so
+    // your usage shows up cleanly in the OpenRouter dashboard.
+    defaultHeaders: {
+      'HTTP-Referer': 'https://github.com/benjaminloschen/tokentrail',
+      'X-Title': 'Tokentrail',
+    },
+  });
   const upsertRun = db.prepare(
     `INSERT INTO feature_cluster_runs (feature_key, session_count, session_id_hash, computed_at)
      VALUES (@feature_key, @session_count, @session_id_hash, datetime('now'))
@@ -121,7 +134,7 @@ export async function recomputeClusters(
     const sessions = loadSessions(db, sessionIds);
     let clusters: ClusterResult[];
     try {
-      clusters = await callClusterer(client, f.feature_name, sessions);
+      clusters = await callClusterer(client, model, f.feature_name, sessions);
       summary.llmCalls++;
     } catch (err) {
       summary.featuresFailed++;
@@ -216,11 +229,12 @@ function loadSessions(
 }
 
 async function callClusterer(
-  client: Anthropic,
+  client: OpenAI,
+  model: string,
   featureName: string,
   sessions: SessionForClustering[]
 ): Promise<ClusterResult[]> {
-  const lines = sessions.map((s, i) => {
+  const lines = sessions.map((s) => {
     const commitText = s.commits.length
       ? `\n      commits: ${s.commits.join(' | ')}`
       : '';
@@ -244,16 +258,13 @@ Rules:
 - Cluster names are short, specific noun phrases ("Sidebar redesign", "Auth refactor"). Avoid "Miscellaneous" / "Other" unless truly nothing fits.
 - No duplicate names.`;
 
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await client.chat.completions.create({
+    model,
     max_tokens: 2000,
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const text = response.content
-    .map((c) => (c.type === 'text' ? c.text : ''))
-    .join('');
-
+  const text = response.choices[0]?.message?.content ?? '';
   return parseAndValidate(text, sessions.map((s) => s.sessionId));
 }
 

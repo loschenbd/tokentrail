@@ -178,15 +178,19 @@ Dismissed anomalies survive future rollup runs.
 
 For features with five or more sessions, Tokentrail groups them into a few
 named topics (e.g. "Sidebar redesign · 5 sessions · $420") on the Feature
-Detail page. Set `ANTHROPIC_API_KEY` in `.env` to enable. Re-clustering runs
-at the end of every `tokentrail rollup` and only re-calls the LLM for
-features whose session set has changed. Force a full re-cluster with:
+Detail page. Set `OPENROUTER_API_KEY` in `.env` to enable. Defaults to
+`anthropic/claude-haiku-4.5` via OpenRouter; override with `OPENROUTER_MODEL`
+(any OpenRouter slug — `openai/gpt-4o-mini`, `google/gemini-2.5-flash`, etc.).
+
+Re-clustering runs at the end of every `tokentrail rollup` and only re-calls
+the LLM for features whose session set has changed. Force a full re-cluster
+with:
 
 ```
 tokentrail cluster --force
 ```
 
-Without an `ANTHROPIC_API_KEY`, clustering is silently skipped — the rest of
+Without an `OPENROUTER_API_KEY`, clustering is silently skipped — the rest of
 the dashboard works as before.
 
 ### Notion schema setup (one-time)

@@ -26,9 +26,11 @@ export function buildOverview(
   opts: { days: number }
 ): OverviewVM {
   const days = Math.max(1, opts.days);
-  const startExpr = `date('now', '-${days - 1} days')`;
-  const priorStartExpr = `date('now', '-${days * 2 - 1} days')`;
-  const priorEndExpr = `date('now', '-${days} days')`;
+  // All date arithmetic uses the server's local time so the dashboard
+  // matches the user's calendar — same machine, same timezone.
+  const startExpr = `date('now', '-${days - 1} days', 'localtime')`;
+  const priorStartExpr = `date('now', '-${days * 2 - 1} days', 'localtime')`;
+  const priorEndExpr = `date('now', '-${days} days', 'localtime')`;
 
   const totalRow = db
     .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM feature_rollups WHERE date >= ${startExpr}`)
@@ -37,7 +39,7 @@ export function buildOverview(
     .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM feature_rollups WHERE date >= ${priorStartExpr} AND date <= ${priorEndExpr}`)
     .get() as { total: number };
   const weekRow = db
-    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total, COALESCE(SUM(sessions_count), 0) AS sessions FROM feature_rollups WHERE date >= date('now', '-6 days')`)
+    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total, COALESCE(SUM(sessions_count), 0) AS sessions FROM feature_rollups WHERE date >= date('now', '-6 days', 'localtime')`)
     .get() as { total: number; sessions: number };
 
   const topFeatures = db
@@ -59,16 +61,16 @@ export function buildOverview(
     .all() as Array<{ date: string; total: number }>;
   const observedMap = new Map(observed.map((r) => [r.date, r.total]));
   const commitsByDay = db
-    .prepare(`SELECT date(authored_at) AS d, COUNT(*) AS n FROM session_commits WHERE authored_at IS NOT NULL AND date(authored_at) >= ${startExpr} GROUP BY date(authored_at)`)
+    .prepare(`SELECT date(authored_at, 'localtime') AS d, COUNT(*) AS n FROM session_commits WHERE authored_at IS NOT NULL AND date(authored_at, 'localtime') >= ${startExpr} GROUP BY date(authored_at, 'localtime')`)
     .all() as Array<{ d: string; n: number }>;
   const commitsMap = new Map(commitsByDay.map((r) => [r.d, r.n]));
   const prsByDay = db
-    .prepare(`SELECT date(merged_at) AS d, COUNT(*) AS n FROM session_prs WHERE merged_at IS NOT NULL AND date(merged_at) >= ${startExpr} GROUP BY date(merged_at)`)
+    .prepare(`SELECT date(merged_at, 'localtime') AS d, COUNT(*) AS n FROM session_prs WHERE merged_at IS NOT NULL AND date(merged_at, 'localtime') >= ${startExpr} GROUP BY date(merged_at, 'localtime')`)
     .all() as Array<{ d: string; n: number }>;
   const prsMap = new Map(prsByDay.map((r) => [r.d, r.n]));
   const dailySeries: OverviewVM['dailySeries'] = [];
   for (let i = days - 1; i >= 0; i--) {
-    const date = db.prepare(`SELECT date('now', '-${i} days') AS d`).get() as { d: string };
+    const date = db.prepare(`SELECT date('now', '-${i} days', 'localtime') AS d`).get() as { d: string };
     dailySeries.push({
       date: date.d,
       total: observedMap.get(date.d) ?? 0,

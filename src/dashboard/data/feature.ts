@@ -23,9 +23,9 @@ export function buildFeatureDetail(
   opts: { featureKey: string; days: number }
 ): FeatureDetailVM | null {
   const days = Math.max(1, opts.days);
-  const startExpr = `date('now', '-${days - 1} days')`;
-  const priorStartExpr = `date('now', '-${days * 2 - 1} days')`;
-  const priorEndExpr = `date('now', '-${days} days')`;
+  const startExpr = `date('now', '-${days - 1} days', 'localtime')`;
+  const priorStartExpr = `date('now', '-${days * 2 - 1} days', 'localtime')`;
+  const priorEndExpr = `date('now', '-${days} days', 'localtime')`;
 
   const head = db
     .prepare(`
@@ -66,13 +66,13 @@ export function buildFeatureDetail(
   const commitsByDay = sessionIds.length === 0
     ? []
     : db
-      .prepare(`SELECT date(authored_at) AS d, COUNT(*) AS n FROM session_commits WHERE session_id IN (SELECT value FROM json_each(?)) AND authored_at IS NOT NULL GROUP BY date(authored_at)`)
+      .prepare(`SELECT date(authored_at, 'localtime') AS d, COUNT(*) AS n FROM session_commits WHERE session_id IN (SELECT value FROM json_each(?)) AND authored_at IS NOT NULL GROUP BY date(authored_at, 'localtime')`)
       .all(JSON.stringify(sessionIds)) as Array<{ d: string; n: number }>;
   const commitsMap = new Map(commitsByDay.map((r) => [r.d, r.n]));
   const prsByDay = sessionIds.length === 0
     ? []
     : db
-      .prepare(`SELECT date(merged_at) AS d, COUNT(*) AS n FROM session_prs WHERE session_id IN (SELECT value FROM json_each(?)) AND merged_at IS NOT NULL GROUP BY date(merged_at)`)
+      .prepare(`SELECT date(merged_at, 'localtime') AS d, COUNT(*) AS n FROM session_prs WHERE session_id IN (SELECT value FROM json_each(?)) AND merged_at IS NOT NULL GROUP BY date(merged_at, 'localtime')`)
       .all(JSON.stringify(sessionIds)) as Array<{ d: string; n: number }>;
   const prsMap = new Map(prsByDay.map((r) => [r.d, r.n]));
 
@@ -89,7 +89,7 @@ export function buildFeatureDetail(
       .prepare(`
         SELECT s.session_id AS sessionId,
                s.title       AS title,
-               date(s.first_seen_at) AS date,
+               date(s.first_seen_at, 'localtime') AS date,
                COALESCE((SELECT SUM(e.estimated_cost_usd) FROM usage_events e WHERE e.session_id = s.session_id), 0) AS cost
         FROM sessions s
         WHERE s.session_id IN (SELECT value FROM json_each(?))

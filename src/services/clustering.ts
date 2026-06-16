@@ -258,9 +258,13 @@ Rules:
 - Cluster names are short, specific noun phrases ("Sidebar redesign", "Auth refactor"). Avoid "Miscellaneous" / "Other" unless truly nothing fits.
 - No duplicate names.`;
 
+  // OpenRouter free-tier accounts cap per-request max_tokens (~5k as of
+  // 2026-06). Default keeps clear of that; override with OPENROUTER_MAX_TOKENS
+  // if you're on a paid plan and want headroom for very large features.
+  const maxTokens = Number.parseInt(process.env.OPENROUTER_MAX_TOKENS || '3500', 10);
   const response = await client.chat.completions.create({
     model,
-    max_tokens: 2000,
+    max_tokens: maxTokens,
     messages: [{ role: 'user', content: prompt }],
   });
 

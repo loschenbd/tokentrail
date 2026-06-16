@@ -11,6 +11,8 @@
     }
     const xs = series.map((d) => new Date(d.date + 'T00:00:00').getTime() / 1000);
     const ys = series.map((d) => d.total);
+    const commitsArr = series.map((d) => d.commits || 0);
+    const prsArr = series.map((d) => d.prs || 0);
 
     const tooltip = document.createElement('div');
     tooltip.className = 'chart-tooltip';
@@ -59,9 +61,15 @@
             }
             const x = xs[idx];
             const y = ys[idx];
+            const commits = commitsArr[idx] || 0;
+            const prs = prsArr[idx] || 0;
             tooltip.innerHTML =
               '<div class="chart-tooltip-date">' + fmtDate(x) + '</div>' +
-              '<div class="chart-tooltip-value">' + fmtUsd(y) + '</div>';
+              '<div class="chart-tooltip-value">' + fmtUsd(y) + '</div>' +
+              '<div class="chart-tooltip-meta">' +
+                commits + ' ' + (commits === 1 ? 'commit' : 'commits') +
+                ' · ' + prs + ' ' + (prs === 1 ? 'PR' : 'PRs') +
+              '</div>';
             tooltip.style.display = 'block';
             const left = self.valToPos(x, 'x');
             const top = self.valToPos(y, 'y');

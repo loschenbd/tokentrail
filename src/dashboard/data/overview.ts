@@ -8,7 +8,7 @@ export type OverviewVM = {
   weekUsd: number;
   weekSessions: number;
   topFeatures: Array<{ featureKey: string; featureName: string; totalUsd: number }>;
-  dailySeries: Array<{ date: string; total: number }>;
+  dailySeries: Array<{ date: string; total: number; commits: number; prs: number }>;
   anomalies: Array<{
     id: number;
     kind: string;
@@ -58,10 +58,23 @@ export function buildOverview(
     .prepare(`SELECT date, SUM(total_cost_usd) AS total FROM feature_rollups WHERE date >= ${startExpr} GROUP BY date`)
     .all() as Array<{ date: string; total: number }>;
   const observedMap = new Map(observed.map((r) => [r.date, r.total]));
+  const commitsByDay = db
+    .prepare(`SELECT date(authored_at) AS d, COUNT(*) AS n FROM session_commits WHERE authored_at IS NOT NULL AND date(authored_at) >= ${startExpr} GROUP BY date(authored_at)`)
+    .all() as Array<{ d: string; n: number }>;
+  const commitsMap = new Map(commitsByDay.map((r) => [r.d, r.n]));
+  const prsByDay = db
+    .prepare(`SELECT date(merged_at) AS d, COUNT(*) AS n FROM session_prs WHERE merged_at IS NOT NULL AND date(merged_at) >= ${startExpr} GROUP BY date(merged_at)`)
+    .all() as Array<{ d: string; n: number }>;
+  const prsMap = new Map(prsByDay.map((r) => [r.d, r.n]));
   const dailySeries: OverviewVM['dailySeries'] = [];
   for (let i = days - 1; i >= 0; i--) {
     const date = db.prepare(`SELECT date('now', '-${i} days') AS d`).get() as { d: string };
-    dailySeries.push({ date: date.d, total: observedMap.get(date.d) ?? 0 });
+    dailySeries.push({
+      date: date.d,
+      total: observedMap.get(date.d) ?? 0,
+      commits: commitsMap.get(date.d) ?? 0,
+      prs: prsMap.get(date.d) ?? 0,
+    });
   }
 
   const anomalies = db

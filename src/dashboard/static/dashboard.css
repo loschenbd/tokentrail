@@ -143,6 +143,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 }
 .chart-tooltip-date { color: var(--color-ink-muted); font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
 .chart-tooltip-value { font-weight: 600; font-size: var(--size-body); }
+.chart-tooltip-meta { color: var(--color-ink-muted); font-size: 11px; margin-top: 2px; font-family: var(--font-sans); }
 
 .single-col { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-l); }
 .session-row {

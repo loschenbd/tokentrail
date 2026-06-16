@@ -144,4 +144,31 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
   // in its conflict target — see src/services/anomalies-db.ts.
   `CREATE UNIQUE INDEX IF NOT EXISTS uniq_anomalies_dedupe
      ON anomalies (kind, date, COALESCE(feature_key, ''), COALESCE(session_id, ''))`,
+
+  // Topic clusters per feature. One row per (feature_key, cluster_name).
+  // Replaced wholesale per feature when re-clustered.
+  `CREATE TABLE IF NOT EXISTS feature_clusters (
+    id              TEXT PRIMARY KEY,
+    feature_key     TEXT NOT NULL,
+    cluster_name    TEXT NOT NULL,
+    session_ids     TEXT NOT NULL,
+    session_count   INTEGER NOT NULL DEFAULT 0,
+    total_usd       REAL NOT NULL DEFAULT 0,
+    rank            INTEGER NOT NULL DEFAULT 0,
+    computed_at     TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_feature_clusters_feature
+     ON feature_clusters (feature_key)`,
+
+  // Tracks the last clustering attempt per feature so we can skip features
+  // whose session set hasn't changed since the previous run. computed_at is
+  // the time we last called the LLM; session_count + session_id_hash form
+  // the fingerprint used by the rollup to decide whether to re-cluster.
+  `CREATE TABLE IF NOT EXISTS feature_cluster_runs (
+    feature_key      TEXT PRIMARY KEY,
+    session_count    INTEGER NOT NULL,
+    session_id_hash  TEXT NOT NULL,
+    computed_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
 ];

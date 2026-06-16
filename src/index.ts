@@ -169,6 +169,26 @@ program
   });
 
 program
+  .command('cluster')
+  .description('Re-cluster sessions into named topics per feature (LLM-driven).')
+  .option('--force', 'Re-cluster every eligible feature, even if its session set is unchanged.')
+  .action(async (opts: { force?: boolean }) => {
+    const { getDb } = await import('./db/db.js');
+    const { recomputeClusters } = await import('./services/clustering.js');
+    const db = getDb();
+    if (opts.force) {
+      db.prepare('DELETE FROM feature_cluster_runs').run();
+    }
+    const r = await recomputeClusters(db);
+    console.log(
+      `Clusters: ${r.featuresClustered} feature${r.featuresClustered === 1 ? '' : 's'} re-clustered, ` +
+        `${r.featuresSkipped} unchanged` +
+        (r.featuresFailed > 0 ? `, ${r.featuresFailed} failed` : '') +
+        ` across ${r.featuresConsidered} candidates (${r.llmCalls} LLM call${r.llmCalls === 1 ? '' : 's'}).`
+    );
+  });
+
+program
   .command('sync')
   .description('Sync the latest ledger entries to Notion.')
   .option('--days <n>', 'Only sync rollups in the last N days.')

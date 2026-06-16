@@ -48,7 +48,6 @@ export function renderOverview(vm: OverviewVM): string {
 function renderTopProjects(items: OverviewVM['topProjects'], totalUsd: number): string {
   if (items.length === 0) return '<div class="muted">No project activity yet.</div>';
   const denom = totalUsd > 0 ? totalUsd : 1;
-  const roman = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
   return items
     .map((p, i) => {
       const share = (p.totalUsd / denom) * 100;
@@ -64,7 +63,7 @@ function renderTopProjects(items: OverviewVM['topProjects'], totalUsd: number): 
         : `<span class="muted">· ${p.features.length} features</span>`;
       return `
         <a class="project-row" href="${href}">
-          <span class="mile">${roman[i] ?? ''}</span>
+          <span class="mile">${i + 1}</span>
           <span class="name">${escapeHtml(p.projectName)} ${featuresLabel}</span>
           <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
         </a>

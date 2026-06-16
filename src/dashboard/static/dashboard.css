@@ -103,10 +103,14 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   align-items: baseline;
 }
 .project-row:hover { background: rgba(255,255,255,0.4); }
-.feature-row .mile {
+.feature-row .mile,
+.project-row .mile {
   color: var(--color-ink-subtle);
   font-family: var(--font-serif);
   font-size: var(--size-small);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding-right: 4px;
 }
 .feature-row .name { font-family: var(--font-serif); }
 .feature-row .amt { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--color-ink); }

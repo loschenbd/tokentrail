@@ -9,6 +9,8 @@ import { renderShell } from './render/shell.js';
 import { tokensCss } from './tokens.js';
 import { buildFeatureDetail } from './data/feature.js';
 import { renderFeature } from './render/feature.js';
+import { buildProjectDetail } from './data/project.js';
+import { renderProject } from './render/project.js';
 import { buildWorthALook } from './data/worth-a-look.js';
 import { renderWorthALook } from './render/worth-a-look.js';
 
@@ -37,6 +39,18 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     const body = renderFeature(vm);
     reply.type('text/html; charset=utf-8');
     return renderShell({ title: `${vm.featureName} · Tokentrail`, activeTab: 'feature', days, showBack: true }, body);
+  });
+
+  app.get<{ Params: { key: string } }>('/project/:key', async (req, reply) => {
+    const days = parseDays(req.query, opts.defaultDays);
+    const vm = buildProjectDetail(getDb(), { projectKey: req.params.key, days });
+    if (!vm) {
+      reply.code(404).type('text/html; charset=utf-8');
+      return renderShell({ title: 'Project not found', days, showBack: true }, '<div class="card"><div class="hero">Not found</div></div>');
+    }
+    const body = renderProject(vm);
+    reply.type('text/html; charset=utf-8');
+    return renderShell({ title: `${vm.projectName} · Tokentrail`, activeTab: 'project', days, showBack: true }, body);
   });
 
   app.get('/worth-a-look', async (_req, reply) => {

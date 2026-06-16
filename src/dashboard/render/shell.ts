@@ -1,6 +1,6 @@
 export type ShellOptions = {
   title: string;
-  activeTab?: 'overview' | 'feature' | 'worth-a-look';
+  activeTab?: 'overview' | 'feature' | 'project' | 'worth-a-look';
   days: number;          // current time-window selection
   showBack?: boolean;
 };

@@ -186,7 +186,7 @@ Put today's spend in your macOS menu bar:
 ```bash
 brew install --cask swiftbar
 mkdir -p ~/Library/Application\ Support/SwiftBar
-ln -s "$PWD/scripts/menubar/tokentrail.5m.js" \
+ln -s "$PWD/scripts/menubar/tokentrail.5m.sh" \
   ~/Library/Application\ Support/SwiftBar/
 ```
 

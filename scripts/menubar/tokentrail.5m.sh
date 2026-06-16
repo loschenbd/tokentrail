@@ -1,15 +1,49 @@
-#!/usr/bin/env node
-// Tokentrail SwiftBar plugin.
-//
-// Filename convention: `.5m.` tells SwiftBar to re-run this script every
-// 5 minutes. See https://github.com/swiftbar/SwiftBar#plugin-api for the
-// full text protocol.
-//
-// Requires the Tokentrail dashboard server on 127.0.0.1:4920. Install:
-//   brew install --cask swiftbar
-//   ln -s "$PWD/scripts/menubar/tokentrail.5m.js" \
-//     ~/Library/Application\ Support/SwiftBar/
+#!/bin/bash
+# Tokentrail SwiftBar plugin.
+#
+# Filename convention: `.5m.` tells SwiftBar to re-run this script every
+# 5 minutes. See https://github.com/swiftbar/SwiftBar#plugin-api.
+#
+# Requires the Tokentrail dashboard server on 127.0.0.1:4920. Install:
+#   brew install --cask swiftbar
+#   ln -s "$PWD/scripts/menubar/tokentrail.5m.sh" \
+#     ~/Library/Application\ Support/SwiftBar/
+#
+# Why a bash wrapper and not `#!/usr/bin/env node`: SwiftBar launches
+# plugins via launchd with a stripped PATH that excludes Homebrew
+# (/opt/homebrew/bin, /usr/local/bin) and nvm (~/.nvm/...), so a bare
+# `env node` shebang exits 127 and SwiftBar shows a blank menu bar
+# icon with no error. This wrapper loads nvm if present, then runs the
+# inline node script via stdin.
+#
+# <bitbar.title>Tokentrail</bitbar.title>
+# <bitbar.author>Tokentrail</bitbar.author>
+# <bitbar.desc>Today's Claude Code spend, refreshed every 5 minutes.</bitbar.desc>
+# <bitbar.environment>[PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin]</bitbar.environment>
 
+set -u
+
+# Load nvm so a user's default node ends up on PATH.
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  export NVM_DIR="$HOME/.nvm"
+  # shellcheck disable=SC1091
+  . "$NVM_DIR/nvm.sh" --no-use >/dev/null 2>&1
+  nvm use default >/dev/null 2>&1 || nvm use node >/dev/null 2>&1 || true
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  cat <<'EOF'
+$— | color=#8b6f47
+---
+Tokentrail: node not found | color=#8b6f47
+Install Node.js | href=https://nodejs.org/
+Refresh | refresh=true
+EOF
+  exit 0
+fi
+
+# Run the inline Node script via stdin so this stays a single file.
+exec node - <<'NODE_PLUGIN'
 'use strict';
 
 const DASHBOARD_URL = 'http://127.0.0.1:4920';
@@ -21,8 +55,8 @@ function fmtUsd(n) {
   return `$${Number(n).toFixed(2)}`;
 }
 
-function plural(n, singular, plural) {
-  return `${n} ${n === 1 ? singular : plural}`;
+function plural(n, singular, pluralForm) {
+  return `${n} ${n === 1 ? singular : pluralForm}`;
 }
 
 function renderError(message) {
@@ -70,13 +104,10 @@ function renderHappy(data) {
     const data = await res.json();
     console.log(renderHappy(data));
   } catch (err) {
-    // SwiftBar surfaces stderr in its per-plugin log (right-click → Logs).
-    // The menu bar stays clean; the breadcrumb is for debugging "server up
-    // but plugin shows 'not running'" mysteries (HTTP errors, JSON parse,
-    // timeout vs. ECONNREFUSED, etc.).
     console.error(`[tokentrail] ${err && err.message ? err.message : err}`);
     console.log(renderError('Tokentrail dashboard not running'));
   } finally {
     clearTimeout(timer);
   }
 })();
+NODE_PLUGIN

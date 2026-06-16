@@ -29,9 +29,12 @@ body::before {
   background: linear-gradient(135deg, var(--color-parchment-top) 0%, var(--color-parchment-bottom) 100%);
   z-index: 10;
 }
+.brand-link { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+.brand-link:hover .brand { color: var(--color-ink); }
+.brand-mark { display: block; width: 36px; height: 36px; border-radius: 6px; mix-blend-mode: multiply; }
 .brand { font-family: var(--font-serif); font-size: var(--size-h1); font-weight: 600; }
 .brand-tag { color: var(--color-ink-muted); font-style: italic; margin-left: var(--space-s); }
-.header-left { display: flex; align-items: baseline; gap: var(--space-s); }
+.header-left { display: flex; align-items: center; gap: var(--space-s); }
 .back { color: var(--color-ink-muted); text-decoration: none; margin-right: var(--space-m); }
 .back:hover { color: var(--color-ink); }
 .range-form { display: flex; gap: var(--space-s); align-items: center; }

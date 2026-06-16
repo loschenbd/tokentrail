@@ -16,6 +16,9 @@ export function renderShell(opts: ShellOptions, body: string): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(opts.title)}</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="icon" type="image/png" href="/static/logo.png">
+<link rel="apple-touch-icon" href="/static/logo.png">
 <link rel="stylesheet" href="/static/uPlot.min.css">
 <link rel="stylesheet" href="/static/dashboard.css">
 </head>
@@ -23,7 +26,10 @@ export function renderShell(opts: ShellOptions, body: string): string {
 <header class="header">
   <div class="header-left">
     ${opts.showBack ? '<a class="back" href="/">← Trail</a>' : ''}
-    <span class="brand">Tokentrail</span>
+    <a class="brand-link" href="/">
+      <img class="brand-mark" src="/static/logo.png" alt="" width="36" height="36">
+      <span class="brand">Tokentrail</span>
+    </a>
     <span class="brand-tag">· the trail so far</span>
   </div>
   <div class="header-right">

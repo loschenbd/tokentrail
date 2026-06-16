@@ -179,10 +179,6 @@ Tokentrail overview. Flags:
 The dashboard is read-only. Labeling, anomaly dismissal, and sync stay on the
 CLI. Stop it with Ctrl-C.
 
-<p align="center">
-  <img src="docs/dashboard.png" alt="Tokentrail dashboard" width="900">
-</p>
-
 ### Anomalies
 
 Anomalies are recomputed at the end of every `tokentrail rollup` and surfaced

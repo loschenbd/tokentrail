@@ -7,7 +7,7 @@ export type FeatureDetailVM = {
   deltaPct: number;
   sessionCount: number;
   branches: string[];
-  dailySeries: Array<{ date: string; total: number }>;
+  dailySeries: Array<{ date: string; total: number; commits: number; prs: number }>;
   sessions: Array<{
     sessionId: string;
     title: string | null;
@@ -51,7 +51,7 @@ export function buildFeatureDetail(
     .get({ key: opts.featureKey }) as { total: number }).total;
   const deltaPct = prior > 0 ? Math.round(((head.totalUsd - prior) / prior) * 100) : (head.totalUsd > 0 ? 100 : 0);
 
-  const dailySeries = db
+  const dailyRows = db
     .prepare(`SELECT date, SUM(total_cost_usd) AS total FROM feature_rollups WHERE feature_key = @key AND date >= ${startExpr} GROUP BY date ORDER BY date`)
     .all({ key: opts.featureKey }) as Array<{ date: string; total: number }>;
 
@@ -62,6 +62,27 @@ export function buildFeatureDetail(
   const uniqueBranches = [...new Set(branches)].sort();
 
   const sessionIds = uniqueSessionIds(head.sessionIds);
+
+  const commitsByDay = sessionIds.length === 0
+    ? []
+    : db
+      .prepare(`SELECT date(authored_at) AS d, COUNT(*) AS n FROM session_commits WHERE session_id IN (SELECT value FROM json_each(?)) AND authored_at IS NOT NULL GROUP BY date(authored_at)`)
+      .all(JSON.stringify(sessionIds)) as Array<{ d: string; n: number }>;
+  const commitsMap = new Map(commitsByDay.map((r) => [r.d, r.n]));
+  const prsByDay = sessionIds.length === 0
+    ? []
+    : db
+      .prepare(`SELECT date(merged_at) AS d, COUNT(*) AS n FROM session_prs WHERE session_id IN (SELECT value FROM json_each(?)) AND merged_at IS NOT NULL GROUP BY date(merged_at)`)
+      .all(JSON.stringify(sessionIds)) as Array<{ d: string; n: number }>;
+  const prsMap = new Map(prsByDay.map((r) => [r.d, r.n]));
+
+  const dailySeries: FeatureDetailVM['dailySeries'] = dailyRows.map((r) => ({
+    date: r.date,
+    total: r.total,
+    commits: commitsMap.get(r.date) ?? 0,
+    prs: prsMap.get(r.date) ?? 0,
+  }));
+
   const sessionRows = sessionIds.length === 0
     ? []
     : db

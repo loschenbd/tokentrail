@@ -93,7 +93,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 
 .project-row {
   display: grid;
-  grid-template-columns: 24px 1fr auto auto;
+  grid-template-columns: 24px 1fr auto;
   gap: var(--space-s);
   padding: 6px 0;
   text-decoration: none;
@@ -103,24 +103,14 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   align-items: baseline;
 }
 .project-row:hover { background: rgba(255,255,255,0.4); }
-.project-row.expandable { cursor: pointer; }
-.project-row .chev {
-  font-size: 12px;
-  color: var(--color-ink-subtle);
-  transition: transform 0.15s ease;
-}
-.project-row.open .chev { transform: rotate(90deg); }
-.project-features {
-  display: none;
-  margin-left: 24px;
-  padding: 4px 0 6px 0;
-  border-left: 1px dashed rgba(139,111,71,0.25);
-}
-.project-features.open { display: block; }
-.feature-row .mile {
+.feature-row .mile,
+.project-row .mile {
   color: var(--color-ink-subtle);
   font-family: var(--font-serif);
   font-size: var(--size-small);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding-right: 4px;
 }
 .feature-row .name { font-family: var(--font-serif); }
 .feature-row .amt { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--color-ink); }

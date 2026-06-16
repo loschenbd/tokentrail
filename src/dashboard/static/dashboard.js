@@ -105,19 +105,6 @@
     });
   }
 
-  function setupProjectToggles() {
-    document.querySelectorAll('[data-project-toggle]').forEach((row) => {
-      row.addEventListener('click', () => {
-        const key = row.getAttribute('data-project-toggle');
-        if (!key) return;
-        const target = document.getElementById('project-' + key);
-        if (!target) return;
-        target.classList.toggle('open');
-        row.classList.toggle('open');
-      });
-    });
-  }
-
   function setupClusterJumps() {
     document.querySelectorAll('[data-cluster-sessions]').forEach((row) => {
       row.addEventListener('click', () => {
@@ -137,6 +124,5 @@
     renderTrend();
     setupRowExpanders();
     setupClusterJumps();
-    setupProjectToggles();
   });
 })();

@@ -40,6 +40,9 @@ export const NOTION_PROPS = {
   sessions: 'Sessions',
   syncedAt: 'Synced At',
   commits: 'Commits',
+  type: 'Type',
+  anomaly: 'Anomaly',
+  anomalyReason: 'Anomaly reason',
 } as const;
 
 export type RollupPagePayload = {
@@ -53,6 +56,9 @@ export type RollupPagePayload = {
   totalCostUsd: number;
   sessions: number;
   commitSummary: string | null;
+  isAnomaly: boolean;
+  anomalyReason: string | null;
+  type: 'Rollup' | 'Digest';
 };
 
 export class NotionService {
@@ -121,6 +127,61 @@ export class NotionService {
     }
   }
 
+  async findDigestPage(weekStart: string): Promise<string | null> {
+    try {
+      const res = await this.client.databases.query({
+        database_id: this.databaseId,
+        page_size: 1,
+        filter: {
+          and: [
+            { property: NOTION_PROPS.type, select: { equals: 'Digest' } },
+            { property: NOTION_PROPS.date, date: { equals: weekStart } },
+          ],
+        },
+      });
+      const page = res.results[0];
+      return page?.id ?? null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`  notion: digest lookup failed for ${weekStart}: ${msg}`);
+      return null;
+    }
+  }
+
+  async upsertDigestPage(
+    weekStart: string,
+    weekTotalUsd: number,
+    body: NotionBlock[]
+  ): Promise<string | null> {
+    try {
+      const existing = await this.findDigestPage(weekStart);
+      const props: Record<string, unknown> = {
+        [NOTION_PROPS.name]: { title: [{ type: 'text', text: { content: `Week of ${weekStart}` } }] },
+        [NOTION_PROPS.date]: { date: { start: weekStart } },
+        [NOTION_PROPS.type]: { select: { name: 'Digest' } },
+        [NOTION_PROPS.totalCostUsd]: { number: weekTotalUsd },
+        [NOTION_PROPS.syncedAt]: { date: { start: new Date().toISOString() } },
+      };
+      if (existing) {
+        await this.client.pages.update({ page_id: existing, properties: props as never });
+        await this.rebuildPageBody(existing, body);
+        return existing;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res = await this.client.pages.create({
+        parent: { database_id: this.databaseId },
+        properties: props as never,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        children: body as any,
+      });
+      return res.id;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`  notion: digest upsert failed for ${weekStart}: ${msg}`);
+      return null;
+    }
+  }
+
   // Delete all top-level children of a page, then append new ones. Used
   // by `tokentrail sync --rebuild-bodies` to refresh existing pages whose
   // body was empty (created before this feature) or stale.
@@ -180,8 +241,20 @@ const MAX_SESSIONS_IN_BODY = 30;
 const MAX_COMMITS_IN_BODY = 30;
 const MAX_PRS_IN_BODY = 20;
 
-export function buildRollupBody(ctx: RollupBodyContext): NotionBlock[] {
+export function buildRollupBody(ctx: RollupBodyContext, opts?: { dashboardUrl?: string }): NotionBlock[] {
   const blocks: NotionBlock[] = [];
+
+  if (opts?.dashboardUrl) {
+    blocks.push({
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: [
+          { type: 'text', text: { content: 'View on dashboard →', link: { url: opts.dashboardUrl } } },
+        ],
+      },
+    });
+  }
 
   // Sessions section.
   if (ctx.sessions.length > 0) {
@@ -277,6 +350,15 @@ function truncate(s: string, max: number): string {
   return s.slice(0, max - 1).trimEnd() + '…';
 }
 
+// One-time Notion schema setup (manual via Notion UI, or via the
+// notion-update-data-source MCP tool — see
+// docs/superpowers/specs/2026-06-15-tokentrail-visualization-design.md):
+//
+//   ALTER COLUMN "Type"           SET SELECT WITH OPTIONS "Rollup", "Digest"
+//   ALTER COLUMN "Anomaly"        SET CHECKBOX
+//   ALTER COLUMN "Anomaly reason" SET RICH_TEXT
+//
+// Sync will silently warn-and-continue until these columns exist.
 function buildProperties(p: RollupPagePayload) {
   const props: Record<string, unknown> = {
     [NOTION_PROPS.name]: {
@@ -303,6 +385,11 @@ function buildProperties(p: RollupPagePayload) {
       rich_text: [
         { type: 'text', text: { content: p.commitSummary ?? '' } },
       ],
+    },
+    [NOTION_PROPS.type]: { select: { name: p.type } },
+    [NOTION_PROPS.anomaly]: { checkbox: p.isAnomaly },
+    [NOTION_PROPS.anomalyReason]: {
+      rich_text: [{ type: 'text', text: { content: p.anomalyReason ?? '' } }],
     },
   };
   // Repo is multi_select — one rollup can span multiple repos when the same

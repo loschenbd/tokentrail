@@ -100,8 +100,13 @@ export function repoContextFor(projectDir: string): RepoContext {
   if (!isGitRepo(projectDir)) {
     return { repo: null, branch: null, commitSha: null };
   }
+  // Prefer the GitHub-style slug from the origin remote. Fall back to
+  // local/<basename> so local-only git repos (no remote configured) still
+  // get a stable repo identity for attribution and rollups.
+  const slug = parseRepoSlug(originUrl(projectDir));
+  const base = projectDir.split('/').filter(Boolean).pop() ?? 'unknown';
   return {
-    repo: parseRepoSlug(originUrl(projectDir)),
+    repo: slug ?? `local/${base}`,
     branch: currentBranch(projectDir),
     commitSha: currentCommitSha(projectDir),
   };

@@ -119,10 +119,22 @@ export function attribute(input: AttributionInput): Attribution {
     }
   }
 
-  // 5. Mainline fallback
+  // 5. Mainline fallback — scope by repo so two repos' main branches don't
+  // collapse into one giant bucket. Falls back to a global key only when
+  // the repo is empty (shouldn't happen, but be defensive).
   if (MAINLINE.has(input.branch.toLowerCase())) {
+    const branchLower = input.branch.toLowerCase();
+    if (input.repo) {
+      const repoSlug = slugify(input.repo);
+      const repoLabel = input.repo.split('/').pop() ?? input.repo;
+      return {
+        featureKey: `mainline-${repoSlug}-${branchLower}`,
+        featureName: `${repoLabel} (${input.branch})`,
+        source: 'mainline',
+      };
+    }
     return {
-      featureKey: `mainline-${input.branch.toLowerCase()}`,
+      featureKey: `mainline-${branchLower}`,
       featureName: `Mainline (${input.branch})`,
       source: 'mainline',
     };

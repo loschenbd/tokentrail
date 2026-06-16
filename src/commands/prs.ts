@@ -31,6 +31,7 @@ export async function backfillPrs(opts: PrsBackfillOptions = {}): Promise<void> 
          c.branch
        FROM session_commits c
        WHERE c.repo IS NOT NULL AND c.repo != ''
+         AND c.repo NOT LIKE 'local/%'
          AND c.branch IS NOT NULL AND c.branch != ''
          ${opts.force ? '' : `AND NOT EXISTS (
            SELECT 1 FROM session_prs p

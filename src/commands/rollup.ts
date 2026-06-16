@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/db.js';
 import { attribute } from '../lib/attribution.js';
 import { bucketFromProjectDir } from '../lib/project-dir.js';
+import { computeAndPersistAnomalies } from '../services/anomalies-db.js';
 
 export type RollupSummary = {
   rowsUpserted: number;
@@ -20,12 +21,13 @@ export type RollupSummary = {
 export async function runRollup(): Promise<RollupSummary> {
   const db = getDb();
 
-  // Pull aggregated rows. Use date() on timestamp so SQLite returns
-  // ISO-yyyy-mm-dd local-to-the-event date.
+  // Pull aggregated rows. Bucket events by their LOCAL date so the daily
+  // series matches the user's calendar (events at 11pm don't slip into
+  // "tomorrow" the way a UTC date() would).
   const rows = db
     .prepare(
       `SELECT
-         date(e.timestamp)                       AS date,
+         date(e.timestamp, 'localtime')          AS date,
          COALESCE(e.repo, '')                    AS repo,
          COALESCE(e.branch, '')                  AS branch,
          COALESCE(e.project_dir, '')             AS project_dir,
@@ -43,7 +45,7 @@ export async function runRollup(): Promise<RollupSummary> {
          ON w.repo = e.repo AND w.branch = e.branch
        LEFT JOIN sessions s
          ON s.session_id = e.session_id
-       GROUP BY date(e.timestamp), e.repo, e.branch, e.project_dir,
+       GROUP BY date(e.timestamp, 'localtime'), e.repo, e.branch, e.project_dir,
                 w.feature_key, w.feature_name,
                 s.feature_override, s.feature_override_name`
     )
@@ -224,6 +226,13 @@ export async function runRollup(): Promise<RollupSummary> {
       `${deletedSuffix}. ` +
       `Total: $${b.toFixed(2)} (events: $${a.toFixed(2)}; ` +
       `delta: $${Math.abs(b - a).toFixed(2)}).`
+  );
+
+  const anomalyResult = computeAndPersistAnomalies(db);
+  console.log(
+    `Anomalies: ${anomalyResult.active} active` +
+      (anomalyResult.preserved > 0 ? `, ${anomalyResult.preserved} dismissed preserved` : '') +
+      '.'
   );
 
   return { rowsUpserted };

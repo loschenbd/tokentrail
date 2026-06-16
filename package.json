@@ -10,7 +10,9 @@
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "tokentrail": "tsx src/index.ts"
+    "tokentrail": "tsx src/index.ts",
+    "test": "node --import tsx --test $(find tests -name '*.test.ts')",
+    "test:watch": "node --import tsx --test --watch $(find tests -name '*.test.ts')"
   },
   "engines": {
     "node": ">=20"
@@ -20,12 +22,15 @@
     "@octokit/rest": "^21.0.2",
     "better-sqlite3": "^11.5.0",
     "commander": "^12.1.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "fastify": "^4.29.1",
+    "open": "^10.2.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.9.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "uplot": "^1.6.32"
   }
 }

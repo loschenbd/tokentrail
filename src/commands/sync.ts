@@ -5,6 +5,8 @@ import {
   type RollupBodyContext,
   type RollupPagePayload,
 } from '../services/notion.js';
+import { buildDigestBody, type DigestContext } from '../services/notion-digest.js';
+import { chooseTopAnomaly, type DetectedAnomaly } from '../services/anomalies.js';
 
 export type SyncOptions = {
   days?: number;
@@ -117,6 +119,13 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
     WHERE session_id IN (SELECT value FROM json_each(?))
     ORDER BY repo, pr_number
   `);
+  const anomaliesForRollup = db.prepare(`
+    SELECT kind, date, feature_key, session_id, amount, baseline, multiplier, reason
+    FROM anomalies
+    WHERE dismissed_at IS NULL
+      AND ((feature_key = @feature_key AND date = @date)
+        OR (date = @date AND feature_key IS NULL))
+  `);
 
   let upserted = 0;
   let skipped = 0;
@@ -124,6 +133,32 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
   const delayMs = opts.delayMs ?? 350;
 
   for (const r of rows) {
+    const rowAnomalies = anomaliesForRollup.all({
+      feature_key: r.feature_key,
+      date: r.date,
+    }) as Array<{
+      kind: 'spike_day' | 'burning_feature' | 'hot_session';
+      date: string;
+      feature_key: string | null;
+      session_id: string | null;
+      amount: number;
+      baseline: number;
+      multiplier: number;
+      reason: string;
+    }>;
+    const top = chooseTopAnomaly(
+      rowAnomalies.map((a) => ({
+        kind: a.kind,
+        date: a.date,
+        feature_key: a.feature_key,
+        session_id: a.session_id,
+        amount: a.amount,
+        baseline: a.baseline,
+        multiplier: a.multiplier,
+        reason: a.reason,
+      })) as DetectedAnomaly[]
+    );
+
     const payload: RollupPagePayload = {
       date: r.date,
       featureKey: r.feature_key,
@@ -135,6 +170,9 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
       totalCostUsd: r.total_cost_usd,
       sessions: r.sessions_count,
       commitSummary: r.commit_summary,
+      isAnomaly: top !== null,
+      anomalyReason: top?.reason ?? null,
+      type: 'Rollup',
     };
 
     let pageId = r.notion_page_id;
@@ -154,7 +192,8 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
           prsForRollup,
         })
       : null;
-    const children = body ? buildRollupBody(body) : [];
+    const dashboardUrl = `http://127.0.0.1:4920/feature/${encodeURIComponent(r.feature_key)}?days=30`;
+    const children = body ? buildRollupBody(body, { dashboardUrl }) : [];
 
     const result = await notion.upsertPage(
       payload,
@@ -199,6 +238,12 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
     `Notion sync complete: ${upserted} page${upserted === 1 ? '' : 's'} ` +
       `upserted, ${skipped} skipped${bodyNote}.`
   );
+
+  const digestResult = await syncWeeklyDigest(db, notion);
+  if (digestResult) {
+    console.log(`Weekly digest synced for week of ${digestResult.weekStart}.`);
+  }
+
   return { scanned: rows.length, upserted, skipped };
 }
 
@@ -248,4 +293,64 @@ function buildBodyContext(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+async function syncWeeklyDigest(
+  db: ReturnType<typeof getDb>,
+  notion: NotionService
+): Promise<{ weekStart: string } | null> {
+  // Monday of the current week. SQLite: 'weekday 0' goes to next Sunday;
+  // shifting back 6 days lands on the most recent Monday (works for any
+  // day of the week including Monday itself).
+  const weekStart = (db
+    .prepare(`SELECT date('now', 'weekday 0', '-6 days') AS d`)
+    .get() as { d: string }).d;
+  const weekEnd = (db.prepare(`SELECT date(?, '+6 days') AS d`).get(weekStart) as { d: string }).d;
+  const priorStart = (db.prepare(`SELECT date(?, '-7 days') AS d`).get(weekStart) as { d: string }).d;
+  const priorEnd = (db.prepare(`SELECT date(?, '-1 days') AS d`).get(weekStart) as { d: string }).d;
+
+  const weekTotal = (db
+    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS t FROM feature_rollups WHERE date >= ? AND date <= ?`)
+    .get(weekStart, weekEnd) as { t: number }).t;
+  const priorTotal = (db
+    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS t FROM feature_rollups WHERE date >= ? AND date <= ?`)
+    .get(priorStart, priorEnd) as { t: number }).t;
+
+  const topFeatures = db
+    .prepare(`
+      SELECT feature_key AS featureKey,
+             MAX(feature_name) AS featureName,
+             ROUND(SUM(total_cost_usd), 2) AS costUsd,
+             SUM(sessions_count) AS sessions
+      FROM feature_rollups
+      WHERE date >= ? AND date <= ?
+      GROUP BY feature_key
+      ORDER BY costUsd DESC
+      LIMIT 5
+    `)
+    .all(weekStart, weekEnd) as DigestContext['topFeatures'];
+
+  const anomalies = db
+    .prepare(`SELECT kind, date, reason FROM anomalies WHERE dismissed_at IS NULL AND date >= ? AND date <= ? ORDER BY multiplier DESC`)
+    .all(weekStart, weekEnd) as DigestContext['anomalies'];
+
+  const recentCommits = db
+    .prepare(`SELECT commit_sha AS sha, subject, repo FROM session_commits WHERE authored_at IS NOT NULL ORDER BY authored_at DESC LIMIT 10`)
+    .all() as DigestContext['recentCommits'];
+
+  const openPrs = db
+    .prepare(`SELECT DISTINCT repo, pr_number AS prNumber, pr_title AS title, pr_url AS url, pr_state AS state FROM session_prs WHERE pr_state = 'open' ORDER BY repo, pr_number LIMIT 20`)
+    .all() as DigestContext['openPrs'];
+
+  const body = buildDigestBody({
+    weekStart,
+    weekTotalUsd: weekTotal,
+    priorWeekTotalUsd: priorTotal,
+    topFeatures,
+    anomalies,
+    recentCommits,
+    openPrs,
+  });
+  const pageId = await notion.upsertDigestPage(weekStart, weekTotal, body);
+  return pageId ? { weekStart } : null;
 }

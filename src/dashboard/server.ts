@@ -13,6 +13,7 @@ import { buildProjectDetail } from './data/project.js';
 import { renderProject } from './render/project.js';
 import { buildWorthALook } from './data/worth-a-look.js';
 import { renderWorthALook } from './render/worth-a-look.js';
+import { buildToday } from './data/api.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
 
@@ -57,6 +58,12 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     const vm = buildWorthALook(getDb());
     reply.type('text/html; charset=utf-8');
     return renderShell({ title: 'Worth a look · Tokentrail', activeTab: 'worth-a-look', days: opts.defaultDays, showBack: true }, renderWorthALook(vm));
+  });
+
+  app.get('/api/today', async (_req, reply) => {
+    const payload = buildToday(getDb());
+    reply.type('application/json; charset=utf-8');
+    return payload;
   });
 
   // Static asset serving — small bespoke handler instead of @fastify/static

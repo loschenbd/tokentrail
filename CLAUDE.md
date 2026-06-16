@@ -34,3 +34,8 @@ Phase 5 report → Phase 6 sync → Phase 7 hooks → Phase 8 automation
 ## Manual verification
 After each phase, run the relevant command and verify the database contents or
 terminal output before proceeding.
+
+## Visual assets
+For logos, README art, social cards, blog headers, dashboard graphics, or any
+on-brand image work, follow `docs/brand-images.md`. The canonical logo is
+`docs/logo.png`.

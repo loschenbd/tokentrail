@@ -11,3 +11,8 @@ data/*.db-shm
 
 .superpowers/
 .worktrees/
+
+# Per-machine Claude Code hook config — example template lives in
+# examples/claude-settings.example.json
+.claude/settings.json
+.claude/settings.local.json

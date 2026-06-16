@@ -89,7 +89,7 @@ export async function recomputeClusters(
     // OpenRouter recommends attribution headers — surface tokentrail so
     // your usage shows up cleanly in the OpenRouter dashboard.
     defaultHeaders: {
-      'HTTP-Referer': 'https://github.com/benjaminloschen/tokentrail',
+      'HTTP-Referer': 'https://github.com/loschenbd/tokentrail',
       'X-Title': 'Tokentrail',
     },
   });

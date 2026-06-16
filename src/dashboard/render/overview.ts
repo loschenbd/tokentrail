@@ -53,39 +53,22 @@ function renderTopProjects(items: OverviewVM['topProjects'], totalUsd: number): 
     .map((p, i) => {
       const share = (p.totalUsd / denom) * 100;
       const pct = Math.max(1, Math.round(share));
-      const singleFeature = p.features.length === 1;
-      // If a project has only one feature, link the header straight to that
-      // feature — no point making the user expand it just to click through.
-      const headerHref = singleFeature
+      // Single-feature projects skip the project page; the feature page is
+      // strictly richer (sessions + topics) and the project page would just
+      // duplicate the same numbers.
+      const href = p.features.length === 1
         ? `/feature/${encodeURIComponent(p.features[0]!.featureKey)}`
-        : null;
-      const projectRow = headerHref
-        ? `<a class="project-row" href="${headerHref}">
-             <span class="mile">${roman[i] ?? ''}</span>
-             <span class="name">${escapeHtml(p.projectName)}</span>
-             <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
-           </a>`
-        : `<div class="project-row expandable" data-project-toggle="${escapeHtml(p.projectKey)}">
-             <span class="mile">${roman[i] ?? ''}</span>
-             <span class="name">${escapeHtml(p.projectName)} <span class="muted">· ${p.features.length} features</span></span>
-             <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
-             <span class="chev">▸</span>
-           </div>`;
-      const featureBlock = singleFeature
+        : `/project/${encodeURIComponent(p.projectKey)}`;
+      const featuresLabel = p.features.length === 1
         ? ''
-        : `<div class="project-features" id="project-${escapeHtml(p.projectKey)}">
-             ${p.features.map((f) => {
-               const fShare = (f.totalUsd / (p.totalUsd || 1)) * 100;
-               return `<a class="feature-row sub" href="/feature/${encodeURIComponent(f.featureKey)}">
-                 <span class="name">${escapeHtml(f.featureName || f.featureKey)}</span>
-                 <span class="amt">$${f.totalUsd.toFixed(0)} <span class="muted share">· ${fShare.toFixed(0)}%</span></span>
-               </a>`;
-             }).join('')}
-           </div>`;
+        : `<span class="muted">· ${p.features.length} features</span>`;
       return `
-        ${projectRow}
+        <a class="project-row" href="${href}">
+          <span class="mile">${roman[i] ?? ''}</span>
+          <span class="name">${escapeHtml(p.projectName)} ${featuresLabel}</span>
+          <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
+        </a>
         <div class="bar"><span style="width:${pct}%"></span></div>
-        ${featureBlock}
       `;
     })
     .join('');

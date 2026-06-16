@@ -1,0 +1,211 @@
+import type DatabaseType from 'better-sqlite3';
+
+// A "project" is a higher-level grouping than a feature. There are three
+// kinds of project key:
+//   repo:<owner>/<name>    — a GitHub-style repo (e.g. repo:loschenbd/archi)
+//   local:<basename>       — a local git repo with no remote
+//   feature:<feature_key>  — a single feature standing on its own (typically
+//                            an "outside:" bucket with no repo at all)
+//
+// The Overview's project grouping uses the same key namespace; the project
+// detail page resolves whichever filter applies and aggregates the
+// matching feature_rollups rows.
+
+export type ProjectDetailVM = {
+  projectKey: string;
+  projectName: string;
+  totalUsd: number;
+  priorUsd: number;
+  deltaPct: number;
+  sessionCount: number;
+  featureCount: number;
+  dailySeries: Array<{ date: string; total: number; commits: number; prs: number }>;
+  features: Array<{
+    featureKey: string;
+    featureName: string;
+    totalUsd: number;
+    sessionCount: number;
+  }>;
+  recentCommits: Array<{ sha: string; subject: string; repo: string | null; authoredAt: string | null }>;
+  anomalies: Array<{
+    id: number;
+    kind: string;
+    date: string;
+    featureKey: string | null;
+    sessionId: string | null;
+    amount: number;
+    reason: string;
+  }>;
+};
+
+type ProjectFilter = {
+  kind: 'repo' | 'feature';
+  repo?: string;
+  featureKey?: string;
+};
+
+function parseProjectKey(projectKey: string): ProjectFilter | null {
+  if (projectKey.startsWith('repo:')) {
+    return { kind: 'repo', repo: projectKey.slice(5) };
+  }
+  if (projectKey.startsWith('local:')) {
+    return { kind: 'repo', repo: 'local/' + projectKey.slice(6) };
+  }
+  if (projectKey.startsWith('feature:')) {
+    return { kind: 'feature', featureKey: projectKey.slice(8) };
+  }
+  return null;
+}
+
+export function buildProjectDetail(
+  db: DatabaseType.Database,
+  opts: { projectKey: string; days: number }
+): ProjectDetailVM | null {
+  const filter = parseProjectKey(opts.projectKey);
+  if (!filter) return null;
+
+  const days = Math.max(1, opts.days);
+  const startExpr = `date('now', '-${days - 1} days', 'localtime')`;
+  const priorStartExpr = `date('now', '-${days * 2 - 1} days', 'localtime')`;
+  const priorEndExpr = `date('now', '-${days} days', 'localtime')`;
+
+  // Each filter resolves to a SQL WHERE clause + bound params. Repo filter
+  // matches the CSV column with leading/trailing comma sentinels so partial
+  // matches (e.g. "archi" matching "loschenbd/archi-old") can't slip in.
+  const filterSql = filter.kind === 'repo'
+    ? `(',' || repo || ',') LIKE @repoNeedle`
+    : `feature_key = @featureKey`;
+  const filterParams: Record<string, string> = filter.kind === 'repo'
+    ? { repoNeedle: `%,${filter.repo},%` }
+    : { featureKey: filter.featureKey! };
+
+  const head = db
+    .prepare(`
+      SELECT COALESCE(SUM(total_cost_usd), 0) AS totalUsd,
+             COALESCE(SUM(sessions_count), 0) AS sessionCount,
+             GROUP_CONCAT(DISTINCT session_ids) AS sessionIdsCsv
+      FROM feature_rollups
+      WHERE ${filterSql} AND date >= ${startExpr}
+    `)
+    .get(filterParams) as {
+      totalUsd: number;
+      sessionCount: number;
+      sessionIdsCsv: string | null;
+    };
+  if (head.totalUsd === 0 && (head.sessionIdsCsv ?? '').length === 0) {
+    return null;
+  }
+
+  const prior = (db
+    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM feature_rollups WHERE ${filterSql} AND date >= ${priorStartExpr} AND date <= ${priorEndExpr}`)
+    .get(filterParams) as { total: number }).total;
+  const deltaPct = prior > 0 ? Math.round(((head.totalUsd - prior) / prior) * 100) : (head.totalUsd > 0 ? 100 : 0);
+
+  // Project display name — prefer the human feature name for feature-kind
+  // projects; for repo-kind, use the repo basename. For the unique features
+  // list, we still need their per-feature totals.
+  const features = db
+    .prepare(`
+      SELECT feature_key AS featureKey,
+             MAX(feature_name) AS featureName,
+             ROUND(SUM(total_cost_usd), 2) AS totalUsd,
+             SUM(sessions_count) AS sessionCount
+      FROM feature_rollups
+      WHERE ${filterSql} AND date >= ${startExpr}
+      GROUP BY feature_key
+      ORDER BY totalUsd DESC
+    `)
+    .all(filterParams) as ProjectDetailVM['features'];
+
+  const projectName = filter.kind === 'repo'
+    ? (filter.repo!.split('/').pop() ?? filter.repo!)
+    : (features[0]?.featureName ?? filter.featureKey!);
+
+  const sessionIds = uniqueSessionIds(head.sessionIdsCsv);
+
+  const dailyRows = db
+    .prepare(`SELECT date, SUM(total_cost_usd) AS total FROM feature_rollups WHERE ${filterSql} AND date >= ${startExpr} GROUP BY date ORDER BY date`)
+    .all(filterParams) as Array<{ date: string; total: number }>;
+  const observedMap = new Map(dailyRows.map((r) => [r.date, r.total]));
+
+  const commitsByDay = sessionIds.length === 0
+    ? []
+    : db
+      .prepare(`SELECT date(authored_at, 'localtime') AS d, COUNT(*) AS n FROM session_commits WHERE session_id IN (SELECT value FROM json_each(?)) AND authored_at IS NOT NULL GROUP BY date(authored_at, 'localtime')`)
+      .all(JSON.stringify(sessionIds)) as Array<{ d: string; n: number }>;
+  const commitsMap = new Map(commitsByDay.map((r) => [r.d, r.n]));
+  const prsByDay = sessionIds.length === 0
+    ? []
+    : db
+      .prepare(`SELECT date(merged_at, 'localtime') AS d, COUNT(*) AS n FROM session_prs WHERE session_id IN (SELECT value FROM json_each(?)) AND merged_at IS NOT NULL GROUP BY date(merged_at, 'localtime')`)
+      .all(JSON.stringify(sessionIds)) as Array<{ d: string; n: number }>;
+  const prsMap = new Map(prsByDay.map((r) => [r.d, r.n]));
+
+  // Zero-fill the daily series across the full window so the chart doesn't
+  // skip days with no activity.
+  const dailySeries: ProjectDetailVM['dailySeries'] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const date = db.prepare(`SELECT date('now', '-${i} days', 'localtime') AS d`).get() as { d: string };
+    dailySeries.push({
+      date: date.d,
+      total: round2(observedMap.get(date.d) ?? 0),
+      commits: commitsMap.get(date.d) ?? 0,
+      prs: prsMap.get(date.d) ?? 0,
+    });
+  }
+
+  const recentCommits = sessionIds.length === 0
+    ? []
+    : db
+      .prepare(`
+        SELECT commit_sha AS sha, subject, repo, authored_at AS authoredAt
+        FROM session_commits
+        WHERE session_id IN (SELECT value FROM json_each(?)) AND authored_at IS NOT NULL
+        ORDER BY authored_at DESC LIMIT 10
+      `)
+      .all(JSON.stringify(sessionIds)) as ProjectDetailVM['recentCommits'];
+
+  const featureKeys = features.map((f) => f.featureKey);
+  const anomalies = featureKeys.length === 0
+    ? []
+    : db
+      .prepare(`
+        SELECT id, kind, date, feature_key AS featureKey, session_id AS sessionId,
+               ROUND(amount, 2) AS amount, reason
+        FROM anomalies
+        WHERE dismissed_at IS NULL
+          AND date >= ${startExpr}
+          AND feature_key IN (SELECT value FROM json_each(?))
+        ORDER BY multiplier DESC, date DESC
+        LIMIT 5
+      `)
+      .all(JSON.stringify(featureKeys)) as ProjectDetailVM['anomalies'];
+
+  return {
+    projectKey: opts.projectKey,
+    projectName,
+    totalUsd: round2(head.totalUsd),
+    priorUsd: round2(prior),
+    deltaPct,
+    sessionCount: head.sessionCount,
+    featureCount: features.length,
+    dailySeries,
+    features: features.map((f) => ({ ...f, totalUsd: round2(f.totalUsd) })),
+    recentCommits,
+    anomalies,
+  };
+}
+
+function uniqueSessionIds(csv: string | null): string[] {
+  if (!csv) return [];
+  const set = new Set<string>();
+  for (const chunk of csv.split(',')) {
+    const s = chunk.trim();
+    if (s) set.add(s);
+  }
+  return [...set];
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}

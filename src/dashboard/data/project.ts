@@ -26,6 +26,12 @@ export type ProjectDetailVM = {
     totalUsd: number;
     sessionCount: number;
   }>;
+  sessions: Array<{
+    sessionId: string;
+    title: string | null;
+    date: string | null;
+    cost: number;
+  }>;
   recentCommits: Array<{ sha: string; subject: string; repo: string | null; authoredAt: string | null }>;
   anomalies: Array<{
     id: number;
@@ -181,16 +187,58 @@ export function buildProjectDetail(
       `)
       .all(JSON.stringify(featureKeys)) as ProjectDetailVM['anomalies'];
 
+  // SUM(sessions_count) double-counts sessions active on multiple days;
+  // the distinct session_ids set is the right number.
+  const distinctSessionCount = sessionIds.length;
+
+  // Sessions across the project — for the trail elevation chart + the
+  // upstream session list. NULL first_seen_at falls back to the earliest
+  // feature_rollups.date where the session appears, so the chart doesn't
+  // silently drop sessions with no datestamp.
+  const sessionRows = sessionIds.length === 0
+    ? []
+    : db
+      .prepare(`
+        SELECT s.session_id AS sessionId,
+               s.title       AS title,
+               date(s.first_seen_at, 'localtime') AS date,
+               COALESCE((SELECT SUM(e.estimated_cost_usd) FROM usage_events e WHERE e.session_id = s.session_id), 0) AS cost
+        FROM sessions s
+        WHERE s.session_id IN (SELECT value FROM json_each(?))
+      `)
+      .all(JSON.stringify(sessionIds)) as Array<{
+        sessionId: string;
+        title: string | null;
+        date: string | null;
+        cost: number;
+      }>;
+  const earliestDateBySession = new Map<string, string>();
+  for (const r of db
+    .prepare(`SELECT date, session_ids FROM feature_rollups WHERE ${filterSql} AND date >= ${startExpr} ORDER BY date`)
+    .all(filterParams) as Array<{ date: string; session_ids: string | null }>) {
+    if (!r.session_ids) continue;
+    for (const sid of r.session_ids.split(',').map((s) => s.trim()).filter(Boolean)) {
+      if (!earliestDateBySession.has(sid)) earliestDateBySession.set(sid, r.date);
+    }
+  }
+  const sessions = sessionRows.map((s) => ({
+    sessionId: s.sessionId,
+    title: s.title,
+    date: s.date ?? earliestDateBySession.get(s.sessionId) ?? null,
+    cost: round2(s.cost),
+  }));
+
   return {
     projectKey: opts.projectKey,
     projectName,
     totalUsd: round2(head.totalUsd),
     priorUsd: round2(prior),
     deltaPct,
-    sessionCount: head.sessionCount,
+    sessionCount: distinctSessionCount,
     featureCount: features.length,
     dailySeries,
     features: features.map((f) => ({ ...f, totalUsd: round2(f.totalUsd) })),
+    sessions,
     recentCommits,
     anomalies,
   };

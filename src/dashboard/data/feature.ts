@@ -152,16 +152,37 @@ export function buildFeatureDetail(
     })
     .filter((c) => c.sessionCount > 0);
 
+  // feature_rollups.sessions_count is a per-row count, so SUMming it
+  // double-counts any session that spans multiple days. The distinct
+  // count of session_ids we already resolved IS the right number.
+  const distinctSessionCount = sessionIds.length;
+
+  // Map each session to the earliest rollup date it appears in, so we
+  // can fall back to that when sessions.first_seen_at is NULL (the
+  // chart filters out null dates, which silently drops the session).
+  const earliestDateBySession = new Map<string, string>();
+  for (const r of db
+    .prepare(`SELECT date, session_ids FROM feature_rollups WHERE feature_key = @key AND date >= ${startExpr} ORDER BY date`)
+    .all({ key: opts.featureKey }) as Array<{ date: string; session_ids: string | null }>) {
+    if (!r.session_ids) continue;
+    for (const sid of r.session_ids.split(',').map((s) => s.trim()).filter(Boolean)) {
+      if (!earliestDateBySession.has(sid)) earliestDateBySession.set(sid, r.date);
+    }
+  }
+  const sessionsWithDateFallback = sessions.map((s) =>
+    s.date ? s : { ...s, date: earliestDateBySession.get(s.sessionId) ?? null }
+  );
+
   return {
     featureKey: opts.featureKey,
     featureName: head.featureName ?? opts.featureKey,
     totalUsd: round2(head.totalUsd),
     deltaPct,
-    sessionCount: head.sessionCount,
+    sessionCount: distinctSessionCount,
     branches: uniqueBranches,
     dailySeries,
     clusters,
-    sessions,
+    sessions: sessionsWithDateFallback,
   };
 }
 

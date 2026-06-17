@@ -131,6 +131,7 @@ tokentrail sessions    # List sessions by cost to scan for attribution.
 tokentrail commits     # Capture or show git commits authored per session.
 tokentrail prs         # Capture or show GitHub PRs linked to each session.
 tokentrail label       # Set, clear, or list per-session feature overrides.
+tokentrail anomaly     # List, dismiss, or restore anomalies (also doable inline on the dashboard).
 tokentrail attribute   # Show how attribution would bucket a given (repo, branch).
 tokentrail sync        # Sync the latest ledger entries to Notion.
 tokentrail run-all     # Walk the full trail end-to-end.
@@ -306,8 +307,8 @@ Tokentrail overview. Flags:
 --days <n>     initial time window (default 30)
 ```
 
-The dashboard is read-only. Labeling, anomaly dismissal, and sync stay on the
-CLI. Stop it with Ctrl-C.
+Anomalies on `/worth-a-look` can be dismissed and restored inline. Labeling
+and sync stay on the CLI for now. Stop the dashboard with Ctrl-C.
 
 ### Menu bar widget (SwiftBar)
 

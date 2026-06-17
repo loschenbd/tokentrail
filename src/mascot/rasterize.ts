@@ -47,12 +47,11 @@ function cellDensity(pixels: Uint8Array, stride: number, x0: number, y0: number,
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
       const i = (y * stride + x) * 4;
-      const r = pixels[i];
-      const g = pixels[i + 1];
-      const b = pixels[i + 2];
-      const a = pixels[i + 3];
-      if (r === undefined || g === undefined || b === undefined || a === undefined) continue;
-      // darkness = 1 - luminance, weighted by alpha
+      // loop bounds derive from image dimensions; indices are valid
+      const r = pixels[i]!;
+      const g = pixels[i + 1]!;
+      const b = pixels[i + 2]!;
+      const a = pixels[i + 3]!;
       const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
       const dark = (1 - lum) * (a / 255);
       sum += dark;

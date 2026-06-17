@@ -155,6 +155,31 @@ export function buildBranchGraph(
   const STALE_THRESHOLD_MS = 7 * 86400000;
   const now = Date.now();
 
+  // featureKey lookup: scan feature_rollups in the same window for rows
+  // whose `branches` CSV contains any of our branch names. Use comma
+  // sentinels to avoid substring false positives (e.g. 'feat/x' should
+  // NOT match a CSV containing 'feat/xy').
+  const featureKeyByBranch = new Map<string, string>();
+  if (branchNames.length > 0) {
+    const fkRows = db
+      .prepare(
+        `SELECT feature_key AS featureKey, branches
+           FROM feature_rollups
+          WHERE repo = ? AND date >= ?`
+      )
+      .all(repo, windowStart) as Array<{ featureKey: string; branches: string | null }>;
+    for (const row of fkRows) {
+      if (!row.branches) continue;
+      const sentinel = ',' + row.branches + ',';
+      for (const name of branchNames) {
+        if (featureKeyByBranch.has(name)) continue;
+        if (sentinel.includes(',' + name + ',')) {
+          featureKeyByBranch.set(name, row.featureKey);
+        }
+      }
+    }
+  }
+
   const branches: BranchLifecycle[] = rows.map((r) => {
     const pr = prByBranch.get(r.branch);
     const mergedAt = pr?.mergedAt ?? null;
@@ -174,7 +199,7 @@ export function buildBranchGraph(
       sessionCount: agg?.sessionCount ?? 0,
       prNumber: pr?.prNumber ?? null,
       prUrl: pr?.prUrl ?? null,
-      featureKey: null,
+      featureKey: featureKeyByBranch.get(r.branch) ?? null,
     };
   });
 

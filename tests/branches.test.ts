@@ -128,6 +128,59 @@ describe('buildBranchGraph — PR matching', () => {
   });
 });
 
+function insertRollup(db: Database.Database, opts: {
+  date: string; featureKey: string; repo: string | null;
+  branches: string;
+  cost?: number; sessions?: number; sessionIds?: string;
+}) {
+  db.prepare(
+    `INSERT INTO feature_rollups
+       (id, date, feature_key, feature_name, repo, branches,
+        total_input_tokens, total_output_tokens, total_cost_usd,
+        sessions_count, session_ids)
+     VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)`
+  ).run(
+    `${opts.date}::${opts.featureKey}`,
+    opts.date, opts.featureKey, opts.featureKey, opts.repo,
+    opts.branches, opts.cost ?? 1, opts.sessions ?? 1, opts.sessionIds ?? 's1',
+  );
+}
+
+describe('buildBranchGraph — featureKey lookup', () => {
+  test('featureKey populated when feature_rollups.branches contains the branch', () => {
+    const db = makeDb();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: nowIso(), repo: 'o/r', branch: 'feat/x', cost: 5 });
+    insertRollup(db, {
+      date: todayLocal(db), featureKey: 'feat-x', repo: 'o/r',
+      branches: 'feat/x,origin/feat/x',
+    });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
+    assert.equal(r.branches[0]!.featureKey, 'feat-x');
+  });
+
+  test('featureKey is null when no feature_rollups row contains the branch', () => {
+    const db = makeDb();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: nowIso(), repo: 'o/r', branch: 'feat/orphan', cost: 5 });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
+    assert.equal(r.branches[0]!.featureKey, null);
+  });
+
+  test('substring match on branches CSV does not produce false positives (comma sentinels)', () => {
+    const db = makeDb();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: nowIso(), repo: 'o/r', branch: 'feat/x', cost: 5 });
+    insertRollup(db, {
+      date: todayLocal(db), featureKey: 'feat-xy', repo: 'o/r',
+      branches: 'feat/xy-but-not-feat/x',
+    });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
+    assert.equal(r.branches[0]!.featureKey, null);
+  });
+});
+
+function todayLocal(db: Database.Database): string {
+  return (db.prepare(`SELECT date('now', 'localtime') AS d`).get() as { d: string }).d;
+}
+
 describe('buildBranchGraph — status, cost, session count', () => {
   test('open status when no merge and lastEvent is within 7 days', () => {
     const db = makeDb();

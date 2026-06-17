@@ -10,6 +10,12 @@ logs to feature-level cost rollups, then optionally syncs that ledger to Notion.
 
 ## Quickstart
 
+Prerequisites: Node.js 20+ and an existing
+[Claude Code](https://docs.anthropic.com/en/docs/agents/claude-code) install.
+Tokentrail reads the session logs Claude Code writes to `~/.claude/projects/`
+— if you've never run a Claude Code session, that directory will be empty
+and the dashboard will show a "no trail yet" hint instead of charts.
+
 ```bash
 git clone https://github.com/loschenbd/tokentrail.git
 cd tokentrail
@@ -19,11 +25,11 @@ npm run tokentrail -- run-all --skip-sync --skip-enrich
 npm run tokentrail -- dashboard
 ```
 
-That ingests your existing Claude Code session logs from `~/.claude/projects/`,
-rolls them into daily per-feature totals, and opens the dashboard at
-`http://127.0.0.1:4920`. Add a `GITHUB_TOKEN` to `.env` to enrich PR data,
-and `NOTION_TOKEN` + `NOTION_DATABASE_ID` to mirror to Notion (see
-**Notion sync** below).
+That ingests your existing Claude Code session logs from `~/.claude/projects/`
+(override with `CLAUDE_CONFIG_DIR` in `.env`), rolls them into daily per-
+feature totals, and opens the dashboard at `http://127.0.0.1:4920`. Add a
+`GITHUB_TOKEN` to `.env` to enrich PR data, and `NOTION_TOKEN` +
+`NOTION_DATABASE_ID` to mirror to Notion (see **Notion sync** below).
 
 ## What Tokentrail does
 

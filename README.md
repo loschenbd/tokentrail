@@ -125,26 +125,47 @@ but only needed occasionally.
 
 ## Claude Code integrations
 
-Two one-shot installers expose Tokentrail to your other Claude Code sessions.
+Two one-shot installers wire Tokentrail into any Claude Code session.
 
-```bash
-tokentrail install-skills
-```
+### `tokentrail install-skills`
 
-Symlinks a `tokentrail-spend` skill and `/today` + `/rollup` slash commands
-into `~/.claude/`. The skill auto-loads when you ask any Claude Code session
-about Claude Code spend, costs, or token attribution; `/today` prints today's
-totals from the dashboard API, `/rollup` runs a fresh ingest. Pass
-`--dry-run` to preview, `--force` to replace existing files.
+Symlinks a skill and two slash commands into `~/.claude/`:
 
-```bash
-tokentrail install-hook --repo /path/to/some-project
-```
+- **`tokentrail-spend` skill** — auto-loads when you ask any Claude Code
+  session about spend, costs, anomalies, or token attribution. Tells the
+  model to hit the dashboard API first, fall through to the CLI for
+  richer queries, and reach for ad-hoc SQL only when needed. Example
+  triggers: *"how much did I spend on archi this week?"*, *"what
+  feature is burning the most?"*, *"which sessions had a spike?"*
 
-Patches that repo's `.claude/settings.json` to fire Tokentrail's session-end
+- **`/today`** — pretty-prints today's spend from the dashboard API.
+  Sample output:
+  ```
+  $551.59 (estimated)
+  benjaminloschen  $265.67  (48%)
+    benjaminloschen (main)  $180.86
+    Library wine v1  $84.81
+  archi  $122.27  (22%)
+  tokentrail  $83.20  (15%)
+  46 open anomalies
+  ```
+
+- **`/rollup`** — runs `tokentrail run-all --skip-sync --skip-enrich` to
+  catch up to the latest Claude Code sessions, then re-renders the same
+  summary as `/today`.
+
+Pass `--dry-run` to preview, `--force` to replace existing files. The
+skill and slash commands work in any Claude Code session — they query
+the dashboard at `127.0.0.1:4920`, so the dashboard server must be
+running for them to return data.
+
+### `tokentrail install-hook [--repo PATH]`
+
+Patches a repo's `.claude/settings.json` to fire Tokentrail's session-end
 hook, with the absolute path to `src/hooks/session-end.sh` auto-detected.
 Omit `--repo` to patch the current directory. Idempotent — re-runs detect
-an existing Tokentrail hook and update its path if the repo moved.
+an existing Tokentrail hook and update its path in place if the repo
+moved (no duplicate stacking).
 
 ### What the session-end hook does
 

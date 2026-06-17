@@ -58,7 +58,22 @@ accept `--help`.
 - `tokentrail sessions --limit 20` — biggest individual sessions
 - `tokentrail commits --feature <key>` — commits authored during a feature's sessions
 - `tokentrail prs --feature <key>` — PRs linked to a feature
-- `tokentrail anomaly list` — currently-active anomalies
+- `tokentrail anomaly list` — currently-active anomalies (see kinds below)
+- `tokentrail anomaly dismiss <id>` — dismiss one
+
+## Anomaly kinds
+
+Three kinds get flagged; treat them differently when answering:
+
+- `spike_day` — a day's total cost was N× the prior week's typical day.
+  Real outliers; surface without filtering.
+- `burning_feature` — a feature/project is racking up significant new
+  spend this week. Catches "I started using Claude on X and didn't
+  notice the cost climb."
+- `hot_session` — a single session crossed a cost threshold. Tends to
+  be noisy at high overall spend levels; if the user has dozens, the
+  threshold likely doesn't match their scale and bulk-dismissing them
+  is reasonable. Don't lead with these when summarizing.
 
 ## Ad-hoc SQL
 
@@ -94,8 +109,9 @@ ORDER BY total_cost_usd DESC LIMIT 10;
 
 ## Installed alongside
 
-If this skill is present, the user has also probably installed two
+If this skill is present, the user has also probably installed three
 slash commands:
 
 - `/today` — pretty-print today's spend via the dashboard API
 - `/rollup` — re-ingest + re-roll to catch up to the latest sessions
+- `/anomalies` — list active anomalies grouped by kind

@@ -16,6 +16,28 @@ export function runMigrations(db: Database.Database): void {
     addColumnIfMissing(db, 'session_commits', 'repo', 'TEXT');
     addColumnIfMissing(db, 'feature_rollups', 'body_synced_at', 'TEXT');
     addColumnIfMissing(db, 'feature_rollups', 'session_ids', 'TEXT');
+    // Idempotent backfill: early-version session_commits rows landed with
+    // repo=NULL because the commits-backfill code path predated the
+    // local/<basename> fallback. Borrow repo from the most-frequent
+    // usage_events.repo for the same session_id. Re-running is a no-op
+    // since the WHERE filters out non-NULL rows.
+    db.exec(`
+      UPDATE session_commits
+      SET repo = (
+        SELECT repo FROM usage_events ue
+        WHERE ue.session_id = session_commits.session_id
+          AND ue.repo IS NOT NULL
+        GROUP BY ue.repo
+        ORDER BY COUNT(*) DESC
+        LIMIT 1
+      )
+      WHERE repo IS NULL
+        AND EXISTS (
+          SELECT 1 FROM usage_events ue
+          WHERE ue.session_id = session_commits.session_id
+            AND ue.repo IS NOT NULL
+        )
+    `);
   });
   tx();
 }

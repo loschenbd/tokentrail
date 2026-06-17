@@ -71,12 +71,26 @@ function renderSessions(items: FeatureDetailVM['sessions']): string {
     .join('');
 }
 
+function isGithubSlug(repo: string | null): repo is string {
+  if (!repo) return false;
+  if (repo.startsWith('local/')) return false;
+  // owner/name — single slash, both parts non-empty
+  const parts = repo.split('/');
+  return parts.length === 2 && parts[0]!.length > 0 && parts[1]!.length > 0;
+}
+
 function renderCommitsBlock(commits: FeatureDetailVM['sessions'][number]['commits']): string {
   if (commits.length === 0) return '';
   return `<div class="sub-label">Commits</div>` + commits
     .map((c) => {
       const shaShort = c.sha.slice(0, 8);
-      const url = c.repo ? `https://github.com/${c.repo}/commit/${c.sha}` : null;
+      // Only link slugs that look like real GitHub repos ("owner/name", and
+      // not the local/<basename> fallback that the commits backfill emits
+      // when there's no GitHub origin). A bare local repo with no remote
+      // gets a plain span — clicking it would 404 on github.com.
+      const url = isGithubSlug(c.repo)
+        ? `https://github.com/${c.repo}/commit/${c.sha}`
+        : null;
       const sha = url
         ? `<a class="sha" href="${escapeHtml(url)}" target="_blank" rel="noopener">${shaShort}</a>`
         : `<span class="sha">${shaShort}</span>`;

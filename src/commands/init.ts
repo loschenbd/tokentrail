@@ -115,24 +115,36 @@ function installSwiftBarPlugin(opts: InitOptions, repoRoot: string): void {
   console.log(`    [linked] ${dst} → ${src}`);
 }
 
+/**
+ * Pick the path to write into the launchd plist's ProgramArguments.
+ *
+ * On brew installs, process.argv[1] is the symlinked
+ *   /opt/homebrew/bin/tokentrail
+ * but if Node was invoked via the resolved real path under Cellar/, we
+ * pattern-match that and walk up to the symlink — surviving brew upgrade.
+ *
+ * For dev (tsx) and npm runs, returns process.argv[1] verbatim.
+ */
+export function resolveTokentrailBin(argv1: string = process.argv[1] ?? ''): string {
+  const m = argv1.match(/^(.*)\/Cellar\/tokentrail\/[^/]+\/libexec\/bin\/tokentrail$/);
+  if (m) {
+    const stable = join(m[1]!, 'bin', 'tokentrail');
+    if (existsSync(stable)) return stable;
+  }
+  return argv1;
+}
+
 function installDaemon(opts: InitOptions, repoRoot: string): void {
   console.log('• Dashboard daemon (launchd)');
 
-  const nodePath = opts.nodePath ?? process.execPath;
-  const entryPath = join(repoRoot, 'src', 'index.ts');
-  const tsxLoader = join(repoRoot, 'node_modules', 'tsx');
-
-  if (!existsSync(entryPath)) {
-    console.log(`    [warn] entry script missing: ${entryPath}`);
-    return;
-  }
-  if (!existsSync(tsxLoader)) {
-    console.log(`    [warn] tsx not installed at ${tsxLoader}`);
-    console.log('           Run `npm install` first, then re-run init.');
+  const tokentrailBin = opts.nodePath ?? resolveTokentrailBin();
+  if (!tokentrailBin || !existsSync(tokentrailBin)) {
+    console.log(`    [warn] could not resolve tokentrail binary path (argv1=${process.argv[1]})`);
+    console.log('           Daemon not installed. Re-run with --nodePath=<absolute path> to override.');
     return;
   }
 
-  const plist = renderDaemonPlist({ nodePath, entryPath, repoRoot });
+  const plist = renderDaemonPlist({ tokentrailBin, repoRoot });
 
   const plistDir = dirname(DAEMON_PLIST_PATH);
   const exists = existsSync(DAEMON_PLIST_PATH);
@@ -187,11 +199,7 @@ function printNextSteps(opts: InitOptions): void {
   console.log('  · See the trail:       tokentrail report');
 }
 
-function renderDaemonPlist(args: {
-  nodePath: string;
-  entryPath: string;
-  repoRoot: string;
-}): string {
+export function renderDaemonPlist(args: { tokentrailBin: string; repoRoot: string }): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -200,10 +208,7 @@ function renderDaemonPlist(args: {
   <string>${DAEMON_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${args.nodePath}</string>
-    <string>--import</string>
-    <string>tsx</string>
-    <string>${args.entryPath}</string>
+    <string>${args.tokentrailBin}</string>
     <string>dashboard</string>
     <string>--no-open</string>
   </array>

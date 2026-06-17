@@ -7,7 +7,7 @@ const program = new Command();
 program
   .name('tokentrail')
   .description('A local ledger and trail-map for Claude Code spend.')
-  .version('0.1.0');
+  .version('0.2.0');
 
 program
   .command('ingest')
@@ -299,6 +299,7 @@ program
   .option('--skip-swiftbar', 'Skip the SwiftBar plugin step.')
   .option('--skip-daemon', "Skip the launchd dashboard daemon step.")
   .option('--skip-hook', "Skip installing the session-end hook into this repo.")
+  .option('--node-path <path>', 'Override the tokentrail binary path written into the launchd plist (rarely needed).')
   .action(
     async (opts: {
       dryRun?: boolean;
@@ -306,6 +307,7 @@ program
       skipSwiftbar?: boolean;
       skipDaemon?: boolean;
       skipHook?: boolean;
+      nodePath?: string;
     }) => {
       const { runInit } = await import('./commands/init.js');
       runInit(opts);

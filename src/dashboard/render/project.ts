@@ -12,9 +12,14 @@ export function renderProject(vm: ProjectDetailVM): string {
   </div>
 
   <div class="card chart-card">
-    <div class="label">Lifecycle</div>
-    <div id="trend-chart" style="width:100%;height:240px"></div>
-    <script type="application/json" id="trend-data">${jsonForScriptTag(vm.dailySeries)}</script>
+    <div class="label">Trail elevation</div>
+    <div id="trail-elevation" data-trail-elevation style="width:100%;height:240px"></div>
+    <script type="application/json" id="trail-elevation-data">${jsonForScriptTag(
+      vm.sessions
+        .filter((s) => s.date !== null)
+        .map((s) => ({ sessionId: s.sessionId, date: s.date, cost: s.cost, title: s.title }))
+        .sort((a, b) => (a.date! < b.date! ? -1 : a.date! > b.date! ? 1 : 0))
+    )}</script>
   </div>
 
   <div class="card">

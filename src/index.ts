@@ -290,6 +290,27 @@ program
   });
 
 program
+  .command('init')
+  .description('One-shot setup: SwiftBar plugin, launchd daemon, Claude skills + hook.')
+  .option('--dry-run', 'Print every step without writing anything.')
+  .option('--force', 'Replace existing symlinks, plists, and skills.')
+  .option('--skip-swiftbar', 'Skip the SwiftBar plugin step.')
+  .option('--skip-daemon', "Skip the launchd dashboard daemon step.")
+  .option('--skip-hook', "Skip installing the session-end hook into this repo.")
+  .action(
+    async (opts: {
+      dryRun?: boolean;
+      force?: boolean;
+      skipSwiftbar?: boolean;
+      skipDaemon?: boolean;
+      skipHook?: boolean;
+    }) => {
+      const { runInit } = await import('./commands/init.js');
+      runInit(opts);
+    }
+  );
+
+program
   .command('install-skills')
   .description("Symlink Tokentrail's Claude Code skill + slash commands into ~/.claude.")
   .option('--force', 'Replace any conflicting files at the destination.')

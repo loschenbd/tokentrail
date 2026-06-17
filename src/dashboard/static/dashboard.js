@@ -93,6 +93,193 @@
     node.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
   }
 
+  function renderTrailElevation() {
+    const node = document.getElementById('trail-elevation');
+    const dataNode = document.getElementById('trail-elevation-data');
+    if (!node || !dataNode) return;
+    let sessions;
+    try { sessions = JSON.parse(dataNode.textContent || '[]'); } catch (e) { return; }
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      node.innerHTML = '<div class="muted" style="padding:24px;text-align:center">No sessions yet — start a Claude Code session in this feature\'s branch to begin the trail.</div>';
+      return;
+    }
+
+    // Build cumulative trail points: { t (unix ms), cum, session }
+    const pts = [];
+    let acc = 0;
+    for (const s of sessions) {
+      acc += s.cost;
+      pts.push({ t: new Date(s.date + 'T12:00:00').getTime(), cum: acc, session: s });
+    }
+    // Anchor the curve at zero on the day before the first session so the
+    // trail starts at the trailhead instead of mid-climb.
+    const firstT = pts[0].t - 86400000;
+    // End the curve at "now" so the trail extends to today as a flat
+    // plateau (the trail doesn't dip after the last session).
+    const lastT = Math.max(pts[pts.length - 1].t, Date.now());
+
+    const W = node.clientWidth || 800;
+    const H = 240;
+    const pad = { l: 50, r: 20, t: 20, b: 30 };
+    const innerW = W - pad.l - pad.r;
+    const innerH = H - pad.t - pad.b;
+
+    const xMin = firstT;
+    const xMax = lastT + 86400000;
+    const yMax = Math.max(acc, 1) * 1.1;
+
+    function xPos(t) {
+      if (xMax === xMin) return pad.l + innerW / 2;
+      return pad.l + ((t - xMin) / (xMax - xMin)) * innerW;
+    }
+    function yPos(v) {
+      return pad.t + innerH - (v / yMax) * innerH;
+    }
+
+    // Build the area polygon and the trail line.
+    // Trail steps: start at (firstT, 0), then for each session step UP to
+    // the cumulative value at that session's t (vertical), then continue
+    // FLAT to the next session's t. This gives the "elevation profile"
+    // look — each session is a rise, days between sessions are flat.
+    const trailPoints = [{ t: firstT, v: 0 }];
+    let prevCum = 0;
+    for (const p of pts) {
+      trailPoints.push({ t: p.t, v: prevCum });   // flat up to the rise
+      trailPoints.push({ t: p.t, v: p.cum });     // the rise
+      prevCum = p.cum;
+    }
+    trailPoints.push({ t: lastT + 86400000, v: prevCum });
+
+    const lineD = trailPoints.map((p, i) => (i === 0 ? 'M' : 'L') + xPos(p.t).toFixed(1) + ' ' + yPos(p.v).toFixed(1)).join(' ');
+    const areaD = lineD +
+      ' L' + xPos(trailPoints[trailPoints.length - 1].t).toFixed(1) + ' ' + yPos(0).toFixed(1) +
+      ' L' + xPos(trailPoints[0].t).toFixed(1) + ' ' + yPos(0).toFixed(1) + ' Z';
+
+    // Build axis ticks: a few horizontal $ gridlines + the date axis.
+    const yTicks = niceTicks(0, yMax, 4);
+    const xTicks = niceTimeTicks(xMin, xMax, 6);
+
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', H);
+    svg.setAttribute('class', 'trail-elevation');
+
+    // Y gridlines + labels
+    for (const v of yTicks) {
+      const y = yPos(v);
+      const grid = document.createElementNS(ns, 'line');
+      grid.setAttribute('x1', pad.l); grid.setAttribute('x2', W - pad.r);
+      grid.setAttribute('y1', y); grid.setAttribute('y2', y);
+      grid.setAttribute('class', 'trail-grid');
+      svg.appendChild(grid);
+      const label = document.createElementNS(ns, 'text');
+      label.setAttribute('x', pad.l - 8); label.setAttribute('y', y + 4);
+      label.setAttribute('class', 'trail-axis-label');
+      label.setAttribute('text-anchor', 'end');
+      label.textContent = '$' + Math.round(v);
+      svg.appendChild(label);
+    }
+    // X labels
+    for (const t of xTicks) {
+      const x = xPos(t);
+      const label = document.createElementNS(ns, 'text');
+      label.setAttribute('x', x); label.setAttribute('y', H - 10);
+      label.setAttribute('class', 'trail-axis-label');
+      label.setAttribute('text-anchor', 'middle');
+      label.textContent = fmtTickDate(t);
+      svg.appendChild(label);
+    }
+
+    // Area
+    const area = document.createElementNS(ns, 'path');
+    area.setAttribute('d', areaD);
+    area.setAttribute('class', 'trail-area');
+    svg.appendChild(area);
+
+    // Line
+    const line = document.createElementNS(ns, 'path');
+    line.setAttribute('d', lineD);
+    line.setAttribute('class', 'trail-line');
+    svg.appendChild(line);
+
+    // Mile markers — one per session, at (t, cum)
+    const tooltip = document.createElement('div');
+    tooltip.className = 'chart-tooltip';
+    tooltip.style.display = 'none';
+    node.style.position = 'relative';
+    node.appendChild(tooltip);
+
+    for (const p of pts) {
+      const cx = xPos(p.t);
+      const cy = yPos(p.cum);
+      const marker = document.createElementNS(ns, 'circle');
+      marker.setAttribute('cx', cx); marker.setAttribute('cy', cy);
+      marker.setAttribute('r', 5);
+      marker.setAttribute('class', 'trail-marker');
+      marker.setAttribute('data-session-id', p.session.sessionId);
+      marker.addEventListener('mouseenter', () => {
+        tooltip.innerHTML =
+          '<div class="chart-tooltip-date">' + fmtFullDate(p.t) + '</div>' +
+          '<div class="chart-tooltip-value">$' + p.session.cost.toFixed(2) + ' this session</div>' +
+          '<div class="chart-tooltip-meta">$' + p.cum.toFixed(2) + ' on the trail</div>';
+        tooltip.style.display = 'block';
+        const rect = node.getBoundingClientRect();
+        const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
+        let px = cx + 12, py = cy - th - 8;
+        if (px + tw > rect.width) px = cx - tw - 12;
+        if (py < 0) py = cy + 12;
+        tooltip.style.left = px + 'px'; tooltip.style.top = py + 'px';
+      });
+      marker.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+      marker.addEventListener('click', () => {
+        const row = document.getElementById(p.session.sessionId);
+        if (!row) return;
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('flash');
+        setTimeout(() => row.classList.remove('flash'), 1200);
+      });
+      svg.appendChild(marker);
+    }
+
+    node.innerHTML = '';
+    node.appendChild(svg);
+    node.appendChild(tooltip);
+  }
+
+  function niceTicks(min, max, n) {
+    const range = max - min;
+    const step = Math.pow(10, Math.floor(Math.log10(range / n)));
+    const err = (n / range) * step;
+    const mult = err <= 0.15 ? 10 : err <= 0.35 ? 5 : err <= 0.75 ? 2 : 1;
+    const niceStep = mult * step;
+    const ticks = [];
+    for (let v = Math.ceil(min / niceStep) * niceStep; v <= max; v += niceStep) ticks.push(v);
+    return ticks;
+  }
+
+  function niceTimeTicks(minMs, maxMs, n) {
+    const span = maxMs - minMs;
+    const dayMs = 86400000;
+    // pick a stride in days
+    const candidates = [1, 2, 5, 7, 14, 30, 60, 90, 180, 365];
+    const stride = candidates.find((d) => span / (d * dayMs) <= n) || 365;
+    const ticks = [];
+    const startDay = Math.ceil(minMs / dayMs) * dayMs;
+    for (let t = startDay; t <= maxMs; t += stride * dayMs) ticks.push(t);
+    return ticks;
+  }
+
+  function fmtTickDate(ms) {
+    const d = new Date(ms);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+  function fmtFullDate(ms) {
+    const d = new Date(ms);
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
   function setupRowExpanders() {
     document.querySelectorAll('[data-expand-target]').forEach((row) => {
       row.addEventListener('click', (e) => {
@@ -122,6 +309,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     renderTrend();
+    renderTrailElevation();
     setupRowExpanders();
     setupClusterJumps();
   });

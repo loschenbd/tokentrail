@@ -83,7 +83,8 @@ describe('buildToday', () => {
     assert.equal(beta.features.length, 1);
 
     assert.equal(r.anomalyCount, 1);
-    assert.match(r.asOf, /^\d{4}-\d{2}-\d{2}T/);
+    // No usage_events inserted, so lastEventAt is null.
+    assert.equal(r.lastEventAt, null);
   });
 
   test('handles empty day: zero totals, empty array, zero anomalies', () => {
@@ -129,6 +130,19 @@ describe('buildToday', () => {
     assert.equal(r.topProjects[0]!.href, 'http://127.0.0.1:4920/project/feature%3Ahas%2Fslash%3Acolon');
     assert.equal(r.topProjects[0]!.features[0]!.href, 'http://127.0.0.1:4920/feature/has%2Fslash%3Acolon');
   });
+
+  test('lastEventAt returns the most recent usage_events.timestamp', () => {
+    const db = makeDb();
+    const insertEvent = (id: string, ts: string) => db
+      .prepare(`INSERT INTO usage_events (id, session_id, timestamp, model, estimated_cost_usd) VALUES (?, 's', ?, 'opus', 0)`)
+      .run(id, ts);
+    insertEvent('e1', '2026-06-15T10:00:00Z');
+    insertEvent('e2', '2026-06-17T08:30:00Z');
+    insertEvent('e3', '2026-06-16T22:00:00Z');
+
+    const r = buildToday(db);
+    assert.equal(r.lastEventAt, '2026-06-17T08:30:00Z');
+  });
 });
 
 describe('GET /api/today', () => {
@@ -148,7 +162,8 @@ describe('GET /api/today', () => {
       assert.equal(typeof body.todayUsd, 'number');
       assert.ok(Array.isArray(body.topProjects));
       assert.equal(typeof body.anomalyCount, 'number');
-      assert.match(body.asOf, /^\d{4}-\d{2}-\d{2}T/);
+      // Empty DB — no events ingested yet, so lastEventAt is null.
+      assert.equal(body.lastEventAt, null);
     } finally {
       await app.close();
       closeDb();

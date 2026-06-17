@@ -33,7 +33,10 @@ export type TodayResponse = {
   todayUsd: number;
   topProjects: TodayProject[];
   anomalyCount: number;
-  asOf: string;
+  // ISO timestamp of the most recent usage event we've ingested. Reflects
+  // data freshness, NOT response time — "asOf = now" would always print
+  // "0s ago" in the menubar and tell the user nothing.
+  lastEventAt: string | null;
   menubar: MenubarSummary;
 };
 
@@ -43,6 +46,10 @@ export function buildToday(db: DatabaseType.Database): TodayResponse {
   const anomalyCount = (db
     .prepare(`SELECT COUNT(*) AS n FROM anomalies WHERE dismissed_at IS NULL`)
     .get() as { n: number }).n;
+
+  const lastEventAt = (db
+    .prepare(`SELECT MAX(timestamp) AS t FROM usage_events`)
+    .get() as { t: string | null }).t;
 
   return {
     todayUsd: overview.totalUsd,
@@ -59,7 +66,7 @@ export function buildToday(db: DatabaseType.Database): TodayResponse {
       })),
     })),
     anomalyCount,
-    asOf: new Date().toISOString(),
+    lastEventAt,
     menubar: buildMenubarSummary(db, overview.totalUsd),
   };
 }

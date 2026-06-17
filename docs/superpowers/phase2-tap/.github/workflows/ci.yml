@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  brew-install:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install from this checkout's formula
+        run: |
+          brew install --build-from-source ./Formula/tokentrail.rb
+
+      - name: Verify the binary works
+        run: |
+          tokentrail --version
+          tokentrail --help | head -5
+
+      - name: brew test
+        run: brew test tokentrail

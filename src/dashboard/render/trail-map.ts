@@ -22,7 +22,6 @@ export function renderTrailMap(opts: { mode: TrailMapMode }): string {
       </div>
       <hr class="rule">
       <div class="map-wrap">
-        <div class="scale">1 coin ≈ 1.2k tokens · $ = cumulative branch cost</div>
         <pre class="ascii-map" id="ascii" aria-hidden="true"></pre>
       </div>
       <div class="legend">
@@ -52,12 +51,12 @@ function renderCta(mode: TrailMapMode): string {
   if (mode === 'welcome') {
     return `
       <a href="/" class="btn btn-primary">Open the dashboard →</a>
-      <a href="https://github.com/loschenbd/tokentrail#readme" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">Read the scrolls</a>
+      <a href="https://github.com/loschenbd/tokentrail#readme" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">Read the docs</a>
     `;
   }
   const cmd = 'npm run tokentrail -- run-all';
   return `
     <a href="#" class="btn btn-primary" data-copy="${escapeHtml(cmd)}">Run a session → (copy command)</a>
-    <a href="https://github.com/loschenbd/tokentrail#readme" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">Read the scrolls</a>
+    <a href="https://github.com/loschenbd/tokentrail#readme" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">Read the docs</a>
   `;
 }

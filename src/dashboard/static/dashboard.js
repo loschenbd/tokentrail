@@ -125,4 +125,52 @@
     setupRowExpanders();
     setupClusterJumps();
   });
+
+  // Anomaly dismiss/restore actions. Delegated handler so we don't need
+  // to re-bind after server-rendered re-renders.
+  document.addEventListener('click', async function (e) {
+    const btn = e.target.closest('.anomaly-action');
+    if (!btn) return;
+    const row = btn.closest('.anomaly-row');
+    if (!row) return;
+    const id = row.dataset.anomalyId;
+    const action = btn.dataset.action;
+    if (!id || (action !== 'dismiss' && action !== 'restore')) return;
+
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/anomalies/' + encodeURIComponent(id) + '/' + action, { method: 'POST' });
+      // 204: state flipped. 409: another tab already flipped it — treat as
+      // success so the visual state catches up rather than nagging the user.
+      if (!res.ok && res.status !== 409) throw new Error('HTTP ' + res.status);
+
+      // Flip the row's visual state.
+      row.classList.toggle('dismissed');
+      const newAction = action === 'dismiss' ? 'restore' : 'dismiss';
+      btn.textContent = newAction;
+      btn.dataset.action = newAction;
+      btn.disabled = false;
+
+      // If we're not showing dismissed rows and we just dismissed one,
+      // collapse it out of view.
+      const showDismissed = document.body.dataset.showDismissed === '1';
+      if (!showDismissed && action === 'dismiss') {
+        row.style.transition = 'opacity 200ms';
+        row.style.opacity = '0';
+        setTimeout(function () { row.remove(); }, 200);
+      }
+    } catch (err) {
+      btn.disabled = false;
+      // Inline ephemeral error message next to the button. Guard against a
+      // detached button (e.g. the row was removed between click and rejection).
+      const parent = btn.parentElement;
+      if (parent) {
+        const errSpan = document.createElement('span');
+        errSpan.className = 'anomaly-error';
+        errSpan.textContent = ' (failed — try again)';
+        parent.appendChild(errSpan);
+        setTimeout(function () { errSpan.remove(); }, 4000);
+      }
+    }
+  });
 })();

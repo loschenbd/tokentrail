@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { getDb } from '../db/db.js';
 import { buildOverview } from './data/overview.js';
 import { renderOverview } from './render/overview.js';
@@ -54,16 +54,28 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return renderShell({ title: `${vm.projectName} · Tokentrail`, activeTab: 'project', days, showBack: true }, body);
   });
 
-  app.get('/worth-a-look', async (_req, reply) => {
-    const vm = buildWorthALook(getDb());
+  app.get('/worth-a-look', async (req, reply) => {
+    const showDismissed = parseShowDismissed(req.query);
+    const vm = buildWorthALook(getDb(), { showDismissed });
     reply.type('text/html; charset=utf-8');
-    return renderShell({ title: 'Worth a look · Tokentrail', activeTab: 'worth-a-look', days: opts.defaultDays, showBack: true }, renderWorthALook(vm));
+    return renderShell(
+      { title: 'Worth a look · Tokentrail', activeTab: 'worth-a-look', days: opts.defaultDays, showBack: true, showDismissed },
+      renderWorthALook(vm)
+    );
   });
 
   app.get('/api/today', async (_req, reply) => {
     const payload = buildToday(getDb());
     reply.type('application/json; charset=utf-8');
     return payload;
+  });
+
+  app.post<{ Params: { id: string } }>('/api/anomalies/:id/dismiss', async (req, reply) => {
+    return setAnomalyDismissed(req.params.id, true, reply);
+  });
+
+  app.post<{ Params: { id: string } }>('/api/anomalies/:id/restore', async (req, reply) => {
+    return setAnomalyDismissed(req.params.id, false, reply);
   });
 
   // Static asset serving — small bespoke handler instead of @fastify/static
@@ -104,4 +116,34 @@ function parseDays(query: unknown, fallback: number): number {
   const n = Number.parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0 || n > 730) return fallback;
   return n;
+}
+
+function parseShowDismissed(query: unknown): boolean {
+  if (typeof query !== 'object' || query === null) return false;
+  const raw = (query as Record<string, unknown>).showDismissed;
+  return raw === '1' || raw === 'true' || raw === 'on';
+}
+
+function setAnomalyDismissed(rawId: string, dismiss: boolean, reply: FastifyReply): FastifyReply {
+  const id = Number.parseInt(rawId, 10);
+  if (!Number.isFinite(id) || id <= 0 || String(id) !== rawId) {
+    return reply.code(400).send({ error: 'invalid id' });
+  }
+  const db = getDb();
+  // Race-free: the guarded UPDATE is the source of truth. If it changes 0 rows,
+  // either the row doesn't exist OR it's already in the requested state — a
+  // follow-up SELECT disambiguates so the response code is correct under
+  // concurrent double-clicks.
+  const updateSql = dismiss
+    ? `UPDATE anomalies SET dismissed_at = datetime('now') WHERE id = ? AND dismissed_at IS NULL`
+    : `UPDATE anomalies SET dismissed_at = NULL WHERE id = ? AND dismissed_at IS NOT NULL`;
+  const info = db.prepare(updateSql).run(id);
+  if (info.changes === 1) {
+    return reply.code(204).send();
+  }
+  const row = db.prepare('SELECT 1 FROM anomalies WHERE id = ?').get(id);
+  if (!row) {
+    return reply.code(404).send({ error: 'not found' });
+  }
+  return reply.code(409).send({ error: dismiss ? 'already dismissed' : 'already active' });
 }

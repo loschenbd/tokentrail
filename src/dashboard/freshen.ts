@@ -10,21 +10,23 @@ const FRESHEN_DEBOUNCE_MS = 30_000;
 let lastFreshenedAt = 0;
 let inFlight: Promise<void> | null = null;
 
-// Run ingest + rollup before serving a today-scoped request so the user
-// always sees fresh totals even when the post-session rollup hook hasn't
-// fired (e.g. long-running Claude Code sessions, or no session has ended
-// since the last data was logged). Cheap when nothing's stale: ingest is
-// a no-op if no JSONL has changed, rollup only runs when ingest pulled
-// new events or feature_rollups is already behind usage_events.
+// Kick off ingest + rollup in the background so the next today-scoped
+// request reads fresh data. Returns synchronously — never blocks the
+// caller. We can't await this on the request thread: ingest scans every
+// JSONL file under ~/.claude/projects and rollup rewrites today's
+// feature_rollups rows, which together take ~5s even when nothing is
+// new. The SwiftBar plugin gives up after 2s, so awaiting here makes
+// the menubar look broken.
 //
-// Failures don't block the request — we serve stale data and log.
-export async function freshenIfStale(): Promise<void> {
+// Tradeoff: the first request after a long quiet period sees the
+// previous freshen's data (potentially one menubar tick stale). The
+// next request sees the new data. For a polling client this is fine.
+//
+// Failures are caught — we log and let the next tick try again.
+export function freshenIfStale(): void {
   const now = Date.now();
   if (now - lastFreshenedAt < FRESHEN_DEBOUNCE_MS) return;
-  if (inFlight) {
-    await inFlight;
-    return;
-  }
+  if (inFlight) return;
   lastFreshenedAt = now;
   inFlight = (async () => {
     try {
@@ -39,7 +41,6 @@ export async function freshenIfStale(): Promise<void> {
       inFlight = null;
     }
   })();
-  await inFlight;
 }
 
 function isRollupBehindEvents(): boolean {

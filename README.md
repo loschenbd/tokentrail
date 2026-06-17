@@ -16,12 +16,23 @@ Tokentrail reads the session logs Claude Code writes to `~/.claude/projects/`
 — if you've never run a Claude Code session, that directory will be empty
 and the dashboard will show a "no trail yet" hint instead of charts.
 
+### Install
+
+**From source (today):**
+
 ```bash
-git clone https://github.com/loschenbd/tokentrail.git
+git clone https://github.com/loschenbd/tokentrail
 cd tokentrail
 npm install
-npm run tokentrail -- run-all --skip-sync --skip-enrich
-npm run tokentrail -- init        # SwiftBar plugin + dashboard daemon + Claude skills + hook
+npm run build
+node dist/src/index.js init        # SwiftBar plugin + dashboard daemon + Claude skills + hook
+```
+
+**Via Homebrew (coming with v0.2.0):**
+
+```bash
+brew install loschenbd/tokentrail/tokentrail
+tokentrail dashboard               # opens onboarding wizard at /welcome
 ```
 
 `init` walks the full setup in one shot on macOS: symlinks the SwiftBar

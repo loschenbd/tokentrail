@@ -76,7 +76,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     reply.type('text/html; charset=utf-8');
     return renderShell(
       { title: 'Welcome · Tokentrail', days: opts.defaultDays, showBack: true },
-      renderTrailMap({ mode: 'welcome' })
+      renderTrailMap({ mode: 'welcome', setupStatus: readSetupStatus() }),
     );
   });
 

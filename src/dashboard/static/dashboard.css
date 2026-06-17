@@ -37,6 +37,25 @@ body::before {
 .header-left { display: flex; align-items: center; gap: var(--space-s); }
 .back { color: var(--color-ink-muted); text-decoration: none; margin-right: var(--space-m); }
 .back:hover { color: var(--color-ink); }
+.header-center { display: flex; justify-content: center; flex: 1; }
+.nav-tabs { display: flex; gap: var(--space-m); align-items: center; }
+.nav-tab {
+  font-family: var(--font-serif);
+  font-size: var(--size-label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-muted);
+  text-decoration: none;
+  padding: 6px 2px;
+  border-bottom: 2px solid transparent;
+}
+.nav-tab:hover { color: var(--color-ink); }
+.nav-tab.active { color: var(--color-ink); border-bottom-color: var(--color-ink); }
+@media (max-width: 700px) {
+  .header { flex-wrap: wrap; }
+  .header-center { order: 3; flex-basis: 100%; justify-content: flex-start; }
+}
+
 .range-form { display: flex; gap: var(--space-s); align-items: center; }
 .range-form select {
   font-family: var(--font-sans);

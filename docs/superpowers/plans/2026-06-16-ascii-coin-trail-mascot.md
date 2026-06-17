@@ -726,8 +726,6 @@ const bundle: FrameBundle = {
 describe('renderFrame', () => {
   test('plain (no color) renders grid as plain text with newlines', () => {
     const out = renderFrame(bundle.frames[0], false);
-    assert.equal(out, '● ·\n¤◐●'.replace(' ·', ' ·'));
-    // Concretely: "● ·\n¤◐●"
     assert.equal(out, '● ·\n¤◐●');
     assert.equal(out.includes('\x1b['), false);
   });

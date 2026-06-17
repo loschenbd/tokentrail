@@ -132,22 +132,53 @@ export function buildBranchGraph(
     }
   }
 
+  // Cost + session aggregates per branch, single query for all branches.
+  const aggRows = branchNames.length === 0
+    ? []
+    : db
+      .prepare(
+        `SELECT branch,
+                ROUND(SUM(estimated_cost_usd), 2) AS totalUsd,
+                COUNT(DISTINCT session_id) AS sessionCount
+           FROM usage_events
+          WHERE repo = ?
+            AND branch IN (SELECT value FROM json_each(?))
+          GROUP BY branch`
+      )
+      .all(repo, JSON.stringify(branchNames)) as Array<{
+        branch: string;
+        totalUsd: number;
+        sessionCount: number;
+      }>;
+  const aggByBranch = new Map(aggRows.map((r) => [r.branch, r]));
+
+  const STALE_THRESHOLD_MS = 7 * 86400000;
+  const now = Date.now();
+
   const branches: BranchLifecycle[] = rows.map((r) => {
     const pr = prByBranch.get(r.branch);
     const mergedAt = pr?.mergedAt ?? null;
+    const agg = aggByBranch.get(r.branch);
+    const ageMs = now - new Date(r.lastEventAt).getTime();
+    let status: 'merged' | 'open' | 'stale';
+    if (mergedAt !== null) status = 'merged';
+    else if (ageMs > STALE_THRESHOLD_MS) status = 'stale';
+    else status = 'open';
     return {
       branch: r.branch,
       firstEventAt: r.firstEventAt,
       lastEventAt: r.lastEventAt,
       mergedAt,
-      status: (mergedAt !== null ? 'merged' : 'open') as 'merged' | 'open' | 'stale',
-      totalUsd: 0,
-      sessionCount: 0,
+      status,
+      totalUsd: agg?.totalUsd ?? 0,
+      sessionCount: agg?.sessionCount ?? 0,
       prNumber: pr?.prNumber ?? null,
       prUrl: pr?.prUrl ?? null,
       featureKey: null,
     };
   });
+
+  const totalUsd = Math.round(branches.reduce((sum, b) => sum + b.totalUsd, 0) * 100) / 100;
 
   return {
     trunk,
@@ -155,6 +186,6 @@ export function buildBranchGraph(
     windowEnd,
     branches,
     totalBranches: branches.length,
-    totalUsd: 0,
+    totalUsd,
   };
 }

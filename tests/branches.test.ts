@@ -127,3 +127,56 @@ describe('buildBranchGraph — PR matching', () => {
     assert.equal(b.prNumber, 9);
   });
 });
+
+describe('buildBranchGraph — status, cost, session count', () => {
+  test('open status when no merge and lastEvent is within 7 days', () => {
+    const db = makeDb();
+    const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: twoDaysAgo, repo: 'o/r', branch: 'feat/recent', cost: 5 });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
+    assert.equal(r.branches[0]!.status, 'open');
+  });
+
+  test('stale status when no merge and lastEvent is older than 7 days', () => {
+    const db = makeDb();
+    const tenDaysAgo = new Date(Date.now() - 10 * 86400000).toISOString();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: tenDaysAgo, repo: 'o/r', branch: 'feat/old', cost: 5 });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
+    assert.equal(r.branches[0]!.status, 'stale');
+  });
+
+  test('totalUsd sums all events on the branch', () => {
+    const db = makeDb();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: nowIso(), repo: 'o/r', branch: 'feat/x', cost: 5.50 });
+    insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: nowIso(), repo: 'o/r', branch: 'feat/x', cost: 3.25 });
+    insertEvent(db, { id: 'e3', sessionId: 's2', timestamp: nowIso(), repo: 'o/r', branch: 'feat/x', cost: 1.00 });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
+    assert.equal(r.branches[0]!.totalUsd, 9.75);
+  });
+
+  test('sessionCount is distinct count of session_ids on the branch', () => {
+    const db = makeDb();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: nowIso(), repo: 'o/r', branch: 'feat/x', cost: 1 });
+    insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: nowIso(), repo: 'o/r', branch: 'feat/x', cost: 1 });
+    insertEvent(db, { id: 'e3', sessionId: 's2', timestamp: nowIso(), repo: 'o/r', branch: 'feat/x', cost: 1 });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
+    assert.equal(r.branches[0]!.sessionCount, 2);
+  });
+
+  test('totalUsd at the graph level sums all branches (including stub trunk cost = 0 for now)', () => {
+    const db = makeDb();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: nowIso(), repo: 'o/r', branch: 'feat/a', cost: 10 });
+    insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: nowIso(), repo: 'o/r', branch: 'feat/b', cost: 7 });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
+    assert.equal(r.totalUsd, 17);
+    assert.equal(r.totalBranches, 2);
+  });
+
+  test('window filter excludes events older than days window', () => {
+    const db = makeDb();
+    const oldTimestamp = new Date(Date.now() - 60 * 86400000).toISOString();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: oldTimestamp, repo: 'o/r', branch: 'feat/ancient', cost: 5 });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 });
+    assert.equal(r, null);
+  });
+});

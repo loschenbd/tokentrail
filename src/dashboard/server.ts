@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { getDb } from '../db/db.js';
 import { buildOverview } from './data/overview.js';
 import { renderOverview } from './render/overview.js';
@@ -114,27 +114,26 @@ function parseDays(query: unknown, fallback: number): number {
   return n;
 }
 
-function setAnomalyDismissed(rawId: string, dismiss: boolean, reply: import('fastify').FastifyReply): unknown {
+function setAnomalyDismissed(rawId: string, dismiss: boolean, reply: FastifyReply): FastifyReply {
   const id = Number.parseInt(rawId, 10);
   if (!Number.isFinite(id) || id <= 0 || String(id) !== rawId) {
     return reply.code(400).send({ error: 'invalid id' });
   }
   const db = getDb();
-  const row = db.prepare('SELECT dismissed_at FROM anomalies WHERE id = ?').get(id) as { dismissed_at: string | null } | undefined;
+  // Race-free: the guarded UPDATE is the source of truth. If it changes 0 rows,
+  // either the row doesn't exist OR it's already in the requested state — a
+  // follow-up SELECT disambiguates so the response code is correct under
+  // concurrent double-clicks.
+  const updateSql = dismiss
+    ? `UPDATE anomalies SET dismissed_at = datetime('now') WHERE id = ? AND dismissed_at IS NULL`
+    : `UPDATE anomalies SET dismissed_at = NULL WHERE id = ? AND dismissed_at IS NOT NULL`;
+  const info = db.prepare(updateSql).run(id);
+  if (info.changes === 1) {
+    return reply.code(204).send();
+  }
+  const row = db.prepare('SELECT 1 FROM anomalies WHERE id = ?').get(id);
   if (!row) {
     return reply.code(404).send({ error: 'not found' });
   }
-  const isCurrentlyDismissed = row.dismissed_at !== null;
-  if (dismiss && isCurrentlyDismissed) {
-    return reply.code(409).send({ error: 'already dismissed' });
-  }
-  if (!dismiss && !isCurrentlyDismissed) {
-    return reply.code(409).send({ error: 'already active' });
-  }
-  if (dismiss) {
-    db.prepare(`UPDATE anomalies SET dismissed_at = datetime('now') WHERE id = ? AND dismissed_at IS NULL`).run(id);
-  } else {
-    db.prepare(`UPDATE anomalies SET dismissed_at = NULL WHERE id = ? AND dismissed_at IS NOT NULL`).run(id);
-  }
-  return reply.code(204).send();
+  return reply.code(409).send({ error: dismiss ? 'already dismissed' : 'already active' });
 }

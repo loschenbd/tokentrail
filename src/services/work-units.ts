@@ -49,12 +49,28 @@ export function refreshWorkUnits(db: DatabaseType.Database): {
   // Only overwrite feature_key/name if this row has NOT been GitHub-enriched.
   // Enrichment is a stronger signal; we don't want to clobber it from raw
   // branch-prefix attribution on every ingest.
+  //
+  // Exception: legacy global `mainline-<branch>` keys (no repo segment,
+  // e.g. `mainline-main`) predate per-repo mainline attribution. They
+  // collapse every repo's main-branch spend into one bucket, which is
+  // always wrong. Override them even when enriched so they migrate to
+  // `mainline-<owner>-<repo>-<branch>` on next ingest. GLOB pattern
+  // matches `mainline-<x>` where <x> is one segment; the per-repo form
+  // `mainline-<x>-<y>` has a hyphen inside and won't match.
   const updateStmt = db.prepare(`
     UPDATE work_units
     SET first_seen_at = MIN(first_seen_at, @first_seen_at),
         last_seen_at  = MAX(last_seen_at, @last_seen_at),
-        feature_key   = CASE WHEN github_enriched_at IS NULL THEN @feature_key ELSE feature_key END,
-        feature_name  = CASE WHEN github_enriched_at IS NULL THEN @feature_name ELSE feature_name END
+        feature_key   = CASE
+          WHEN github_enriched_at IS NULL THEN @feature_key
+          WHEN feature_key GLOB 'mainline-*' AND feature_key NOT GLOB 'mainline-*-*' THEN @feature_key
+          ELSE feature_key
+        END,
+        feature_name  = CASE
+          WHEN github_enriched_at IS NULL THEN @feature_name
+          WHEN feature_key GLOB 'mainline-*' AND feature_key NOT GLOB 'mainline-*-*' THEN @feature_name
+          ELSE feature_name
+        END
     WHERE id = @id
   `);
 

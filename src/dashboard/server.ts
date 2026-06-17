@@ -14,8 +14,13 @@ import { renderProject } from './render/project.js';
 import { buildWorthALook } from './data/worth-a-look.js';
 import { renderWorthALook } from './render/worth-a-look.js';
 import { buildToday } from './data/api.js';
+import { loadFrames } from '../mascot/load-frames.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
+
+// Load mascot frames once at module load time; null if frames.json is missing.
+const mascotBundle = loadFrames();
+const mascotJson = mascotBundle ? JSON.stringify(mascotBundle) : undefined;
 
 export type ServerOptions = { defaultDays: number };
 
@@ -27,7 +32,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     const vm = buildOverview(getDb(), { days });
     const body = renderOverview(vm);
     reply.type('text/html; charset=utf-8');
-    return renderShell({ title: 'Tokentrail · Overview', activeTab: 'overview', days }, body);
+    return renderShell({ title: 'Tokentrail · Overview', activeTab: 'overview', days, mascotJson }, body);
   });
 
   app.get<{ Params: { key: string } }>('/feature/:key', async (req, reply) => {
@@ -35,11 +40,11 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     const vm = buildFeatureDetail(getDb(), { featureKey: req.params.key, days });
     if (!vm) {
       reply.code(404).type('text/html; charset=utf-8');
-      return renderShell({ title: 'Feature not found', days, showBack: true }, '<div class="card"><div class="hero">Not found</div></div>');
+      return renderShell({ title: 'Feature not found', days, showBack: true, mascotJson }, '<div class="card"><div class="hero">Not found</div></div>');
     }
     const body = renderFeature(vm);
     reply.type('text/html; charset=utf-8');
-    return renderShell({ title: `${vm.featureName} · Tokentrail`, activeTab: 'feature', days, showBack: true }, body);
+    return renderShell({ title: `${vm.featureName} · Tokentrail`, activeTab: 'feature', days, showBack: true, mascotJson }, body);
   });
 
   app.get<{ Params: { key: string } }>('/project/:key', async (req, reply) => {
@@ -47,17 +52,17 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     const vm = buildProjectDetail(getDb(), { projectKey: req.params.key, days });
     if (!vm) {
       reply.code(404).type('text/html; charset=utf-8');
-      return renderShell({ title: 'Project not found', days, showBack: true }, '<div class="card"><div class="hero">Not found</div></div>');
+      return renderShell({ title: 'Project not found', days, showBack: true, mascotJson }, '<div class="card"><div class="hero">Not found</div></div>');
     }
     const body = renderProject(vm);
     reply.type('text/html; charset=utf-8');
-    return renderShell({ title: `${vm.projectName} · Tokentrail`, activeTab: 'project', days, showBack: true }, body);
+    return renderShell({ title: `${vm.projectName} · Tokentrail`, activeTab: 'project', days, showBack: true, mascotJson }, body);
   });
 
   app.get('/worth-a-look', async (_req, reply) => {
     const vm = buildWorthALook(getDb());
     reply.type('text/html; charset=utf-8');
-    return renderShell({ title: 'Worth a look · Tokentrail', activeTab: 'worth-a-look', days: opts.defaultDays, showBack: true }, renderWorthALook(vm));
+    return renderShell({ title: 'Worth a look · Tokentrail', activeTab: 'worth-a-look', days: opts.defaultDays, showBack: true, mascotJson }, renderWorthALook(vm));
   });
 
   app.get('/api/today', async (_req, reply) => {

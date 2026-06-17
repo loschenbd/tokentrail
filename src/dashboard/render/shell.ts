@@ -3,6 +3,7 @@ export type ShellOptions = {
   activeTab?: 'overview' | 'feature' | 'project' | 'worth-a-look';
   days: number;          // current time-window selection
   showBack?: boolean;
+  mascotJson?: string;
 };
 
 export function renderShell(opts: ShellOptions, body: string): string {
@@ -39,7 +40,12 @@ export function renderShell(opts: ShellOptions, body: string): string {
     </form>
   </div>
 </header>
-<main>${body}</main>
+<main>${opts.mascotJson ? `
+  <div class="mascot-wrap">
+    <pre id="mascot" class="mascot" aria-hidden="true"></pre>
+    <script type="application/json" id="mascot-frames">${escapeJsonForScriptTag(opts.mascotJson)}</script>
+  </div>
+` : ''}${body}</main>
 <script src="/static/uPlot.iife.min.js"></script>
 <script src="/static/dashboard.js"></script>
 </body>
@@ -53,4 +59,10 @@ export function escapeHtml(s: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// Escape a JSON string so it can be embedded inside a <script> tag without
+// allowing a </script> sequence to break out of the script context.
+export function escapeJsonForScriptTag(json: string): string {
+  return json.replace(/<\/script/gi, '<\\/script');
 }

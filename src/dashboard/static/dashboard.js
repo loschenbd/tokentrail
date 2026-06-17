@@ -126,3 +126,63 @@
     setupClusterJumps();
   });
 })();
+
+(function () {
+  const pre = document.getElementById('mascot');
+  const dataNode = document.getElementById('mascot-frames');
+  if (!pre || !dataNode) return;
+  let bundle;
+  try { bundle = JSON.parse(dataNode.textContent || ''); } catch (e) { return; }
+  if (!bundle || !Array.isArray(bundle.frames) || bundle.frames.length === 0) return;
+
+  function render(idx) {
+    const f = bundle.frames[idx] || bundle.frames[bundle.centerIndex];
+    pre.textContent = f.grid.map(function (row) { return row.join(''); }).join('\n');
+  }
+  render(bundle.centerIndex);
+
+  function driftIndex(t) {
+    const ix = Math.sin(t) > 0 ? 3 : 1;
+    const iy = Math.cos(t * 0.7) > 0 ? 0 : 2;
+    return iy * 5 + ix;
+  }
+
+  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+    let t = 0;
+    setInterval(function () { t += 0.03; render(driftIndex(t)); }, 80);
+    return;
+  }
+
+  let lastIdx = bundle.centerIndex;
+  let idleTimer = setTimeout(startDrift, 2000);
+  let driftHandle = null;
+  let lastMove = 0;
+
+  function indexFromCursor(e) {
+    const rect = pre.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = Math.max(-1, Math.min(1, (e.clientX - cx) / 320));
+    const dy = Math.max(-1, Math.min(1, (e.clientY - cy) / 240));
+    const ix = Math.round((dx + 1) * 2);
+    const iy = Math.round(dy + 1);
+    return iy * 5 + ix;
+  }
+
+  function startDrift() {
+    if (driftHandle) return;
+    let t = 0;
+    driftHandle = setInterval(function () { t += 0.03; render(driftIndex(t)); }, 80);
+  }
+
+  window.addEventListener('mousemove', function (e) {
+    const now = performance.now();
+    if (now - lastMove < 30) return;
+    lastMove = now;
+    if (driftHandle) { clearInterval(driftHandle); driftHandle = null; }
+    const idx = indexFromCursor(e);
+    if (idx !== lastIdx) { lastIdx = idx; render(idx); }
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(startDrift, 2000);
+  });
+})();

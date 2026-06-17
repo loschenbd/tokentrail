@@ -16,6 +16,8 @@ import { renderWorthALook } from './render/worth-a-look.js';
 import { buildToday } from './data/api.js';
 import { buildTodayVM } from './data/today.js';
 import { renderToday } from './render/today.js';
+import { renderTrailMap } from './render/trail-map.js';
+import { freshenIfStale } from './freshen.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
 
@@ -62,6 +64,14 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return renderShell(
       { title: 'Today · Tokentrail', activeTab: 'today', days: opts.defaultDays, showBack: true },
       renderToday(vm)
+    );
+  });
+
+  app.get('/welcome', async (_req, reply) => {
+    reply.type('text/html; charset=utf-8');
+    return renderShell(
+      { title: 'Welcome · Tokentrail', days: opts.defaultDays, showBack: true },
+      renderTrailMap({ mode: 'welcome' })
     );
   });
 

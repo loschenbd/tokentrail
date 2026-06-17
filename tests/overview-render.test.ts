@@ -20,9 +20,12 @@ function emptyVM(): OverviewVM {
 }
 
 describe('renderOverview empty-state', () => {
-  test('renders no-data hint when totals, week, and projects are all empty', () => {
+  test('renders the onboarding trail map and troubleshooting hint when empty', () => {
     const html = renderOverview(emptyVM());
-    assert.match(html, /No trail yet/);
+    // PR #20 swapped the "No trail yet" string for the onboarding trail
+    // map + a collapsible troubleshooting details block.
+    assert.match(html, /\bempty-state\b/);
+    assert.match(html, /Don't see your trail\?/);
     assert.match(html, /Claude Code/);
     // The standard layout grid should NOT render when empty — the hint
     // replaces it so the user isn't staring at a row of zeros.
@@ -34,6 +37,6 @@ describe('renderOverview empty-state', () => {
     vm.totalUsd = 12.34;
     const html = renderOverview(vm);
     assert.match(html, /class="layout"/);
-    assert.doesNotMatch(html, /No trail yet/);
+    assert.doesNotMatch(html, /\bempty-state\b/);
   });
 });

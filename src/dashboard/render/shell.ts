@@ -1,6 +1,6 @@
 export type ShellOptions = {
   title: string;
-  activeTab?: 'overview' | 'feature' | 'project' | 'worth-a-look';
+  activeTab?: 'overview' | 'today' | 'feature' | 'project' | 'worth-a-look';
   days: number;          // current time-window selection
   showBack?: boolean;
   showDismissed?: boolean;
@@ -11,6 +11,14 @@ export function renderShell(opts: ShellOptions, body: string): string {
   const range = dayOptions
     .map((d) => `<option value="${d}"${d === opts.days ? ' selected' : ''}>${d === 365 ? 'all' : `${d}d`}</option>`)
     .join('');
+  const navItem = (key: NonNullable<ShellOptions['activeTab']>, href: string, label: string): string =>
+    `<a class="nav-tab${opts.activeTab === key ? ' active' : ''}" href="${href}">${label}</a>`;
+  const nav = `
+    <nav class="nav-tabs">
+      ${navItem('overview', '/', 'Overview')}
+      ${navItem('today', '/today', 'Today')}
+      ${navItem('worth-a-look', '/worth-a-look', 'Worth a look')}
+    </nav>`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -33,6 +41,7 @@ export function renderShell(opts: ShellOptions, body: string): string {
     </a>
     <span class="brand-tag">· the trail so far</span>
   </div>
+  <div class="header-center">${nav}</div>
   <div class="header-right">
     <form method="get" class="range-form">
       <label class="label" for="days">Window</label>

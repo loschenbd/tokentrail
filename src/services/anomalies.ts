@@ -92,7 +92,11 @@ function detectHotSessions(
 ): DetectedAnomaly[] {
   const { multiplier: minMult, floorUsd } = ANOMALY.hotSession;
   const costs = sessions.map((s) => s.cost).filter((c) => c > 0);
-  const baseline = median(costs);
+  // p90 instead of median: at high overall spend the median gets pulled
+  // down by a long tail of small sessions, so the 3× threshold fires on
+  // routine work. p90 reflects the size of the user's typical BIG session,
+  // which is the right yardstick for "is this one anomalously large?".
+  const baseline = percentile(costs, 0.9);
   if (baseline <= 0) return [];
   const out: DetectedAnomaly[] = [];
   for (const s of sessions) {
@@ -127,6 +131,21 @@ function median(values: number[]): number {
     return (lo + hi) / 2;
   }
   return sorted[mid] ?? 0;
+}
+
+// Linear-interpolated percentile (matches NumPy's default). p is in [0, 1].
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  if (values.length === 1) return values[0] ?? 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const rank = p * (sorted.length - 1);
+  const lo = Math.floor(rank);
+  const hi = Math.ceil(rank);
+  if (lo === hi) return sorted[lo] ?? 0;
+  const frac = rank - lo;
+  const loVal = sorted[lo] ?? 0;
+  const hiVal = sorted[hi] ?? 0;
+  return loVal + (hiVal - loVal) * frac;
 }
 
 function isoTodayUtc(): string {

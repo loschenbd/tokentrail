@@ -1,0 +1,58 @@
+name: Bump formula
+
+on:
+  repository_dispatch:
+    types: [tokentrail-release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to bump to (e.g. 0.2.1)'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ -n "${{ github.event.client_payload.version }}" ]; then
+            echo "v=${{ github.event.client_payload.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "v=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute new sha256
+        id: sha
+        run: |
+          V="${{ steps.version.outputs.v }}"
+          SHA=$(curl -sL "https://github.com/loschenbd/tokentrail/archive/refs/tags/v${V}.tar.gz" | shasum -a 256 | cut -d' ' -f1)
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Update formula
+        run: |
+          V="${{ steps.version.outputs.v }}"
+          SHA="${{ steps.sha.outputs.sha }}"
+          sed -i.bak -E "s|url \".*\"|url \"https://github.com/loschenbd/tokentrail/archive/refs/tags/v${V}.tar.gz\"|" Formula/tokentrail.rb
+          sed -i.bak -E "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/tokentrail.rb
+          rm Formula/tokentrail.rb.bak
+
+      - name: Open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          V="${{ steps.version.outputs.v }}"
+          BRANCH="bump/v${V}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${BRANCH}"
+          git add Formula/tokentrail.rb
+          git commit -m "tokentrail v${V}"
+          git push -u origin "${BRANCH}"
+          gh pr create --title "tokentrail v${V}" --body "Auto-bump from upstream tag v${V}."

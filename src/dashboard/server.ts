@@ -18,6 +18,10 @@ import { buildTodayVM } from './data/today.js';
 import { renderToday } from './render/today.js';
 import { renderTrailMap } from './render/trail-map.js';
 import { freshenIfStale } from './freshen.js';
+import { readSetupStatus } from './data/setup-status.js';
+import { runInstallSkills } from '../commands/install-skills.js';
+import { installSwiftBarPlugin, installDaemon } from '../commands/init.js';
+import { pkgRoot } from '../lib/pkg-root.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
 
@@ -99,6 +103,54 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.post<{ Params: { id: string } }>('/api/anomalies/:id/restore', async (req, reply) => {
     return setAnomalyDismissed(req.params.id, false, reply);
+  });
+
+  // Returns the SetupStatus object — no action performed.
+  app.post('/api/setup/status', async (_req, reply) => {
+    reply.type('application/json; charset=utf-8');
+    return { ok: true, status: readSetupStatus() };
+  });
+
+  app.post('/api/setup/menubar-plugin', async (_req, reply) => {
+    reply.type('application/json; charset=utf-8');
+    try {
+      installSwiftBarPlugin({}, pkgRoot());
+      return { ok: true, status: readSetupStatus() };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+        status: readSetupStatus(),
+      };
+    }
+  });
+
+  app.post('/api/setup/daemon', async (_req, reply) => {
+    reply.type('application/json; charset=utf-8');
+    try {
+      installDaemon({}, pkgRoot());
+      return { ok: true, status: readSetupStatus() };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+        status: readSetupStatus(),
+      };
+    }
+  });
+
+  app.post('/api/setup/skills', async (_req, reply) => {
+    reply.type('application/json; charset=utf-8');
+    try {
+      runInstallSkills();
+      return { ok: true, status: readSetupStatus() };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+        status: readSetupStatus(),
+      };
+    }
   });
 
   // Static asset serving — small bespoke handler instead of @fastify/static

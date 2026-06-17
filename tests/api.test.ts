@@ -157,3 +157,61 @@ describe('GET /api/today', () => {
     }
   });
 });
+
+describe('buildToday — menubar summary', () => {
+  test('sparkline includes 14 days oldest-first with today as the last cell', () => {
+    const db = makeDb();
+    const offsets: Array<[number, number]> = [[-5, 5], [-2, 20], [-1, 10], [0, 7]];
+    offsets.forEach(([offset, cost], i) => {
+      const date = (db.prepare(`SELECT date('now', '${offset} days', 'localtime') AS d`).get() as { d: string }).d;
+      insertRollup(db, { date, featureKey: `f-${i}`, featureName: `F ${i}`, repo: 'x/y', cost, sessionIds: `s-${i}`, sessions: 1 });
+    });
+    const res = buildToday(db);
+    assert.equal(res.menubar.sparkline.length, 14);
+    assert.equal(res.menubar.sparkline[13], 7);
+    assert.equal(res.menubar.sparkline[12], 10);
+    assert.equal(res.menubar.sparkline[10], 0);
+  });
+
+  test('last7Usd and last30Usd sum the correct windows', () => {
+    const db = makeDb();
+    const samples: Array<[number, number]> = [[-35, 100], [-20, 30], [-3, 5], [0, 7]];
+    samples.forEach(([offset, cost], i) => {
+      const date = (db.prepare(`SELECT date('now', '${offset} days', 'localtime') AS d`).get() as { d: string }).d;
+      insertRollup(db, { date, featureKey: `f-${i}`, featureName: `F ${i}`, repo: 'x/y', cost, sessionIds: `s-${i}`, sessions: 1 });
+    });
+    const res = buildToday(db);
+    assert.equal(res.menubar.last7Usd, 12);
+    assert.equal(res.menubar.last30Usd, 42);
+  });
+
+  test('deltaVsYesterday is signed percent vs yesterday total', () => {
+    const db = makeDb();
+    const today = (db.prepare(`SELECT date('now','localtime') AS d`).get() as { d: string }).d;
+    const yest = (db.prepare(`SELECT date('now','-1 days','localtime') AS d`).get() as { d: string }).d;
+    insertRollup(db, { date: yest, featureKey: 'a', featureName: 'A', repo: 'x/y', cost: 10, sessionIds: 's1', sessions: 1 });
+    insertRollup(db, { date: today, featureKey: 'b', featureName: 'B', repo: 'x/y', cost: 25, sessionIds: 's2', sessions: 1 });
+    const res = buildToday(db);
+    assert.equal(res.menubar.yesterdayUsd, 10);
+    assert.equal(res.menubar.deltaVsYesterday, 150);
+  });
+
+  test('first-day case: yesterday=0, today>0 returns Infinity for delta', () => {
+    const db = makeDb();
+    const today = (db.prepare(`SELECT date('now','localtime') AS d`).get() as { d: string }).d;
+    insertRollup(db, { date: today, featureKey: 'a', featureName: 'A', repo: 'x/y', cost: 10, sessionIds: 's1', sessions: 1 });
+    const res = buildToday(db);
+    assert.equal(res.menubar.yesterdayUsd, 0);
+    assert.equal(res.menubar.deltaVsYesterday, Infinity);
+  });
+
+  test('empty: all menubar fields zero, sparkline is 14 zeros', () => {
+    const db = makeDb();
+    const res = buildToday(db);
+    assert.deepEqual(res.menubar.sparkline, Array(14).fill(0));
+    assert.equal(res.menubar.last7Usd, 0);
+    assert.equal(res.menubar.last30Usd, 0);
+    assert.equal(res.menubar.yesterdayUsd, 0);
+    assert.equal(res.menubar.deltaVsYesterday, 0);
+  });
+});

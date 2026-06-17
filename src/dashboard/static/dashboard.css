@@ -230,7 +230,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 
 .anomaly-full {
   display: grid;
-  grid-template-columns: 100px 110px 1fr 2fr;
+  grid-template-columns: 100px 110px 1fr 2fr auto;
   gap: var(--space-s);
   padding: 6px 4px;
   border-bottom: 1px dashed rgba(139,111,71,0.2);

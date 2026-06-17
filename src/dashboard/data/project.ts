@@ -1,4 +1,5 @@
 import type DatabaseType from 'better-sqlite3';
+import { buildBranchGraph, type BranchGraphVM } from './branches.js';
 
 // A "project" is a higher-level grouping than a feature. There are three
 // kinds of project key:
@@ -42,6 +43,7 @@ export type ProjectDetailVM = {
     amount: number;
     reason: string;
   }>;
+  branchGraph: BranchGraphVM | null;
 };
 
 type ProjectFilter = {
@@ -187,6 +189,8 @@ export function buildProjectDetail(
       `)
       .all(JSON.stringify(featureKeys)) as ProjectDetailVM['anomalies'];
 
+  const branchGraph = buildBranchGraph(db, { projectKey: opts.projectKey, days });
+
   // SUM(sessions_count) double-counts sessions active on multiple days;
   // the distinct session_ids set is the right number.
   const distinctSessionCount = sessionIds.length;
@@ -241,6 +245,7 @@ export function buildProjectDetail(
     sessions,
     recentCommits,
     anomalies,
+    branchGraph,
   };
 }
 

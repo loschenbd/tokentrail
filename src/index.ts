@@ -278,6 +278,18 @@ program
   });
 
 program
+  .command('attribute')
+  .description('Show how attribution would bucket a given (repo, branch) — debug helper.')
+  .requiredOption('--repo <slug>', 'Repo slug, e.g. "owner/name" (use "" for no repo).')
+  .requiredOption('--branch <name>', 'Branch name, e.g. "feat/foo" or "main".')
+  .option('--pr-title <title>', 'Simulate a PR title (overrides branch attribution).')
+  .option('--pr-labels <list>', 'Comma-separated PR labels to simulate.')
+  .action(async (opts: { repo: string; branch: string; prTitle?: string; prLabels?: string }) => {
+    const { runAttribute } = await import('./commands/attribute.js');
+    runAttribute(opts);
+  });
+
+program
   .command('install-skills')
   .description("Symlink Tokentrail's Claude Code skill + slash commands into ~/.claude.")
   .option('--force', 'Replace any conflicting files at the destination.')

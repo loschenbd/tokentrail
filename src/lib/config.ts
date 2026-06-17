@@ -1,0 +1,190 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
+
+// Tokentrail's runtime config: extension knobs that let teams customize
+// attribution without forking the source. All keys are optional; missing
+// fields fall back to the built-in defaults.
+//
+// Resolution order (first match wins):
+//   1. $TOKENTRAIL_CONFIG (explicit absolute path)
+//   2. <cwd>/.tokentrail.json (project-local — gitignored by default)
+//   3. ~/.config/tokentrail/config.json (user-level)
+//   4. defaults only
+//
+// "extra" prefixes mean APPEND to the defaults. To replace a default
+// entirely you'd have to fork — that's intentional, so common branch
+// names like `main` keep working even if a user's config file is
+// truncated or out of date.
+
+export type RawBranchPattern = {
+  pattern: string;
+  /** Prefix applied to the slugified tail to build the feature_key. */
+  keyPrefix?: string;
+  /** Prefix applied to the humanized tail to build the feature_name. */
+  namePrefix?: string;
+};
+
+export type CompiledBranchPattern = {
+  pattern: RegExp;
+  keyPrefix: string;
+  namePrefix: string;
+};
+
+export type FeatureOverride = {
+  featureKey: string;
+  featureName: string;
+};
+
+export type TokentrailConfig = {
+  /** Extra branch names treated as mainline (added to default main/master/develop/staging). */
+  extraMainlineBranches: string[];
+  /**
+   * Extra branch-prefix patterns. Each pattern's first capture group is the
+   * tail; the resulting feature_key is `<keyPrefix><slug(tail)>` and the
+   * feature_name is `<namePrefix><humanize(tail)>`.
+   */
+  extraBranchPatterns: CompiledBranchPattern[];
+  /** Extra parent directory names that hold a user's project repos (added to default ['Projects']). */
+  extraProjectsParentDirs: string[];
+  /**
+   * Manual (repo, branch) → feature overrides. Highest-priority signal in
+   * attribution; use for cases that PR title / labels / branch prefix all
+   * fail to capture.
+   */
+  featureOverrides: Record<string, FeatureOverride>;
+  /** Where this config was loaded from (informational; null = defaults only). */
+  source: string | null;
+};
+
+const EMPTY_CONFIG: TokentrailConfig = {
+  extraMainlineBranches: [],
+  extraBranchPatterns: [],
+  extraProjectsParentDirs: [],
+  featureOverrides: {},
+  source: null,
+};
+
+let cached: TokentrailConfig | null = null;
+
+export function getConfig(): TokentrailConfig {
+  if (cached) return cached;
+  cached = loadConfig();
+  return cached;
+}
+
+/** Clear the in-process cache. Tests should call this between cases. */
+export function resetConfigCache(): void {
+  cached = null;
+}
+
+function loadConfig(): TokentrailConfig {
+  const path = resolveConfigPath();
+  if (!path) return EMPTY_CONFIG;
+  return loadConfigFrom(path);
+}
+
+export function loadConfigFrom(path: string): TokentrailConfig {
+  const raw = readFileSync(path, 'utf-8').trim();
+  if (raw.length === 0) return { ...EMPTY_CONFIG, source: path };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `[tokentrail] failed to parse config at ${path}: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
+  return normalize(parsed, path);
+}
+
+function resolveConfigPath(): string | null {
+  if (process.env.TOKENTRAIL_CONFIG) {
+    const explicit = resolve(process.env.TOKENTRAIL_CONFIG);
+    if (existsSync(explicit)) return explicit;
+    console.warn(`[tokentrail] TOKENTRAIL_CONFIG points at ${explicit} but the file does not exist; using defaults.`);
+    return null;
+  }
+  const projectLocal = resolve(process.cwd(), '.tokentrail.json');
+  if (existsSync(projectLocal)) return projectLocal;
+  const userLevel = join(homedir(), '.config', 'tokentrail', 'config.json');
+  if (existsSync(userLevel)) return userLevel;
+  return null;
+}
+
+function normalize(raw: unknown, source: string): TokentrailConfig {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new Error(`[tokentrail] config at ${source} must be a JSON object`);
+  }
+  const obj = raw as Record<string, unknown>;
+  return {
+    extraMainlineBranches: asStringArray(obj.extraMainlineBranches, 'extraMainlineBranches', source),
+    extraBranchPatterns: compileBranchPatterns(obj.extraBranchPatterns, source),
+    extraProjectsParentDirs: asStringArray(obj.extraProjectsParentDirs, 'extraProjectsParentDirs', source),
+    featureOverrides: asOverrides(obj.featureOverrides, source),
+    source,
+  };
+}
+
+function asStringArray(value: unknown, key: string, source: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((v) => typeof v !== 'string')) {
+    throw new Error(`[tokentrail] config ${key} must be a string array (at ${source})`);
+  }
+  return value as string[];
+}
+
+function compileBranchPatterns(value: unknown, source: string): CompiledBranchPattern[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error(`[tokentrail] config extraBranchPatterns must be an array (at ${source})`);
+  }
+  return value.map((p, i): CompiledBranchPattern => {
+    if (typeof p !== 'object' || p === null) {
+      throw new Error(`[tokentrail] extraBranchPatterns[${i}] must be an object (at ${source})`);
+    }
+    const raw = p as RawBranchPattern;
+    if (typeof raw.pattern !== 'string') {
+      throw new Error(`[tokentrail] extraBranchPatterns[${i}].pattern must be a string (at ${source})`);
+    }
+    let regex: RegExp;
+    try {
+      regex = new RegExp(raw.pattern);
+    } catch (err) {
+      throw new Error(
+        `[tokentrail] extraBranchPatterns[${i}].pattern is not a valid regex: ${
+          err instanceof Error ? err.message : String(err)
+        } (at ${source})`
+      );
+    }
+    return {
+      pattern: regex,
+      keyPrefix: typeof raw.keyPrefix === 'string' ? raw.keyPrefix : '',
+      namePrefix: typeof raw.namePrefix === 'string' ? raw.namePrefix : '',
+    };
+  });
+}
+
+function asOverrides(value: unknown, source: string): Record<string, FeatureOverride> {
+  if (value === undefined) return {};
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`[tokentrail] featureOverrides must be an object (at ${source})`);
+  }
+  const out: Record<string, FeatureOverride> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (typeof v !== 'object' || v === null) {
+      throw new Error(`[tokentrail] featureOverrides["${k}"] must be an object with featureKey/featureName (at ${source})`);
+    }
+    const entry = v as Record<string, unknown>;
+    if (typeof entry.featureKey !== 'string' || typeof entry.featureName !== 'string') {
+      throw new Error(`[tokentrail] featureOverrides["${k}"] must have string featureKey and featureName (at ${source})`);
+    }
+    out[k] = {
+      featureKey: entry.featureKey,
+      featureName: entry.featureName,
+    };
+  }
+  return out;
+}

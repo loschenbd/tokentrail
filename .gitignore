@@ -16,3 +16,7 @@ data/*.db-shm
 # examples/claude-settings.example.json
 .claude/settings.json
 .claude/settings.local.json
+
+# Per-user Tokentrail runtime config — example template lives in
+# .tokentrail.json.example. May contain private project / feature names.
+.tokentrail.json

@@ -1,0 +1,27 @@
+{
+  "_comment": "Tokentrail runtime config. Copy to .tokentrail.json (gitignored) or ~/.config/tokentrail/config.json. All keys are optional — each one APPENDS to Tokentrail's built-in defaults; nothing here can disable a default. Use `tokentrail attribute --repo X --branch Y` to test the result.",
+
+  "extraMainlineBranches": ["trunk", "production"],
+
+  "extraBranchPatterns": [
+    {
+      "pattern": "^release/(.+)$",
+      "keyPrefix": "release-",
+      "namePrefix": "Release: "
+    },
+    {
+      "pattern": "^epic/(.+)$",
+      "keyPrefix": "epic-",
+      "namePrefix": "Epic: "
+    }
+  ],
+
+  "extraProjectsParentDirs": ["Code", "dev", "src"],
+
+  "featureOverrides": {
+    "owner/repo:feat/some-cryptic-branch": {
+      "featureKey": "human-readable-feature-key",
+      "featureName": "Human-readable feature name shown in the dashboard"
+    }
+  }
+}

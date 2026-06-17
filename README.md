@@ -20,16 +20,25 @@ and the dashboard will show a "no trail yet" hint instead of charts.
 git clone https://github.com/loschenbd/tokentrail.git
 cd tokentrail
 npm install
-cp .env.example .env       # optional — only needed for Notion sync and PR enrich
 npm run tokentrail -- run-all --skip-sync --skip-enrich
-npm run tokentrail -- dashboard
+npm run tokentrail -- init        # SwiftBar plugin + dashboard daemon + Claude skills + hook
 ```
 
-That ingests your existing Claude Code session logs from `~/.claude/projects/`
-(override with `CLAUDE_CONFIG_DIR` in `.env`), rolls them into daily per-
-feature totals, and opens the dashboard at `http://127.0.0.1:4920`. Add a
-`GITHUB_TOKEN` to `.env` to enrich PR data, and `NOTION_TOKEN` +
-`NOTION_DATABASE_ID` to mirror to Notion (see **Notion sync** below).
+`init` walks the full setup in one shot on macOS: symlinks the SwiftBar
+plugin into `~/Library/Application Support/SwiftBar/`, writes a
+`com.tokentrail.daemon` launchd plist so the dashboard auto-starts at
+login, symlinks the Claude Code skill and `/today` + `/rollup` slash
+commands into `~/.claude/`, and adds Tokentrail's Stop hook to this
+repo's `.claude/settings.json`. Re-runnable; pass `--dry-run` to preview
+or `--force` to replace existing entries. Skip individual steps with
+`--skip-swiftbar`, `--skip-daemon`, or `--skip-hook`.
+
+Once `init` finishes, the menu bar widget shows today's running total
+within a minute and the dashboard is live at `http://127.0.0.1:4920`.
+
+Want Notion sync or richer PR data? `cp .env.example .env`, add
+`GITHUB_TOKEN` and/or `NOTION_TOKEN` + `NOTION_DATABASE_ID`, then run
+`tokentrail enrich` and `tokentrail sync` (see **Notion sync** below).
 
 ## What Tokentrail does
 
@@ -112,6 +121,7 @@ land, so you don't want it committed.
 ## Commands
 
 ```
+tokentrail init        # One-shot setup: SwiftBar + daemon + Claude skills + hook.
 tokentrail ingest      # Load new usage events into the local ledger.
 tokentrail enrich      # Pull PR metadata for branches we've seen.
 tokentrail rollup      # Aggregate events into daily feature rollups.
@@ -296,11 +306,14 @@ CLI. Stop it with Ctrl-C.
 
 ### Menu bar widget (SwiftBar)
 
-Put today's spend in your macOS menu bar:
+Put today's spend in your macOS menu bar. `tokentrail init` does this
+for you — it symlinks the SwiftBar plugin into
+`~/Library/Application Support/SwiftBar/` and writes the launchd plist
+that keeps the dashboard daemon running. If you skipped `init` or want
+to do it by hand:
 
 ```bash
 brew install --cask swiftbar
-mkdir -p ~/Library/Application\ Support/SwiftBar
 ln -s "$PWD/scripts/menubar/tokentrail.1m.sh" \
   ~/Library/Application\ Support/SwiftBar/
 ```
@@ -310,8 +323,11 @@ widget shows today's spend (`$X.XX`) and refreshes every minute. Click
 it to see today's top projects, each with its constituent features
 nested underneath and an anomaly count.
 
-Requires `tokentrail dashboard` to be running on port 4920. If it isn't,
-the widget shows `$—` and a "not running" hint instead of crashing.
+Requires `tokentrail dashboard` to be running on port 4920. If it
+isn't, the widget shows `$—` and a "not running" hint instead of
+crashing. (`init`'s launchd plist keeps the daemon up across reboots;
+manage it with `launchctl unload`/`load` on
+`~/Library/LaunchAgents/com.tokentrail.daemon.plist`.)
 
 ### Anomalies
 

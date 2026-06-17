@@ -1,0 +1,23 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+jobs:
+  notify-tap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify homebrew-tokentrail tap
+        env:
+          GH_TOKEN: ${{ secrets.TAP_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::TAP_DISPATCH_TOKEN secret not configured — skipping tap dispatch. Set it in repo Settings → Secrets and variables → Actions once the homebrew-tokentrail tap exists."
+            exit 0
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh api repos/loschenbd/homebrew-tokentrail/dispatches \
+            -f event_type=tokentrail-release \
+            -f client_payload[version]="${VERSION}" \
+            -f client_payload[tag]="${GITHUB_REF_NAME}"

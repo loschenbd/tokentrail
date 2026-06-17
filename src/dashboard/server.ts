@@ -14,6 +14,8 @@ import { renderProject } from './render/project.js';
 import { buildWorthALook } from './data/worth-a-look.js';
 import { renderWorthALook } from './render/worth-a-look.js';
 import { buildToday } from './data/api.js';
+import { buildTodayVM } from './data/today.js';
+import { renderToday } from './render/today.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
 
@@ -52,6 +54,15 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     const body = renderProject(vm);
     reply.type('text/html; charset=utf-8');
     return renderShell({ title: `${vm.projectName} · Tokentrail`, activeTab: 'project', days, showBack: true }, body);
+  });
+
+  app.get('/today', async (_req, reply) => {
+    const vm = buildTodayVM(getDb());
+    reply.type('text/html; charset=utf-8');
+    return renderShell(
+      { title: 'Today · Tokentrail', activeTab: 'today', days: opts.defaultDays, showBack: true },
+      renderToday(vm)
+    );
   });
 
   app.get('/worth-a-look', async (req, reply) => {

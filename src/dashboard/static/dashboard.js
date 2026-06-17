@@ -248,6 +248,165 @@
     node.appendChild(tooltip);
   }
 
+  function renderBranchGraph() {
+    const node = document.getElementById('branch-graph');
+    const dataNode = document.getElementById('branch-graph-data');
+    if (!node || !dataNode) return;
+    let vm;
+    try { vm = JSON.parse(dataNode.textContent || 'null'); } catch (e) { return; }
+    if (!vm || !Array.isArray(vm.branches) || vm.branches.length === 0) return;
+
+    const branches = vm.branches.slice();
+    // Sort by firstEventAt ascending — earliest branches stack at the top.
+    branches.sort(function (a, b) {
+      return a.firstEventAt < b.firstEventAt ? -1 : a.firstEventAt > b.firstEventAt ? 1 : 0;
+    });
+
+    // Vertical layout: 0-24 date axis, 24-48 title row, 48 = trunk Y,
+    // then 36px per lane.
+    const TRUNK_Y = 48;
+    const LANE_HEIGHT = 36;
+    const W = node.clientWidth || 800;
+    const H = TRUNK_Y + branches.length * LANE_HEIGHT + 16;
+    const pad = { l: 40, r: 40 };
+
+    const windowStartMs = new Date(vm.windowStart + 'T00:00:00').getTime();
+    const windowEndMs = new Date(vm.windowEnd + 'T23:59:59').getTime();
+
+    function xAt(iso) {
+      const t = new Date(iso).getTime();
+      const clamped = Math.max(windowStartMs, Math.min(windowEndMs, t));
+      const span = windowEndMs - windowStartMs;
+      if (span <= 0) return pad.l + (W - pad.l - pad.r) / 2;
+      return pad.l + ((clamped - windowStartMs) / span) * (W - pad.l - pad.r);
+    }
+
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', H);
+    svg.setAttribute('class', 'branch-graph');
+
+    // Date axis ticks (above the trunk line).
+    const xTicks = niceTimeTicks(windowStartMs, windowEndMs, 6);
+    for (let i = 0; i < xTicks.length; i++) {
+      const tx = xAt(new Date(xTicks[i]).toISOString());
+      const tickLabel = document.createElementNS(ns, 'text');
+      tickLabel.setAttribute('x', tx);
+      tickLabel.setAttribute('y', 18);
+      tickLabel.setAttribute('class', 'branch-graph-axis-label');
+      tickLabel.setAttribute('text-anchor', 'middle');
+      tickLabel.textContent = fmtTickDate(xTicks[i]);
+      svg.appendChild(tickLabel);
+
+      const grid = document.createElementNS(ns, 'line');
+      grid.setAttribute('x1', tx); grid.setAttribute('x2', tx);
+      grid.setAttribute('y1', TRUNK_Y); grid.setAttribute('y2', H - 4);
+      grid.setAttribute('class', 'branch-graph-grid');
+      svg.appendChild(grid);
+    }
+
+    // Trunk line.
+    const trunkLine = document.createElementNS(ns, 'line');
+    trunkLine.setAttribute('x1', pad.l); trunkLine.setAttribute('x2', W - pad.r);
+    trunkLine.setAttribute('y1', TRUNK_Y); trunkLine.setAttribute('y2', TRUNK_Y);
+    trunkLine.setAttribute('class', 'branch-graph-trunk');
+    svg.appendChild(trunkLine);
+
+    // One row per branch.
+    for (let i = 0; i < branches.length; i++) {
+      const b = branches[i];
+      const laneY = TRUNK_Y + (i + 1) * LANE_HEIGHT;
+      const x1 = xAt(b.firstEventAt);
+      const endIso = b.mergedAt || b.lastEventAt;
+      const x2 = xAt(endIso);
+      const span = Math.max(20, x2 - x1);
+      const cp = Math.min(40, span * 0.25);  // bezier handle offset
+      const flatInset = Math.min(20, span * 0.15);
+
+      const d =
+        'M ' + x1 + ',' + TRUNK_Y +
+        ' C ' + (x1 + cp) + ',' + TRUNK_Y + ' ' + (x1 + cp) + ',' + laneY + ' ' + (x1 + flatInset) + ',' + laneY +
+        ' L ' + (x2 - flatInset) + ',' + laneY +
+        ' C ' + (x2 - cp) + ',' + laneY + ' ' + (x2 - cp) + ',' + TRUNK_Y + ' ' + x2 + ',' + TRUNK_Y;
+
+      const arc = document.createElementNS(ns, 'path');
+      arc.setAttribute('d', d);
+      arc.setAttribute('class', 'branch-graph-arc ' + b.status);
+      arc.setAttribute('data-branch', b.branch);
+      svg.appendChild(arc);
+
+      // Click handler — featureKey wins, then prUrl, else no-op.
+      const target = b.featureKey
+        ? '/feature/' + encodeURIComponent(b.featureKey)
+        : (b.prUrl || null);
+      if (target) {
+        arc.style.cursor = 'pointer';
+        arc.addEventListener('click', function () {
+          if (b.featureKey) window.location.href = target;
+          else window.open(target, '_blank', 'noopener');
+        });
+      } else {
+        arc.style.cursor = 'default';
+      }
+
+      // Start marker. If the branch pre-dates the window (firstEventAt is
+      // before windowStart), draw an inward « chevron at the clamped x1
+      // instead of a closed circle — communicates "this branch existed
+      // before the window starts."
+      const preDates = new Date(b.firstEventAt).getTime() < windowStartMs;
+      if (preDates) {
+        const chevron = document.createElementNS(ns, 'text');
+        chevron.setAttribute('x', x1 - 2);
+        chevron.setAttribute('y', TRUNK_Y + 4);
+        chevron.setAttribute('text-anchor', 'middle');
+        chevron.setAttribute('class', 'branch-graph-axis-label');
+        chevron.textContent = '«';
+        svg.appendChild(chevron);
+      } else {
+        const startMarker = document.createElementNS(ns, 'circle');
+        startMarker.setAttribute('cx', x1); startMarker.setAttribute('cy', TRUNK_Y);
+        startMarker.setAttribute('r', 4);
+        startMarker.setAttribute('class', 'branch-graph-marker ' + b.status);
+        svg.appendChild(startMarker);
+      }
+
+      // End marker: closed circle if merged, open circle if open/stale.
+      const endMarker = document.createElementNS(ns, 'circle');
+      endMarker.setAttribute('cx', x2); endMarker.setAttribute('cy', TRUNK_Y);
+      endMarker.setAttribute('r', 4);
+      const endClass = b.status === 'merged'
+        ? 'branch-graph-marker merged'
+        : (b.status === 'open' ? 'branch-graph-marker open-end' : 'branch-graph-marker stale-end');
+      endMarker.setAttribute('class', endClass);
+      svg.appendChild(endMarker);
+
+      // Label — placed at the lane midpoint, truncated if too long.
+      const label = document.createElementNS(ns, 'text');
+      label.setAttribute('x', (x1 + x2) / 2);
+      label.setAttribute('y', laneY + 4);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('class', 'branch-graph-label');
+      const statusText = b.status === 'merged' && b.mergedAt
+        ? 'merged ' + fmtTickDate(new Date(b.mergedAt).getTime())
+        : b.status;
+      const raw = b.branch + '  $' + Math.round(b.totalUsd) + ' · ' + b.sessionCount + ' ' + (b.sessionCount === 1 ? 'session' : 'sessions') + ' · ' + statusText;
+      label.textContent = truncate(raw, 56);
+      const tooltip = document.createElementNS(ns, 'title');
+      tooltip.textContent = b.branch + ' — $' + b.totalUsd.toFixed(2) + ' · ' + b.sessionCount + ' sessions · ' + b.status;
+      label.appendChild(tooltip);
+      svg.appendChild(label);
+    }
+
+    node.innerHTML = '';
+    node.appendChild(svg);
+  }
+
+  function truncate(s, n) {
+    return s.length <= n ? s : s.slice(0, n - 1) + '…';
+  }
+
   function niceTicks(min, max, n) {
     const range = max - min;
     const step = Math.pow(10, Math.floor(Math.log10(range / n)));
@@ -310,6 +469,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     renderTrend();
     renderTrailElevation();
+    renderBranchGraph();
     setupRowExpanders();
     setupClusterJumps();
   });

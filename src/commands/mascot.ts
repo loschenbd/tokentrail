@@ -8,7 +8,7 @@ const RESET      = '\x1b[0m';
 const DARK_CHARS = new Set(['◐', '◑', '●']);
 const MID_CHARS  = new Set(['·', '¤']);
 
-export type MascotOptions = { frame?: number; noColor?: boolean };
+export type MascotOptions = { frame?: number; noColor?: boolean; now?: Date };
 
 export function renderFrame(frame: Frame, useColor: boolean): string {
   if (!useColor) {
@@ -38,6 +38,8 @@ export function pickFrameIndex(forced: number | undefined, bundle: FrameBundle, 
     if (forced >= 0 && forced < bundle.frames.length) return forced;
     return bundle.centerIndex;
   }
+  // Uses local time deliberately: the time-of-day pick is a decorative
+  // surface for the user, not a global rendering.
   const h = now.getHours();
   const dyIndex = h < 12 ? 0 : h < 18 ? 1 : 2;
   const idx = dyIndex * 5 + 2;
@@ -57,7 +59,7 @@ export async function runMascot(opts: MascotOptions): Promise<void> {
     process.stderr.write('mascot frames not built — run `npm run build:mascot`\n');
     return;
   }
-  const idx = pickFrameIndex(opts.frame, bundle, new Date());
+  const idx = pickFrameIndex(opts.frame, bundle, opts.now ?? new Date());
   const useColor = shouldColor({ noColor: opts.noColor, env: process.env, isTTY: process.stdout.isTTY });
   // pickFrameIndex guarantees idx ∈ [0, frames.length)
   process.stdout.write(renderFrame(bundle.frames[idx]!, useColor) + '\n');

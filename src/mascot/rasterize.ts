@@ -16,14 +16,13 @@ const CELL_PX_H = 12;
 
 export function rasterizeSvgToChars(svg: string, opts: { cols: number; rows: number }): CharGrid {
   const width = opts.cols * CELL_PX_W;
-  const height = opts.rows * CELL_PX_H;
   const resvg = new Resvg(svg, { fitTo: { mode: 'width', value: width } });
   const png = resvg.render();
-  const { pixels, width: w, height: h } = png;
-  // pixels is RGBA Uint8Array of size w*h*4. Use the actual w/h from the
+  const { pixels, width: w, height: pngH } = png;
+  // pixels is RGBA Uint8Array of size w*pngH*4. Use the actual w/pngH from the
   // pixmap, then sample per cell.
   const cellW = w / opts.cols;
-  const cellH = h / opts.rows;
+  const cellH = pngH / opts.rows;
 
   const grid: CharGrid = [];
   for (let r = 0; r < opts.rows; r++) {

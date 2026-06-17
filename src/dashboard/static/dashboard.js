@@ -175,10 +175,22 @@
     driftHandle = setInterval(function () { t += 0.03; render(driftIndex(t)); }, 80);
   }
 
+  const HOVER_MARGIN = 200; // px around the mascot before we stop tracking
+
   window.addEventListener('mousemove', function (e) {
     const now = performance.now();
     if (now - lastMove < 30) return;
     lastMove = now;
+    const rect = pre.getBoundingClientRect();
+    const inRange =
+      e.clientX >= rect.left - HOVER_MARGIN &&
+      e.clientX <= rect.right + HOVER_MARGIN &&
+      e.clientY >= rect.top - HOVER_MARGIN &&
+      e.clientY <= rect.bottom + HOVER_MARGIN;
+    if (!inRange) {
+      if (!driftHandle) startDrift();
+      return;
+    }
     if (driftHandle) { clearInterval(driftHandle); driftHandle = null; }
     const idx = indexFromCursor(e);
     if (idx !== lastIdx) { lastIdx = idx; render(idx); }

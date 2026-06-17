@@ -18,7 +18,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build:mascot": "tsx src/mascot/build-frames.ts",
-    "build": "npm run build:mascot && tsc",
+    "build": "npm run build:mascot && tsc && node -e \"const fs=require('fs');const path=require('path');fs.mkdirSync('dist/mascot',{recursive:true});fs.copyFileSync('src/mascot/frames.json','dist/mascot/frames.json');\"",
     "start": "node dist/index.js",
     "tokentrail": "tsx src/index.ts",
     "test": "node --import tsx --test $(find tests -name '*.test.ts')",

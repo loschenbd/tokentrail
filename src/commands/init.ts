@@ -10,13 +10,10 @@ import {
 } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { runInstallHook } from './install-hook.js';
 import { runInstallSkills } from './install-skills.js';
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, '..', '..');
+import { pkgRoot } from '../lib/pkg-root.js';
 
 export type InitOptions = {
   dryRun?: boolean;
@@ -24,7 +21,7 @@ export type InitOptions = {
   skipSwiftbar?: boolean;
   skipDaemon?: boolean;
   skipHook?: boolean;
-  /** Override the path used in symlinks/plist (for tests). */
+  /** Override the tokentrail binary path written into the launchd plist. Surfaced as --node-path on the CLI; used by tests for the resolveTokentrailBin fallback path. */
   nodePath?: string;
 };
 
@@ -51,17 +48,19 @@ export function runInit(opts: InitOptions = {}): void {
     return;
   }
 
+  const repoRoot = pkgRoot();
+
   console.log('Tokentrail init — laying out a trail you can find again.\n');
 
-  if (!opts.skipSwiftbar) installSwiftBarPlugin(opts);
-  if (!opts.skipDaemon) installDaemon(opts);
+  if (!opts.skipSwiftbar) installSwiftBarPlugin(opts, repoRoot);
+  if (!opts.skipDaemon) installDaemon(opts, repoRoot);
   installSkills(opts);
-  if (!opts.skipHook) installRepoHook(opts);
+  if (!opts.skipHook) installRepoHook(opts, repoRoot);
 
   printNextSteps(opts);
 }
 
-function installSwiftBarPlugin(opts: InitOptions): void {
+function installSwiftBarPlugin(opts: InitOptions, repoRoot: string): void {
   console.log('• SwiftBar plugin');
   if (!existsSync('/Applications/SwiftBar.app')) {
     console.log('    SwiftBar.app not found in /Applications.');
@@ -70,7 +69,7 @@ function installSwiftBarPlugin(opts: InitOptions): void {
     return;
   }
 
-  const src = join(REPO_ROOT, 'scripts', 'menubar', SWIFTBAR_PLUGIN_NAME);
+  const src = join(repoRoot, 'scripts', 'menubar', SWIFTBAR_PLUGIN_NAME);
   const dst = join(SWIFTBAR_PLUGIN_DIR, SWIFTBAR_PLUGIN_NAME);
 
   if (!existsSync(src)) {
@@ -116,24 +115,36 @@ function installSwiftBarPlugin(opts: InitOptions): void {
   console.log(`    [linked] ${dst} → ${src}`);
 }
 
-function installDaemon(opts: InitOptions): void {
+/**
+ * Pick the path to write into the launchd plist's ProgramArguments.
+ *
+ * On brew installs, process.argv[1] is the symlinked
+ *   /opt/homebrew/bin/tokentrail
+ * but if Node was invoked via the resolved real path under Cellar/, we
+ * pattern-match that and walk up to the symlink — surviving brew upgrade.
+ *
+ * For dev (tsx) and npm runs, returns process.argv[1] verbatim.
+ */
+export function resolveTokentrailBin(argv1: string = process.argv[1] ?? ''): string {
+  const m = argv1.match(/^(.*)\/Cellar\/tokentrail\/[^/]+\/libexec\/bin\/tokentrail$/);
+  if (m) {
+    const stable = join(m[1]!, 'bin', 'tokentrail');
+    if (existsSync(stable)) return stable;
+  }
+  return argv1;
+}
+
+function installDaemon(opts: InitOptions, repoRoot: string): void {
   console.log('• Dashboard daemon (launchd)');
 
-  const nodePath = opts.nodePath ?? process.execPath;
-  const entryPath = join(REPO_ROOT, 'src', 'index.ts');
-  const tsxLoader = join(REPO_ROOT, 'node_modules', 'tsx');
-
-  if (!existsSync(entryPath)) {
-    console.log(`    [warn] entry script missing: ${entryPath}`);
-    return;
-  }
-  if (!existsSync(tsxLoader)) {
-    console.log(`    [warn] tsx not installed at ${tsxLoader}`);
-    console.log('           Run `npm install` first, then re-run init.');
+  const tokentrailBin = opts.nodePath ?? resolveTokentrailBin();
+  if (!tokentrailBin || !existsSync(tokentrailBin)) {
+    console.log(`    [warn] could not resolve tokentrail binary path (argv1=${process.argv[1]})`);
+    console.log('           Daemon not installed. Re-run with --node-path <absolute path> to override.');
     return;
   }
 
-  const plist = renderDaemonPlist({ nodePath, entryPath, repoRoot: REPO_ROOT });
+  const plist = renderDaemonPlist({ tokentrailBin, repoRoot });
 
   const plistDir = dirname(DAEMON_PLIST_PATH);
   const exists = existsSync(DAEMON_PLIST_PATH);
@@ -172,9 +183,9 @@ function installSkills(opts: InitOptions): void {
   runInstallSkills({ dryRun: opts.dryRun, force: opts.force });
 }
 
-function installRepoHook(opts: InitOptions): void {
+function installRepoHook(opts: InitOptions, repoRoot: string): void {
   console.log('• Session-end hook (this repo)');
-  runInstallHook({ repo: REPO_ROOT, dryRun: opts.dryRun });
+  runInstallHook({ repo: repoRoot, dryRun: opts.dryRun });
 }
 
 function printNextSteps(opts: InitOptions): void {
@@ -188,11 +199,7 @@ function printNextSteps(opts: InitOptions): void {
   console.log('  · See the trail:       tokentrail report');
 }
 
-function renderDaemonPlist(args: {
-  nodePath: string;
-  entryPath: string;
-  repoRoot: string;
-}): string {
+export function renderDaemonPlist(args: { tokentrailBin: string; repoRoot: string }): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -201,10 +208,7 @@ function renderDaemonPlist(args: {
   <string>${DAEMON_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${args.nodePath}</string>
-    <string>--import</string>
-    <string>tsx</string>
-    <string>${args.entryPath}</string>
+    <string>${args.tokentrailBin}</string>
     <string>dashboard</string>
     <string>--no-open</string>
   </array>

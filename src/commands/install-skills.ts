@@ -8,12 +8,9 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
-// Repo root is two levels up from src/commands/install-skills.ts.
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, '..', '..');
+import { pkgRoot } from '../lib/pkg-root.js';
 
 export type InstallSkillsOptions = {
   dryRun?: boolean;
@@ -33,7 +30,7 @@ export type InstallSkillsResult = {
 
 export function runInstallSkills(opts: InstallSkillsOptions = {}): InstallSkillsResult {
   const claudeHome = opts.claudeHome ?? join(homedir(), '.claude');
-  const templatesDir = opts.templatesDir ?? join(REPO_ROOT, 'templates');
+  const templatesDir = opts.templatesDir ?? join(pkgRoot(), 'templates');
 
   const result: InstallSkillsResult = {
     linked: [],

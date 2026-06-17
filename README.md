@@ -123,25 +123,48 @@ tokentrail sync --force --rebuild-bodies
 This lists, deletes, and re-appends every page's body content. Slow,
 but only needed occasionally.
 
-## Hook setup
+## Claude Code integrations
+
+Two one-shot installers expose Tokentrail to your other Claude Code sessions.
+
+```bash
+tokentrail install-skills
+```
+
+Symlinks a `tokentrail-spend` skill and `/today` + `/rollup` slash commands
+into `~/.claude/`. The skill auto-loads when you ask any Claude Code session
+about Claude Code spend, costs, or token attribution; `/today` prints today's
+totals from the dashboard API, `/rollup` runs a fresh ingest. Pass
+`--dry-run` to preview, `--force` to replace existing files.
+
+```bash
+tokentrail install-hook --repo /path/to/some-project
+```
+
+Patches that repo's `.claude/settings.json` to fire Tokentrail's session-end
+hook, with the absolute path to `src/hooks/session-end.sh` auto-detected.
+Omit `--repo` to patch the current directory. Idempotent — re-runs detect
+an existing Tokentrail hook and update its path if the repo moved.
+
+### What the session-end hook does
 
 A small `Stop` hook fires at the end of every Claude Code session and writes
 a JSONL snapshot of `session_id`, `branch`, `commit_sha`, and `remote` to
-`~/.claude-cost-tracker/session-hooks.jsonl`. On the next `tokentrail ingest`
-run, snapshots backfill the branch on any usage event whose ingest-time
-HEAD was missing or sitting on a mainline branch — giving you accurate
-branch attribution even for sessions where you've since switched branches.
+`~/.claude-cost-tracker/session-hooks.jsonl` (override with `TRACKER_LOG_DIR`).
+On the next `tokentrail ingest` run, snapshots backfill the branch on any
+usage event whose ingest-time HEAD was missing or sitting on a mainline
+branch — giving you accurate attribution even for sessions where you've
+since switched branches.
 
-To install, for each repo you want tracked:
+The hook is read-only with respect to your repo: it only reads `git rev-parse`
+output and appends to its own log file.
 
-1. Copy `examples/claude-settings.example.json` to that repo's
-   `.claude/settings.json`.
-2. Replace `/ABSOLUTE/PATH/TO/tokentrail/src/hooks/session-end.sh` with the
-   actual absolute path of the hook script on your machine.
-3. (Optional) Override the log location with `TRACKER_LOG_DIR`.
+### Manual install (alternative)
 
-The hook is read-only with respect to your repo: it only reads `git
-rev-parse` output and appends to its own log file.
+If you'd rather wire the hook by hand, copy `examples/claude-settings.example
+.json` to the target repo's `.claude/settings.json` and replace
+`/ABSOLUTE/PATH/TO/tokentrail/src/hooks/session-end.sh` with the actual path
+on your machine.
 
 ## Automation
 

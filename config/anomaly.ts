@@ -14,7 +14,7 @@ export const ANOMALY = {
     floorUsd: 50,
   },
   hotSession: {
-    multiplier: 3.0,    // session ≥ 3× trailing 30-day median session cost
+    multiplier: 3.0,    // session ≥ 3× trailing 30-day p90 session cost
     floorUsd: 25,
     windowDays: 30,
   },

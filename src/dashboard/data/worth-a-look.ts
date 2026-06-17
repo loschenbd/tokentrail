@@ -1,6 +1,8 @@
 import type DatabaseType from 'better-sqlite3';
 
 export type WorthALookVM = {
+  showDismissed: boolean;
+  dismissedCount: number;
   items: Array<{
     id: number;
     kind: string;
@@ -10,10 +12,26 @@ export type WorthALookVM = {
     amount: number;
     reason: string;
     multiplier: number;
+    dismissed: boolean;
   }>;
 };
 
-export function buildWorthALook(db: DatabaseType.Database): WorthALookVM {
+export type BuildWorthALookOptions = {
+  showDismissed: boolean;
+};
+
+export function buildWorthALook(
+  db: DatabaseType.Database,
+  opts: BuildWorthALookOptions = { showDismissed: false }
+): WorthALookVM {
+  const dismissedCount = (db
+    .prepare(`SELECT COUNT(*) AS n FROM anomalies WHERE dismissed_at IS NOT NULL`)
+    .get() as { n: number }).n;
+
+  // Active rows always; dismissed rows only when requested. ORDER BY
+  // `dismissedInt ASC` puts active (0) before dismissed (1) and tie-breaks
+  // by date desc then multiplier desc within each group.
+  const whereClause = opts.showDismissed ? '' : 'WHERE dismissed_at IS NULL';
   const items = db
     .prepare(`
       SELECT id, kind, date,
@@ -21,11 +39,17 @@ export function buildWorthALook(db: DatabaseType.Database): WorthALookVM {
              session_id  AS sessionId,
              ROUND(amount, 2)     AS amount,
              ROUND(multiplier, 2) AS multiplier,
-             reason
+             reason,
+             CASE WHEN dismissed_at IS NULL THEN 0 ELSE 1 END AS dismissedInt
       FROM anomalies
-      WHERE dismissed_at IS NULL
-      ORDER BY date DESC, multiplier DESC
+      ${whereClause}
+      ORDER BY dismissedInt ASC, date DESC, multiplier DESC
     `)
-    .all() as WorthALookVM['items'];
-  return { items };
+    .all() as Array<Omit<WorthALookVM['items'][number], 'dismissed'> & { dismissedInt: number }>;
+
+  return {
+    showDismissed: opts.showDismissed,
+    dismissedCount,
+    items: items.map(({ dismissedInt, ...rest }) => ({ ...rest, dismissed: dismissedInt === 1 })),
+  };
 }

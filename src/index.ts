@@ -227,22 +227,24 @@ program
 
 program
   .command('anomaly')
-  .description('List or dismiss anomalies.')
-  .argument('[action]', '"list" (default) or "dismiss".')
-  .argument('[id]', 'Anomaly id when dismissing.')
+  .description('List, dismiss, or restore anomalies.')
+  .argument('[action]', '"list" (default), "dismiss", or "restore".')
+  .argument('[id]', 'Anomaly id when dismissing or restoring.')
   .action(async (action: string | undefined, id: string | undefined) => {
-    const { dismissAnomaly, listAnomalies } = await import('./commands/anomaly.js');
+    const { dismissAnomaly, listAnomalies, restoreAnomaly } = await import('./commands/anomaly.js');
     if (!action || action === 'list') {
       listAnomalies();
       return;
     }
-    if (action === 'dismiss') {
+    if (action === 'dismiss' || action === 'restore') {
       if (!id) {
-        console.error('Usage: tokentrail anomaly dismiss <id>');
+        console.error(`Usage: tokentrail anomaly ${action} <id>`);
         process.exitCode = 1;
         return;
       }
-      dismissAnomaly(Number.parseInt(id, 10));
+      const n = Number.parseInt(id, 10);
+      if (action === 'dismiss') dismissAnomaly(n);
+      else restoreAnomaly(n);
       return;
     }
     console.error(`Unknown anomaly action: ${action}`);

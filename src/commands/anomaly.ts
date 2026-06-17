@@ -13,6 +13,19 @@ export function dismissAnomaly(id: number): void {
   console.log(`Dismissed anomaly ${id}.`);
 }
 
+export function restoreAnomaly(id: number): void {
+  const db = getDb();
+  const result = db
+    .prepare(`UPDATE anomalies SET dismissed_at = NULL WHERE id = ? AND dismissed_at IS NOT NULL`)
+    .run(id);
+  if (result.changes === 0) {
+    console.error(`No dismissed anomaly with id ${id}.`);
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`Restored anomaly ${id}.`);
+}
+
 export function listAnomalies(): void {
   const db = getDb();
   const rows = db

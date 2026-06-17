@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type DatabaseType from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';
-import { restoreAnomaly, dismissAnomaly } from '../src/commands/anomaly.js';
+import { restoreAnomaly } from '../src/commands/anomaly.js';
 import { closeDb, getDb } from '../src/db/db.js';
 
 const require = createRequire(import.meta.url);
@@ -54,12 +54,10 @@ function insertAnomaly(db: DatabaseType.Database, opts: { dismissed: boolean }):
 }
 
 describe('restoreAnomaly', () => {
-  let exitCode: number | undefined;
   let errorOutput: string[] = [];
   let logOutput: string[] = [];
 
   beforeEach(() => {
-    exitCode = process.exitCode;
     process.exitCode = undefined;
     errorOutput = [];
     logOutput = [];
@@ -75,7 +73,9 @@ describe('restoreAnomaly', () => {
 
   afterEach(() => {
     (globalThis as any).__restoreConsole?.();
-    process.exitCode = exitCode;
+    // Tests that exercise the error path set process.exitCode = 1. Clear it
+    // here so the test runner doesn't inherit that exit code at process end.
+    process.exitCode = undefined;
     cleanupDb();
   });
 

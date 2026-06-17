@@ -304,3 +304,36 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   font-size: var(--size-small);
   font-style: italic;
 }
+
+/* Trail elevation chart — cumulative $ over time with mile-markers */
+.trail-elevation { display: block; font-family: var(--font-sans); }
+.trail-grid {
+  stroke: rgba(139,111,71,0.15);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.trail-axis-label {
+  fill: var(--color-ink-muted);
+  font-size: var(--size-small);
+  font-family: var(--font-mono);
+}
+.trail-area {
+  fill: rgba(139,111,71,0.18);
+  stroke: none;
+}
+.trail-line {
+  fill: none;
+  stroke: var(--color-ink-muted);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.trail-marker {
+  fill: var(--color-ink);
+  stroke: var(--color-parchment, #f3eadb);
+  stroke-width: 2;
+  cursor: pointer;
+  transition: r 120ms ease-out;
+}
+.trail-marker:hover {
+  r: 7;
+}

@@ -48,6 +48,19 @@ program
   });
 
 program
+  .command('mascot')
+  .description('Print the Tokentrail ASCII coin trail.')
+  .option('--no-color', 'Disable ANSI sepia color (also respects NO_COLOR env).')
+  .option('--frame <n>', 'Force a specific frame index (0–14).')
+  .action(async (opts: { color?: boolean; frame?: string }) => {
+    const { runMascot } = await import('./commands/mascot.js');
+    await runMascot({
+      noColor: opts.color === false,
+      frame: opts.frame !== undefined ? Number.parseInt(opts.frame, 10) : undefined,
+    });
+  });
+
+program
   .command('commits')
   .description('Capture or show git commits authored during each session.')
   .argument('[session]', 'Optional session id prefix to show commits for.')

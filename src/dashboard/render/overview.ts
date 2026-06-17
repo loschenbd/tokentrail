@@ -1,6 +1,7 @@
 import type { OverviewVM } from '../data/overview.js';
 import { escapeHtml } from './shell.js';
 import { claudeProjectsDir } from '../../services/jsonl-reader.js';
+import { renderTrailMap } from './trail-map.js';
 
 export function renderOverview(vm: OverviewVM): string {
   if (isEmpty(vm)) return renderEmptyState();
@@ -54,20 +55,23 @@ function isEmpty(vm: OverviewVM): boolean {
 function renderEmptyState(): string {
   const path = claudeProjectsDir();
   return `
+${renderTrailMap({ mode: 'onboarding' })}
 <div class="single-col">
 <div class="card empty-state">
-  <div class="hero">No trail yet</div>
-  <p>Tokentrail follows Claude Code's session logs out of
-     <code>${escapeHtml(path)}</code>.</p>
-  <p>If you've used Claude Code before and don't see anything here:</p>
-  <ul>
-    <li>Check that the path above contains <code>.jsonl</code> files</li>
-    <li>Re-run <code>npm run tokentrail -- run-all --skip-sync --skip-enrich</code> to ingest</li>
-    <li>If Claude Code is installed elsewhere, set <code>CLAUDE_CONFIG_DIR</code> in <code>.env</code></li>
-  </ul>
-  <p>If you haven't installed Claude Code yet,
-     <a href="https://docs.anthropic.com/en/docs/agents/claude-code" target="_blank" rel="noopener">install it</a>,
-     run a session, and refresh this page.</p>
+  <details>
+    <summary class="label">Don't see your trail?</summary>
+    <p>Tokentrail follows Claude Code's session logs out of
+       <code>${escapeHtml(path)}</code>.</p>
+    <p>If you've used Claude Code before and don't see anything here:</p>
+    <ul>
+      <li>Check that the path above contains <code>.jsonl</code> files</li>
+      <li>Re-run <code>npm run tokentrail -- run-all --skip-sync --skip-enrich</code> to ingest</li>
+      <li>If Claude Code is installed elsewhere, set <code>CLAUDE_CONFIG_DIR</code> in <code>.env</code></li>
+    </ul>
+    <p>If you haven't installed Claude Code yet,
+       <a href="https://docs.anthropic.com/en/docs/agents/claude-code" target="_blank" rel="noopener">install it</a>,
+       run a session, and refresh this page.</p>
+  </details>
 </div>
 </div>
   `;

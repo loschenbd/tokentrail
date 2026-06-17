@@ -80,8 +80,8 @@
 .trail-map .scale { position: absolute; bottom: 7px; left: 14px; font-size: 8px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--tm-ink-muted); opacity: 0.6; user-select: none; }
 .trail-map .ascii-map {
   font-family: var(--tm-font-mono);
-  font-size: clamp(0.55rem, 1.05vw, 0.67rem);
-  line-height: 1.44;
+  font-size: clamp(0.6rem, 1.3vw, 1rem);
+  line-height: 1.32;
   white-space: pre;
   color: var(--tm-ink);
   letter-spacing: 0.035em;

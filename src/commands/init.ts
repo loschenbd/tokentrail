@@ -21,7 +21,7 @@ export type InitOptions = {
   skipSwiftbar?: boolean;
   skipDaemon?: boolean;
   skipHook?: boolean;
-  /** Override the path used in symlinks/plist (for tests). */
+  /** Override the tokentrail binary path written into the launchd plist. Surfaced as --node-path on the CLI; used by tests for the resolveTokentrailBin fallback path. */
   nodePath?: string;
 };
 
@@ -140,7 +140,7 @@ function installDaemon(opts: InitOptions, repoRoot: string): void {
   const tokentrailBin = opts.nodePath ?? resolveTokentrailBin();
   if (!tokentrailBin || !existsSync(tokentrailBin)) {
     console.log(`    [warn] could not resolve tokentrail binary path (argv1=${process.argv[1]})`);
-    console.log('           Daemon not installed. Re-run with --nodePath=<absolute path> to override.');
+    console.log('           Daemon not installed. Re-run with --node-path <absolute path> to override.');
     return;
   }
 

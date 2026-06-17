@@ -28,7 +28,7 @@ npm run build
 node dist/src/index.js init        # SwiftBar plugin + dashboard daemon + Claude skills + hook
 ```
 
-**Via Homebrew (coming with v0.2.0):**
+**Via Homebrew (once the tap ships):**
 
 ```bash
 brew install loschenbd/tokentrail/tokentrail

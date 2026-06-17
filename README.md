@@ -339,13 +339,18 @@ manage it with `launchctl unload`/`load` on
 
 Anomalies are recomputed at the end of every `tokentrail rollup` and surfaced
 both in the dashboard sidebar / `/worth-a-look` page and in Notion (`Anomaly` /
-`Anomaly reason` columns + the weekly digest page). Dismiss one with:
+`Anomaly reason` columns + the weekly digest page). Dismiss or restore one
+with:
 
 ```
 tokentrail anomaly dismiss <id>
+tokentrail anomaly restore <id>
 ```
 
-Dismissed anomalies survive future rollup runs.
+Or click the inline `dismiss` / `restore` button on each row in
+`/worth-a-look`; toggle **Show dismissed** in the header to see the dismissed
+rows alongside the active ones. Dismissed anomalies survive future rollup
+runs.
 
 ### Topic clusters
 

@@ -17,9 +17,9 @@ export function renderTrailMap(opts: { mode: TrailMapMode }): string {
         <span class="corner-glyph br">✦</span>
       </div>
       <div class="map-header">
-        <p class="map-eyebrow">Chart of Token Lands · branch: project</p>
+        <p class="map-eyebrow">Chart of Token Lands</p>
         <h1 class="map-title">Tokentrail</h1>
-        <p class="map-tagline">Every token a footstep — every branch a fork in the road</p>
+        <p class="map-tagline">Here be tokens</p>
       </div>
       <hr class="rule">
       <div class="map-wrap">

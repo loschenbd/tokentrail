@@ -47,6 +47,68 @@ feature totals, and opens the dashboard at `http://127.0.0.1:4920`. Add a
 4. **Roll up.** Group usage into daily per-feature totals.
 5. **Report.** Print the trail. Optionally sync to Notion.
 
+## How attribution works
+
+For each session, Tokentrail walks this priority chain and stops at the
+first match:
+
+1. **Manual override** — exact `(repo, branch)` match from your
+   `.tokentrail.json` (see **Customizing attribution** below).
+2. **PR label** — the first non-generic label on a PR for the branch.
+3. **PR title** — the PR's own title.
+4. **Branch prefix** — built-in patterns plus any extras you've configured:
+   - `feature/<x>` or `feat/<x>` → `<x>`
+   - `fix/<x>`, `bugfix/<x>`, `hotfix/<x>` → `fix-<x>` ("Fix: …")
+   - `chore/<x>` → `chore-<x>` ("Chore: …")
+   - `spike/<x>` or `research/<x>` → `research-<x>` ("Research: …")
+   - `deps/…` or `dependabot/…` → `deps-update` ("Dependency updates")
+5. **Mainline branch** — `main`, `master`, `develop`, `staging` (plus any
+   `extraMainlineBranches`). Scoped by repo so two repos' main branches
+   don't collapse into one bucket.
+6. **Branch slug** — fallback for anything else: the branch name,
+   slugified.
+
+To test how a given branch would be attributed without spinning up a
+session, use the debug command:
+
+```bash
+tokentrail attribute --repo octo/foo --branch feature/cool-thing
+# feature_key:  cool-thing
+# feature_name: Cool thing
+# source:       branch-prefix
+# config:       (defaults — no .tokentrail.json found)
+```
+
+`--pr-title <title>` and `--pr-labels <a,b,c>` simulate enrichment signals.
+
+### Customizing attribution
+
+Create a `.tokentrail.json` in the repo root (or `~/.config/tokentrail/
+config.json` for system-wide), or point `TOKENTRAIL_CONFIG` at any path.
+All four extension knobs are optional and APPEND to the built-ins — you
+can't disable defaults.
+
+```jsonc
+{
+  "extraMainlineBranches": ["trunk", "production"],
+  "extraBranchPatterns": [
+    { "pattern": "^release/(.+)$", "keyPrefix": "release-", "namePrefix": "Release: " },
+    { "pattern": "^epic/(.+)$",    "keyPrefix": "epic-",    "namePrefix": "Epic: " }
+  ],
+  "extraProjectsParentDirs": ["Code", "dev", "src"],
+  "featureOverrides": {
+    "owner/repo:feat/cryptic-branch": {
+      "featureKey": "human-readable-key",
+      "featureName": "Human-readable feature name"
+    }
+  }
+}
+```
+
+See `.tokentrail.json.example` for a copy-pasteable template. The file is
+gitignored by default — `featureOverrides` is where private project names
+land, so you don't want it committed.
+
 ## Commands
 
 ```
@@ -58,6 +120,7 @@ tokentrail sessions    # List sessions by cost to scan for attribution.
 tokentrail commits     # Capture or show git commits authored per session.
 tokentrail prs         # Capture or show GitHub PRs linked to each session.
 tokentrail label       # Set, clear, or list per-session feature overrides.
+tokentrail attribute   # Show how attribution would bucket a given (repo, branch).
 tokentrail sync        # Sync the latest ledger entries to Notion.
 tokentrail run-all     # Walk the full trail end-to-end.
 ```

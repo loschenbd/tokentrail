@@ -1,4 +1,4 @@
-import { FEATURE_OVERRIDES } from '../../config/feature-map.js';
+import { getConfig, type TokentrailConfig } from './config.js';
 
 export type AttributionInput = {
   repo: string;
@@ -19,9 +19,14 @@ export type Attribution = {
     | 'branch-slug';
 };
 
-const MAINLINE = new Set(['main', 'master', 'develop', 'staging']);
+const DEFAULT_MAINLINE: ReadonlySet<string> = new Set([
+  'main',
+  'master',
+  'develop',
+  'staging',
+]);
 
-// Labels we should ignore as feature signal — too generic to be meaningful.
+// Labels we ignore as feature signal — too generic to be meaningful.
 const GENERIC_LABELS = new Set([
   'bug',
   'enhancement',
@@ -41,11 +46,13 @@ const GENERIC_LABELS = new Set([
   'wip',
 ]);
 
-const BRANCH_PATTERNS: ReadonlyArray<{
+type DefaultBranchPattern = {
   pattern: RegExp;
   key: (slug: string) => string;
   name: (slug: string) => string;
-}> = [
+};
+
+const DEFAULT_BRANCH_PATTERNS: ReadonlyArray<DefaultBranchPattern> = [
   {
     pattern: /^(?:feature|feat)\/(.+)$/i,
     key: (s) => slugify(s),
@@ -73,10 +80,13 @@ const BRANCH_PATTERNS: ReadonlyArray<{
   },
 ];
 
-export function attribute(input: AttributionInput): Attribution {
-  // 1. Manual override
+export function attribute(
+  input: AttributionInput,
+  config: TokentrailConfig = getConfig()
+): Attribution {
+  // 1. Manual override (from config file)
   const overrideKey = `${input.repo}:${input.branch}`;
-  const override = FEATURE_OVERRIDES[overrideKey];
+  const override = config.featureOverrides[overrideKey];
   if (override) {
     return {
       featureKey: override.featureKey,
@@ -106,8 +116,8 @@ export function attribute(input: AttributionInput): Attribution {
     };
   }
 
-  // 4. Branch prefix patterns
-  for (const { pattern, key, name } of BRANCH_PATTERNS) {
+  // 4a. Built-in branch prefix patterns
+  for (const { pattern, key, name } of DEFAULT_BRANCH_PATTERNS) {
     const m = input.branch.match(pattern);
     if (m) {
       const tail = m[1] ?? '';
@@ -119,11 +129,24 @@ export function attribute(input: AttributionInput): Attribution {
     }
   }
 
+  // 4b. User-configured branch prefix patterns (.tokentrail.json)
+  for (const { pattern, keyPrefix, namePrefix } of config.extraBranchPatterns) {
+    const m = input.branch.match(pattern);
+    if (m) {
+      const tail = m[1] ?? '';
+      return {
+        featureKey: `${keyPrefix}${slugify(tail)}`,
+        featureName: `${namePrefix}${humanize(tail)}`,
+        source: 'branch-prefix',
+      };
+    }
+  }
+
   // 5. Mainline fallback — scope by repo so two repos' main branches don't
   // collapse into one giant bucket. Falls back to a global key only when
   // the repo is empty (shouldn't happen, but be defensive).
-  if (MAINLINE.has(input.branch.toLowerCase())) {
-    const branchLower = input.branch.toLowerCase();
+  const branchLower = input.branch.toLowerCase();
+  if (isMainline(branchLower, config)) {
     if (input.repo) {
       const repoSlug = slugify(input.repo);
       const repoLabel = input.repo.split('/').pop() ?? input.repo;
@@ -146,6 +169,14 @@ export function attribute(input: AttributionInput): Attribution {
     featureName: humanize(input.branch),
     source: 'branch-slug',
   };
+}
+
+function isMainline(branchLower: string, config: TokentrailConfig): boolean {
+  if (DEFAULT_MAINLINE.has(branchLower)) return true;
+  for (const extra of config.extraMainlineBranches) {
+    if (extra.toLowerCase() === branchLower) return true;
+  }
+  return false;
 }
 
 export function slugify(s: string): string {

@@ -128,8 +128,11 @@ function renderHappy(data) {
   if (sparkText) heroBits.push(sparkText);
   lines.push(`${sanitizeLabel(heroBits.join('   '))} | font=Menlo size=12`);
 
-  const ago = data.asOf ? fmtAgo(new Date(data.asOf).getTime()) : '?';
-  lines.push(`Updated ${ago} ago | ${META_STYLE}`);
+  // lastEventAt is the timestamp of the most recent usage_event we've
+  // ingested. The old `asOf = now` value always rendered "0s ago" and
+  // told the user nothing about whether their data was flowing.
+  const ago = data.lastEventAt ? fmtAgo(new Date(data.lastEventAt).getTime()) : '—';
+  lines.push(`Last event ${ago} ago | ${META_STYLE}`);
   lines.push('---');
 
   // Stat rows (stacked — see spec's risk note about SwiftBar grid jank).

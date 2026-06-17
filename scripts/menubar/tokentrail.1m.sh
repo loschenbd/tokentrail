@@ -70,6 +70,34 @@ function plural(n, singular, pluralForm) {
   return `${n} ${n === 1 ? singular : pluralForm}`;
 }
 
+// Block glyphs for the 14-day sparkline (' ' is empty, '█' is the max).
+const BLOCKS = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+function spark(values) {
+  const max = Math.max.apply(null, values.concat(1));
+  return values
+    .map(function (v) { return BLOCKS[Math.min(8, Math.round((v / max) * 8))]; })
+    .join('');
+}
+
+function fmtDelta(d) {
+  if (d === 0) return '—';                              // em dash
+  if (d === null || d === undefined) return '';
+  // JSON.stringify(Infinity) becomes null on the wire — handle both forms.
+  if (d === Infinity || d === 'Infinity') return 'first day';
+  const arrow = d > 0 ? '▲' : '▼';                 // ▲ / ▼
+  const abs = Math.abs(d);
+  if (abs >= 50) return arrow + ' ' + (1 + abs / 100).toFixed(1) + 'x';
+  return arrow + ' ' + abs + '%';
+}
+
+function fmtAgo(ms) {
+  const secs = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (secs < 60) return secs + 's';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return mins + 'm';
+  return Math.round(mins / 60) + 'h';
+}
+
 function renderError(message) {
   return [
     `$— | color=#8b6f47`,
@@ -88,6 +116,30 @@ function sanitizeLabel(s) {
 function renderHappy(data) {
   const lines = [];
   lines.push(`${fmtUsd(data.todayUsd)} | font=Menlo size=12`);
+  lines.push('---');
+
+  // Hero row + stat block (CodexBar-inspired). Defensive: older daemons
+  // without the menubar field fall back to zero state.
+  const menubar = data.menubar || { sparkline: [], last7Usd: 0, last30Usd: 0, deltaVsYesterday: 0, yesterdayUsd: 0 };
+  const sparkText = menubar.sparkline && menubar.sparkline.length ? spark(menubar.sparkline) : '';
+  const deltaText = fmtDelta(menubar.deltaVsYesterday);
+  const heroBits = [`${fmtUsd(data.todayUsd)} today`];
+  if (deltaText) heroBits.push(deltaText);
+  if (sparkText) heroBits.push(sparkText);
+  lines.push(`${sanitizeLabel(heroBits.join('   '))} | font=Menlo size=12`);
+
+  const ago = data.asOf ? fmtAgo(new Date(data.asOf).getTime()) : '?';
+  lines.push(`Updated ${ago} ago | ${META_STYLE}`);
+  lines.push('---');
+
+  // Stat rows (stacked — see spec's risk note about SwiftBar grid jank).
+  lines.push(`Today      ${fmtUsd(data.todayUsd)} | ${META_STYLE}`);
+  lines.push(`Last 7d    ${fmtUsd(menubar.last7Usd)} | ${META_STYLE}`);
+  lines.push(`Last 30d   ${fmtUsd(menubar.last30Usd)} | ${META_STYLE}`);
+  const anomaliesLabel = data.anomalyCount > 0
+    ? `⚠ Worth a look   ${plural(data.anomalyCount, 'active', 'active')}`
+    : `Worth a look   —`;
+  lines.push(`${sanitizeLabel(anomaliesLabel)} | href=${DASHBOARD_URL}/worth-a-look ${META_STYLE}`);
   lines.push('---');
 
   if (data.topProjects.length === 0) {
@@ -121,6 +173,7 @@ function renderHappy(data) {
 
   lines.push('---');
   lines.push(`Open dashboard | href=${DASHBOARD_URL}/`);
+  lines.push(`Today | href=${DASHBOARD_URL}/today`);
   lines.push('Refresh | refresh=true');
   return lines.join('\n');
 }

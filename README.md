@@ -326,8 +326,14 @@ ln -s "$PWD/scripts/menubar/tokentrail.1m.sh" \
 
 Open SwiftBar from Spotlight; it picks up the plugin automatically. The
 widget shows today's spend (`$X.XX`) and refreshes every minute. Click
-it to see today's top projects, each with its constituent features
-nested underneath and an anomaly count.
+it to see:
+
+- A 14-day sparkline of daily spend, the delta vs yesterday, and how
+  long ago the data was refreshed.
+- Today / Last 7d / Last 30d totals, plus a `⚠ Worth a look` row when
+  there are active anomalies.
+- Today's top projects, each with its constituent features nested
+  underneath.
 
 Requires `tokentrail dashboard` to be running on port 4920. If it
 isn't, the widget shows `$—` and a "not running" hint instead of

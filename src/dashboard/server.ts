@@ -59,6 +59,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   app.get('/today', async (_req, reply) => {
+    await freshenIfStale();
     const vm = buildTodayVM(getDb());
     reply.type('text/html; charset=utf-8');
     return renderShell(
@@ -86,6 +87,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   app.get('/api/today', async (_req, reply) => {
+    await freshenIfStale();
     const payload = buildToday(getDb());
     reply.type('application/json; charset=utf-8');
     return payload;

@@ -99,6 +99,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     'uPlot.min.css',
     'logo.png',
     'favicon.svg',
+    'trail-map.css',
+    'trail-map.js',
   ]);
 
   app.get('/static/tokens.css', async (_req, reply) => {

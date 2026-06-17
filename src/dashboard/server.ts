@@ -66,6 +66,14 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return payload;
   });
 
+  app.post<{ Params: { id: string } }>('/api/anomalies/:id/dismiss', async (req, reply) => {
+    return setAnomalyDismissed(req.params.id, true, reply);
+  });
+
+  app.post<{ Params: { id: string } }>('/api/anomalies/:id/restore', async (req, reply) => {
+    return setAnomalyDismissed(req.params.id, false, reply);
+  });
+
   // Static asset serving — small bespoke handler instead of @fastify/static
   // to keep dep count low. Only allows files whose basename matches a
   // whitelist (no path traversal).
@@ -104,4 +112,29 @@ function parseDays(query: unknown, fallback: number): number {
   const n = Number.parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0 || n > 730) return fallback;
   return n;
+}
+
+function setAnomalyDismissed(rawId: string, dismiss: boolean, reply: import('fastify').FastifyReply): unknown {
+  const id = Number.parseInt(rawId, 10);
+  if (!Number.isFinite(id) || id <= 0 || String(id) !== rawId) {
+    return reply.code(400).send({ error: 'invalid id' });
+  }
+  const db = getDb();
+  const row = db.prepare('SELECT dismissed_at FROM anomalies WHERE id = ?').get(id) as { dismissed_at: string | null } | undefined;
+  if (!row) {
+    return reply.code(404).send({ error: 'not found' });
+  }
+  const isCurrentlyDismissed = row.dismissed_at !== null;
+  if (dismiss && isCurrentlyDismissed) {
+    return reply.code(409).send({ error: 'already dismissed' });
+  }
+  if (!dismiss && !isCurrentlyDismissed) {
+    return reply.code(409).send({ error: 'already active' });
+  }
+  if (dismiss) {
+    db.prepare(`UPDATE anomalies SET dismissed_at = datetime('now') WHERE id = ? AND dismissed_at IS NULL`).run(id);
+  } else {
+    db.prepare(`UPDATE anomalies SET dismissed_at = NULL WHERE id = ? AND dismissed_at IS NOT NULL`).run(id);
+  }
+  return reply.code(204).send();
 }

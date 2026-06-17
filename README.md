@@ -27,7 +27,8 @@ npm run tokentrail -- init        # SwiftBar plugin + dashboard daemon + Claude 
 `init` walks the full setup in one shot on macOS: symlinks the SwiftBar
 plugin into `~/Library/Application Support/SwiftBar/`, writes a
 `com.tokentrail.daemon` launchd plist so the dashboard auto-starts at
-login, symlinks the Claude Code skill and `/today` + `/rollup` slash
+login, symlinks the Claude Code skill and `/today` + `/rollup` +
+`/anomalies` slash
 commands into `~/.claude/`, and adds Tokentrail's Stop hook to this
 repo's `.claude/settings.json`. Re-runnable; pass `--dry-run` to preview
 or `--force` to replace existing entries. Skip individual steps with
@@ -202,7 +203,7 @@ Two one-shot installers wire Tokentrail into any Claude Code session.
 
 ### `tokentrail install-skills`
 
-Symlinks a skill and two slash commands into `~/.claude/`:
+Symlinks a skill and three slash commands into `~/.claude/`:
 
 - **`tokentrail-spend` skill** — auto-loads when you ask any Claude Code
   session about spend, costs, anomalies, or token attribution. Tells the
@@ -226,6 +227,10 @@ Symlinks a skill and two slash commands into `~/.claude/`:
 - **`/rollup`** — runs `tokentrail run-all --skip-sync --skip-enrich` to
   catch up to the latest Claude Code sessions, then re-renders the same
   summary as `/today`.
+
+- **`/anomalies`** — lists active anomalies grouped by kind
+  (`spike_day` / `burning_feature` / `hot_session`), with a one-line
+  total and the dismiss command at the bottom.
 
 Pass `--dry-run` to preview, `--force` to replace existing files. The
 skill and slash commands work in any Claude Code session — they query

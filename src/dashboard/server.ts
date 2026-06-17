@@ -54,10 +54,14 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return renderShell({ title: `${vm.projectName} · Tokentrail`, activeTab: 'project', days, showBack: true }, body);
   });
 
-  app.get('/worth-a-look', async (_req, reply) => {
-    const vm = buildWorthALook(getDb());
+  app.get('/worth-a-look', async (req, reply) => {
+    const showDismissed = parseShowDismissed(req.query);
+    const vm = buildWorthALook(getDb(), { showDismissed });
     reply.type('text/html; charset=utf-8');
-    return renderShell({ title: 'Worth a look · Tokentrail', activeTab: 'worth-a-look', days: opts.defaultDays, showBack: true }, renderWorthALook(vm));
+    return renderShell(
+      { title: 'Worth a look · Tokentrail', activeTab: 'worth-a-look', days: opts.defaultDays, showBack: true, showDismissed },
+      renderWorthALook(vm)
+    );
   });
 
   app.get('/api/today', async (_req, reply) => {
@@ -112,6 +116,12 @@ function parseDays(query: unknown, fallback: number): number {
   const n = Number.parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0 || n > 730) return fallback;
   return n;
+}
+
+function parseShowDismissed(query: unknown): boolean {
+  if (typeof query !== 'object' || query === null) return false;
+  const raw = (query as Record<string, unknown>).showDismissed;
+  return raw === '1' || raw === 'true' || raw === 'on';
 }
 
 function setAnomalyDismissed(rawId: string, dismiss: boolean, reply: FastifyReply): FastifyReply {

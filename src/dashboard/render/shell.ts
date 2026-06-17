@@ -1,8 +1,9 @@
 export type ShellOptions = {
   title: string;
-  activeTab?: 'overview' | 'feature' | 'project' | 'worth-a-look';
+  activeTab?: 'overview' | 'today' | 'feature' | 'project' | 'worth-a-look';
   days: number;          // current time-window selection
   showBack?: boolean;
+  showDismissed?: boolean;
 };
 
 export function renderShell(opts: ShellOptions, body: string): string {
@@ -22,7 +23,7 @@ export function renderShell(opts: ShellOptions, body: string): string {
 <link rel="stylesheet" href="/static/uPlot.min.css">
 <link rel="stylesheet" href="/static/dashboard.css">
 </head>
-<body>
+<body${opts.showDismissed ? ' data-show-dismissed="1"' : ''}>
 <header class="header">
   <div class="header-left">
     ${opts.showBack ? '<a class="back" href="/">← Trail</a>' : ''}

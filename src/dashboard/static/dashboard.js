@@ -140,7 +140,9 @@
     btn.disabled = true;
     try {
       const res = await fetch('/api/anomalies/' + encodeURIComponent(id) + '/' + action, { method: 'POST' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      // 204: state flipped. 409: another tab already flipped it — treat as
+      // success so the visual state catches up rather than nagging the user.
+      if (!res.ok && res.status !== 409) throw new Error('HTTP ' + res.status);
 
       // Flip the row's visual state.
       row.classList.toggle('dismissed');
@@ -159,12 +161,16 @@
       }
     } catch (err) {
       btn.disabled = false;
-      // Inline ephemeral error message next to the button.
-      const errSpan = document.createElement('span');
-      errSpan.className = 'anomaly-error';
-      errSpan.textContent = ' (failed — try again)';
-      btn.parentElement.appendChild(errSpan);
-      setTimeout(function () { errSpan.remove(); }, 4000);
+      // Inline ephemeral error message next to the button. Guard against a
+      // detached button (e.g. the row was removed between click and rejection).
+      const parent = btn.parentElement;
+      if (parent) {
+        const errSpan = document.createElement('span');
+        errSpan.className = 'anomaly-error';
+        errSpan.textContent = ' (failed — try again)';
+        parent.appendChild(errSpan);
+        setTimeout(function () { errSpan.remove(); }, 4000);
+      }
     }
   });
 })();

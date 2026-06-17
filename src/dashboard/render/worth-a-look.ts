@@ -66,7 +66,7 @@ function renderRow(a: WorthALookVM['items'][number]): string {
       <span class="anomaly-kind">${escapeHtml(a.kind)}</span>
       <span class="anomaly-target">${target}</span>
       <span class="anomaly-reason">${escapeHtml(a.reason)}</span>
-      <button class="anomaly-action" data-action="${action}">${action}</button>
+      <button type="button" class="anomaly-action" data-action="${action}">${action}</button>
     </div>
   `;
 }

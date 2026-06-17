@@ -1,10 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, '..', '..');
-const HOOK_PATH = join(REPO_ROOT, 'src', 'hooks', 'session-end.sh');
+import { pkgRoot } from '../lib/pkg-root.js';
 
 export type InstallHookOptions = {
   /** Repo to patch — defaults to CWD. */
@@ -27,7 +24,7 @@ type Settings = { hooks?: { Stop?: StopGroup[]; [k: string]: unknown }; [k: stri
 export function runInstallHook(opts: InstallHookOptions = {}): InstallHookResult {
   const repo = resolve(opts.repo ?? process.cwd());
   const settingsPath = join(repo, '.claude', 'settings.json');
-  const hookPath = opts.hookPath ?? HOOK_PATH;
+  const hookPath = opts.hookPath ?? join(pkgRoot(), 'src', 'hooks', 'session-end.sh');
 
   let settings: Settings = {};
   if (existsSync(settingsPath)) {

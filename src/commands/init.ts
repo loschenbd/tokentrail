@@ -9,14 +9,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir, platform } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 
 import { runInstallHook } from './install-hook.js';
 import { runInstallSkills } from './install-skills.js';
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, '..', '..');
+import { pkgRoot } from '../lib/pkg-root.js';
 
 export type InitOptions = {
   dryRun?: boolean;
@@ -51,17 +48,19 @@ export function runInit(opts: InitOptions = {}): void {
     return;
   }
 
+  const repoRoot = pkgRoot();
+
   console.log('Tokentrail init — laying out a trail you can find again.\n');
 
-  if (!opts.skipSwiftbar) installSwiftBarPlugin(opts);
-  if (!opts.skipDaemon) installDaemon(opts);
+  if (!opts.skipSwiftbar) installSwiftBarPlugin(opts, repoRoot);
+  if (!opts.skipDaemon) installDaemon(opts, repoRoot);
   installSkills(opts);
-  if (!opts.skipHook) installRepoHook(opts);
+  if (!opts.skipHook) installRepoHook(opts, repoRoot);
 
   printNextSteps(opts);
 }
 
-function installSwiftBarPlugin(opts: InitOptions): void {
+function installSwiftBarPlugin(opts: InitOptions, repoRoot: string): void {
   console.log('• SwiftBar plugin');
   if (!existsSync('/Applications/SwiftBar.app')) {
     console.log('    SwiftBar.app not found in /Applications.');
@@ -70,7 +69,7 @@ function installSwiftBarPlugin(opts: InitOptions): void {
     return;
   }
 
-  const src = join(REPO_ROOT, 'scripts', 'menubar', SWIFTBAR_PLUGIN_NAME);
+  const src = join(repoRoot, 'scripts', 'menubar', SWIFTBAR_PLUGIN_NAME);
   const dst = join(SWIFTBAR_PLUGIN_DIR, SWIFTBAR_PLUGIN_NAME);
 
   if (!existsSync(src)) {
@@ -116,12 +115,12 @@ function installSwiftBarPlugin(opts: InitOptions): void {
   console.log(`    [linked] ${dst} → ${src}`);
 }
 
-function installDaemon(opts: InitOptions): void {
+function installDaemon(opts: InitOptions, repoRoot: string): void {
   console.log('• Dashboard daemon (launchd)');
 
   const nodePath = opts.nodePath ?? process.execPath;
-  const entryPath = join(REPO_ROOT, 'src', 'index.ts');
-  const tsxLoader = join(REPO_ROOT, 'node_modules', 'tsx');
+  const entryPath = join(repoRoot, 'src', 'index.ts');
+  const tsxLoader = join(repoRoot, 'node_modules', 'tsx');
 
   if (!existsSync(entryPath)) {
     console.log(`    [warn] entry script missing: ${entryPath}`);
@@ -133,7 +132,7 @@ function installDaemon(opts: InitOptions): void {
     return;
   }
 
-  const plist = renderDaemonPlist({ nodePath, entryPath, repoRoot: REPO_ROOT });
+  const plist = renderDaemonPlist({ nodePath, entryPath, repoRoot });
 
   const plistDir = dirname(DAEMON_PLIST_PATH);
   const exists = existsSync(DAEMON_PLIST_PATH);
@@ -172,9 +171,9 @@ function installSkills(opts: InitOptions): void {
   runInstallSkills({ dryRun: opts.dryRun, force: opts.force });
 }
 
-function installRepoHook(opts: InitOptions): void {
+function installRepoHook(opts: InitOptions, repoRoot: string): void {
   console.log('• Session-end hook (this repo)');
-  runInstallHook({ repo: REPO_ROOT, dryRun: opts.dryRun });
+  runInstallHook({ repo: repoRoot, dryRun: opts.dryRun });
 }
 
 function printNextSteps(opts: InitOptions): void {

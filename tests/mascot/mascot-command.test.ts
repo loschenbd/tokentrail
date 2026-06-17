@@ -23,6 +23,14 @@ describe('renderFrame', () => {
     assert.equal(out.includes('\x1b[38;5;94m'), true);
     assert.equal(out.includes('\x1b[0m'), true);
   });
+
+  test('colored output is exactly the expected ANSI sequence (verifies transitions)', () => {
+    const out = renderFrame(bundle.frames[0], true);
+    const expected =
+      '\x1b[38;5;94m●\x1b[0m \x1b[38;5;58m·\x1b[0m\n' +
+      '\x1b[38;5;58m¤\x1b[0m\x1b[38;5;94m◐●\x1b[0m';
+    assert.equal(out, expected);
+  });
 });
 
 describe('pickFrameIndex', () => {

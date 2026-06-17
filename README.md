@@ -2,6 +2,26 @@
   <img src="docs/logo.png" alt="Tokentrail" width="180">
 </p>
 
+<!-- MASCOT START -->
+```
+                               ··   
+                           ¤¤ ·¤¤·  
+                       ¤¤······¤¤·  
+                   ······· ¤¤  ··   
+                  ·¤·¤ ¤¤·          
+               ·¤¤·¤·¤              
+        ··     ¤······              
+     ··¤¤¤¤    ¤·¤·                 
+    ¤¤¤¤·¤¤·    ··                  
+   ·¤·¤¤¤¤¤¤¤                       
+   ¤¤¤¤¤···¤¤·                      
+  ····¤¤¤·¤¤··                      
+  ····¤·¤¤¤·¤                       
+   ¤¤¤¤·¤···                        
+       ·                            
+```
+<!-- MASCOT END -->
+
 # Tokentrail
 
 Tokentrail is a local-first CLI for tracing Claude Code token usage across

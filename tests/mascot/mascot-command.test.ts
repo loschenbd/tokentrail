@@ -13,19 +13,25 @@ const bundle: FrameBundle = {
 
 describe('renderFrame', () => {
   test('plain (no color) renders grid as plain text with newlines', () => {
-    const out = renderFrame(bundle.frames[0], false);
+    const frame = bundle.frames[0];
+    assert(frame, 'frame should exist');
+    const out = renderFrame(frame, false);
     assert.equal(out, '● ·\n¤◐●');
     assert.equal(out.includes('\x1b['), false);
   });
 
   test('colored renders include ANSI escape sequences', () => {
-    const out = renderFrame(bundle.frames[0], true);
+    const frame = bundle.frames[0];
+    assert(frame, 'frame should exist');
+    const out = renderFrame(frame, true);
     assert.equal(out.includes('\x1b[38;5;94m'), true);
     assert.equal(out.includes('\x1b[0m'), true);
   });
 
   test('colored output is exactly the expected ANSI sequence (verifies transitions)', () => {
-    const out = renderFrame(bundle.frames[0], true);
+    const frame = bundle.frames[0];
+    assert(frame, 'frame should exist');
+    const out = renderFrame(frame, true);
     const expected =
       '\x1b[38;5;94m●\x1b[0m \x1b[38;5;58m·\x1b[0m\n' +
       '\x1b[38;5;58m¤\x1b[0m\x1b[38;5;94m◐●\x1b[0m';

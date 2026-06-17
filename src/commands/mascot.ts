@@ -59,5 +59,10 @@ export async function runMascot(opts: MascotOptions): Promise<void> {
   }
   const idx = pickFrameIndex(opts.frame, bundle, new Date());
   const useColor = shouldColor({ noColor: opts.noColor, env: process.env, isTTY: process.stdout.isTTY });
-  process.stdout.write(renderFrame(bundle.frames[idx], useColor) + '\n');
+  const frame = bundle.frames[idx];
+  if (!frame) {
+    process.stderr.write('mascot frame index out of bounds\n');
+    return;
+  }
+  process.stdout.write(renderFrame(frame, useColor) + '\n');
 }

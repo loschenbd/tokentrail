@@ -26,15 +26,22 @@ describe('variants', () => {
 
   test('CENTER_INDEX points to bend (0, 0)', () => {
     const vs = variants();
-    assert.equal(vs[CENTER_INDEX].bend.dx, 0);
-    assert.equal(vs[CENTER_INDEX].bend.dy, 0);
+    const center = vs[CENTER_INDEX];
+    assert(center, 'center variant should exist');
+    assert.equal(center.bend.dx, 0);
+    assert.equal(center.bend.dy, 0);
   });
 
   test('order is iy * 5 + ix (rows first, then columns)', () => {
     const vs = variants();
-    assert.deepEqual(vs[0].bend, { dx: -1.0, dy: -1.0 });
-    assert.deepEqual(vs[4].bend, { dx:  1.0, dy: -1.0 });
-    assert.deepEqual(vs[5].bend, { dx: -1.0, dy:  0   });
-    assert.deepEqual(vs[14].bend, { dx: 1.0, dy:  1.0 });
+    const v0 = vs[0];
+    const v4 = vs[4];
+    const v5 = vs[5];
+    const v14 = vs[14];
+    assert(v0 && v4 && v5 && v14, 'all variants should exist');
+    assert.deepEqual(v0.bend, { dx: -1.0, dy: -1.0 });
+    assert.deepEqual(v4.bend, { dx:  1.0, dy: -1.0 });
+    assert.deepEqual(v5.bend, { dx: -1.0, dy:  0   });
+    assert.deepEqual(v14.bend, { dx: 1.0, dy:  1.0 });
   });
 });

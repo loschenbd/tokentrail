@@ -48,9 +48,11 @@ describe('coinTrailSvg', () => {
 
 function extractLastTrailCx(svg: string): number {
   const matches = [...svg.matchAll(/<circle class="coin trail"[^>]*cx="([-\d.]+)"/g)];
-  return Number(matches[matches.length - 1][1]);
+  const last = matches[matches.length - 1];
+  return Number(last?.[1]);
 }
 function extractLastTrailCy(svg: string): number {
   const matches = [...svg.matchAll(/<circle class="coin trail"[^>]*cy="([-\d.]+)"/g)];
-  return Number(matches[matches.length - 1][1]);
+  const last = matches[matches.length - 1];
+  return Number(last?.[1]);
 }

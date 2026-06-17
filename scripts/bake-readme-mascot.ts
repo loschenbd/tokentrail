@@ -21,9 +21,13 @@ function main(): void {
     process.stderr.write('mascot frames not built — run `npm run build:mascot` first\n');
     process.exit(1);
   }
+  const frame = bundle.frames[bundle.centerIndex];
+  if (!frame) {
+    process.stderr.write('mascot center frame not found in bundle\n');
+    process.exit(1);
+  }
   const path = resolve(process.cwd(), 'README.md');
   const before = readFileSync(path, 'utf8');
-  const frame = bundle.frames[bundle.centerIndex];
   const frameText = frame.grid.map(row => row.join('')).join('\n');
   const after = bakeMascot(before, frameText);
   if (after === before) {

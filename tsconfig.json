@@ -16,6 +16,6 @@
     "allowImportingTsExtensions": false,
     "verbatimModuleSyntax": false
   },
-  "include": ["src/**/*", "config/**/*", "tests/**/*.ts"],
-  "exclude": ["node_modules", "dist", "data"]
+  "include": ["src/**/*", "config/**/*"],
+  "exclude": ["node_modules", "dist", "data", "tests"]
 }

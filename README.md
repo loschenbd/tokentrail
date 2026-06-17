@@ -44,6 +44,8 @@ npm run tokentrail -- run-all --skip-sync --skip-enrich
 npm run tokentrail -- init        # SwiftBar plugin + dashboard daemon + Claude skills + hook
 ```
 
+Bonus: `npm run tokentrail -- mascot` prints the ASCII coin trail.
+
 `init` walks the full setup in one shot on macOS: symlinks the SwiftBar
 plugin into `~/Library/Application Support/SwiftBar/`, writes a
 `com.tokentrail.daemon` launchd plist so the dashboard auto-starts at

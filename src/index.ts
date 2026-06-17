@@ -277,4 +277,24 @@ program
     });
   });
 
+program
+  .command('install-skills')
+  .description("Symlink Tokentrail's Claude Code skill + slash commands into ~/.claude.")
+  .option('--force', 'Replace any conflicting files at the destination.')
+  .option('--dry-run', 'Print what would happen without writing anything.')
+  .action(async (opts: { force?: boolean; dryRun?: boolean }) => {
+    const { runInstallSkills } = await import('./commands/install-skills.js');
+    runInstallSkills({ force: opts.force, dryRun: opts.dryRun });
+  });
+
+program
+  .command('install-hook')
+  .description("Patch a repo's .claude/settings.json to fire Tokentrail's session-end hook.")
+  .option('--repo <path>', 'Repo to patch (default: current directory).')
+  .option('--dry-run', 'Print the planned change without writing anything.')
+  .action(async (opts: { repo?: string; dryRun?: boolean }) => {
+    const { runInstallHook } = await import('./commands/install-hook.js');
+    runInstallHook({ repo: opts.repo, dryRun: opts.dryRun });
+  });
+
 program.parseAsync(process.argv);

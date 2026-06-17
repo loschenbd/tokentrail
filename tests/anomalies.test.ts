@@ -94,7 +94,7 @@ describe('hot_session', () => {
     hasOverride: false,
   }));
 
-  test('flags session ≥ $25 and ≥ 3× 30-day median', () => {
+  test('flags session ≥ $25 and ≥ 3× 30-day p90', () => {
     const sessions = [
       ...baseSessions,
       { sessionId: 'hot', date: '2026-06-08', cost: 50, branch: null, hasOverride: false },
@@ -134,6 +134,49 @@ describe('hot_session', () => {
     ];
     const out = detectAnomalies({ dailyTotals: [], featureWeekly: [], sessions, labeledWorkUnitBranches: new Set() } satisfies AnomalyInput);
     assert.equal(out.filter((a) => a.kind === 'hot_session').length, 0);
+  });
+
+  test('does NOT flag $50 when the user routinely has big sessions (p90 is high)', () => {
+    // 20 small sessions + 10 medium ones: p90 lands around the medium tier,
+    // so a $50 session is only ~1.25× the typical big session. Under the
+    // old median-based detector this DID flag and produced the noise that
+    // had to be bulk-dismissed.
+    const sessions = [
+      ...Array.from({ length: 20 }, (_, i) => ({
+        sessionId: `small-${i}`, date: '2026-06-08', cost: 5,
+        branch: null as string | null, hasOverride: false,
+      })),
+      ...Array.from({ length: 10 }, (_, i) => ({
+        sessionId: `med-${i}`, date: '2026-06-08', cost: 40,
+        branch: null as string | null, hasOverride: false,
+      })),
+      { sessionId: 'maybe', date: '2026-06-08', cost: 50, branch: null, hasOverride: false },
+    ];
+    const out = detectAnomalies({ dailyTotals: [], featureWeekly: [], sessions, labeledWorkUnitBranches: new Set() } satisfies AnomalyInput);
+    assert.equal(
+      out.filter((a) => a.kind === 'hot_session').length,
+      0,
+      'p90 ≈ $40; a $50 session is only 1.25× — well below 3×'
+    );
+  });
+
+  test('still flags a truly huge session against a big-session population', () => {
+    // Same population as above, but with a $500 session — that IS anomalous
+    // at ~12.5× p90, so it should still flag.
+    const sessions = [
+      ...Array.from({ length: 20 }, (_, i) => ({
+        sessionId: `small-${i}`, date: '2026-06-08', cost: 5,
+        branch: null as string | null, hasOverride: false,
+      })),
+      ...Array.from({ length: 10 }, (_, i) => ({
+        sessionId: `med-${i}`, date: '2026-06-08', cost: 40,
+        branch: null as string | null, hasOverride: false,
+      })),
+      { sessionId: 'huge', date: '2026-06-08', cost: 500, branch: null, hasOverride: false },
+    ];
+    const out = detectAnomalies({ dailyTotals: [], featureWeekly: [], sessions, labeledWorkUnitBranches: new Set() } satisfies AnomalyInput);
+    const hot = out.find((a) => a.kind === 'hot_session' && a.session_id === 'huge');
+    assert.ok(hot, 'a $500 session against p90 ≈ $40 should still flag');
   });
 });
 

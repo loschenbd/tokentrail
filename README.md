@@ -35,6 +35,19 @@ brew install loschenbd/tokentrail/tokentrail
 tokentrail dashboard               # opens onboarding wizard at /welcome
 ```
 
+After `brew install` (or `npm install`) finishes, open the dashboard and
+walk through the onboarding checklist:
+
+```bash
+tokentrail dashboard
+# opens http://127.0.0.1:4920/welcome
+```
+
+The checklist installs the SwiftBar plugin, registers the launchd daemon,
+links the Claude Code skills, and shows you the per-repo session-end hook
+command to run. Power users can skip the wizard with `tokentrail init`,
+which does all of that non-interactively.
+
 `init` walks the full setup in one shot on macOS: symlinks the SwiftBar
 plugin into `~/Library/Application Support/SwiftBar/`, writes a
 `com.tokentrail.daemon` launchd plist so the dashboard auto-starts at

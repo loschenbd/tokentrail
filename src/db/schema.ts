@@ -171,4 +171,22 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     session_id_hash  TEXT NOT NULL,
     computed_at      TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
+
+  // Per-branch git-history merge detection. Populated by
+  // `tokentrail merges --backfill` — for each (repo, branch) we have
+  // session activity on, we check whether the branch's tip commit is
+  // reachable from origin/main (or origin/master). When merged_at is
+  // not NULL, the branch graph treats the branch as merged even if
+  // session_prs has no row (e.g. direct CLI merge without a PR, or a
+  // repo the GitHub token can't see). Only catches ancestor-preserving
+  // merges (regular merge / fast-forward) — squash and rebase create
+  // new SHAs that break the ancestry signal.
+  `CREATE TABLE IF NOT EXISTS branch_merges (
+    repo         TEXT NOT NULL,
+    branch       TEXT NOT NULL,
+    merged_at    TEXT,
+    source_sha   TEXT,
+    detected_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (repo, branch)
+  )`,
 ];

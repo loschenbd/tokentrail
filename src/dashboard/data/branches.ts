@@ -153,6 +153,27 @@ export function buildBranchGraph(
       }>;
   const aggByBranch = new Map(aggRows.map((r) => [r.branch, r]));
 
+  // Git-history merge fallback: for branches without a merged PR (or any
+  // PR), consult branch_merges — populated by `tokentrail merges --backfill`
+  // by checking ancestry against origin/main locally. Covers direct CLI
+  // merges and repos the GitHub token can't see.
+  const gitMergedAtByBranch = new Map<string, string>();
+  if (branchNames.length > 0) {
+    const gmRows = db
+      .prepare(
+        `SELECT branch, merged_at AS mergedAt
+           FROM branch_merges
+          WHERE repo = ?
+            AND branch IN (SELECT value FROM json_each(?))
+            AND merged_at IS NOT NULL`
+      )
+      .all(repo, JSON.stringify(branchNames)) as Array<{
+        branch: string;
+        mergedAt: string;
+      }>;
+    for (const row of gmRows) gitMergedAtByBranch.set(row.branch, row.mergedAt);
+  }
+
   const STALE_THRESHOLD_MS = 7 * 86400000;
   const now = Date.now();
 
@@ -183,7 +204,7 @@ export function buildBranchGraph(
 
   const branches: BranchLifecycle[] = rows.map((r) => {
     const pr = prByBranch.get(r.branch);
-    const mergedAt = pr?.mergedAt ?? null;
+    const mergedAt = pr?.mergedAt ?? gitMergedAtByBranch.get(r.branch) ?? null;
     const agg = aggByBranch.get(r.branch);
     const ageMs = now - new Date(r.lastEventAt).getTime();
     let status: 'merged' | 'open' | 'stale';

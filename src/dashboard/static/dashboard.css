@@ -337,3 +337,49 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 .trail-marker:hover {
   r: 7;
 }
+
+/* Branch graph — bezier-arc lifecycle visualization per project */
+.branch-graph { display: block; font-family: var(--font-sans); }
+.branch-graph-trunk {
+  fill: none;
+  stroke: var(--color-ink);
+  stroke-width: 2;
+  shape-rendering: crispEdges;
+}
+.branch-graph-grid {
+  stroke: rgba(139,111,71,0.15);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  shape-rendering: crispEdges;
+}
+.branch-graph-axis-label {
+  fill: var(--color-ink-muted);
+  font-size: var(--size-small);
+  font-family: var(--font-mono);
+}
+.branch-graph-arc {
+  fill: none;
+  stroke-width: 1.5;
+  cursor: pointer;
+  transition: stroke-width 120ms ease-out;
+}
+.branch-graph-arc:hover { stroke-width: 2.5; }
+.branch-graph-arc.merged { stroke: var(--color-ink-muted); }
+.branch-graph-arc.open   { stroke: var(--color-accent-green); stroke-width: 2; }
+.branch-graph-arc.stale  { stroke: var(--color-ink-subtle); }
+.branch-graph-marker {
+  stroke: var(--color-parchment-top, #f8f3e7);
+  stroke-width: 2;
+}
+.branch-graph-marker.merged { fill: var(--color-ink-muted); }
+.branch-graph-marker.open   { fill: var(--color-accent-green); }
+.branch-graph-marker.stale  { fill: var(--color-ink-subtle); }
+.branch-graph-marker.open-end { fill: var(--color-parchment-top, #f8f3e7); stroke: var(--color-accent-green); stroke-width: 2; }
+.branch-graph-marker.stale-end { fill: var(--color-parchment-top, #f8f3e7); stroke: var(--color-ink-subtle); stroke-width: 2; }
+.branch-graph-label {
+  fill: var(--color-ink);
+  font-size: var(--size-small);
+  font-family: var(--font-sans);
+  pointer-events: none;
+}
+.branch-graph-label.muted { fill: var(--color-ink-muted); }

@@ -105,6 +105,21 @@ program
   );
 
 program
+  .command('merges')
+  .description('Detect branches merged into trunk via git history (catches direct CLI merges and repos the GitHub token can\'t see).')
+  .option('--backfill', 'Walk candidate (repo, branch) pairs and populate branch_merges.')
+  .option('--force', 'Re-check every pair, including ones already in branch_merges.')
+  .action(async (opts: { backfill?: boolean; force?: boolean }) => {
+    const { backfillBranchMerges } = await import('./commands/merges.js');
+    if (!opts.backfill) {
+      console.error('Usage: tokentrail merges --backfill');
+      process.exitCode = 1;
+      return;
+    }
+    await backfillBranchMerges({ force: opts.force });
+  });
+
+program
   .command('label')
   .description('Set, clear, or list per-session feature overrides.')
   .argument('[session]', 'Session id prefix (≥4 chars) or "list".')

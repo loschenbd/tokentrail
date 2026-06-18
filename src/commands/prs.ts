@@ -1,3 +1,4 @@
+import type DatabaseType from 'better-sqlite3';
 import { getDb } from '../db/db.js';
 import { GitHubService, parseRepoOwnerName } from '../services/github.js';
 
@@ -9,10 +10,59 @@ export type PrsBackfillOptions = {
 // Mainline names we never look PRs up for.
 const MAINLINE = new Set(['main', 'master', 'develop', 'staging']);
 
-// Walk session_commits, extract unique (session_id, repo, head_branch)
-// triples whose branch isn't mainline, and look up the matching PR via
-// GitHub. Caches lookups by (repo, branch) so two sessions that worked
-// on the same branch share one API call.
+export type PrCandidateTuple = { sessionId: string; repo: string; branch: string };
+
+// Discover (session, repo, branch) tuples that need a PR lookup. Two sources:
+//   1. usage_events.branch — the branch actually checked out when Claude Code
+//      was running. Captured live from JSONL, reliable.
+//   2. session_commits.branch — git decoration (`%D`) at scan time. Often
+//      empty because most commits aren't at a branch tip when the commits
+//      backfill runs (squash-merged + deleted branches lose decoration).
+// We union both sources so PR enrichment isn't gated on commit decoration
+// surviving long enough to be captured.
+export function findPrCandidateTuples(
+  db: DatabaseType.Database,
+  opts: { force?: boolean } = {}
+): PrCandidateTuple[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT session_id, repo, branch FROM (
+         SELECT u.session_id AS session_id, u.repo AS repo, u.branch AS branch
+           FROM usage_events u
+          WHERE u.repo IS NOT NULL AND u.repo != ''
+            AND u.repo NOT LIKE 'local/%'
+            AND u.branch IS NOT NULL AND u.branch != ''
+            AND u.branch NOT IN ('main','master','develop','staging')
+         UNION ALL
+         SELECT c.session_id AS session_id, c.repo AS repo, c.branch AS branch
+           FROM session_commits c
+          WHERE c.repo IS NOT NULL AND c.repo != ''
+            AND c.repo NOT LIKE 'local/%'
+            AND c.branch IS NOT NULL AND c.branch != ''
+       ) AS sources
+       ${opts.force ? '' : `WHERE NOT EXISTS (
+         SELECT 1 FROM session_prs p
+          WHERE p.session_id = sources.session_id AND p.repo = sources.repo
+       )`}`
+    )
+    .all() as Array<{ session_id: string; repo: string; branch: string }>;
+
+  // session_commits.branch may carry git decoration ("HEAD -> feat/foo,
+  // origin/feat/foo"); usage_events.branch is already a clean name.
+  // expandBranches handles both — a clean name returns itself.
+  const tuples: PrCandidateTuple[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    for (const branch of expandBranches(r.branch)) {
+      const key = `${r.session_id}::${r.repo}::${branch}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      tuples.push({ sessionId: r.session_id, repo: r.repo, branch });
+    }
+  }
+  return tuples;
+}
+
 export async function backfillPrs(opts: PrsBackfillOptions = {}): Promise<void> {
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
@@ -23,43 +73,7 @@ export async function backfillPrs(opts: PrsBackfillOptions = {}): Promise<void> 
   }
 
   const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT DISTINCT
-         c.session_id,
-         c.repo,
-         c.branch
-       FROM session_commits c
-       WHERE c.repo IS NOT NULL AND c.repo != ''
-         AND c.repo NOT LIKE 'local/%'
-         AND c.branch IS NOT NULL AND c.branch != ''
-         ${opts.force ? '' : `AND NOT EXISTS (
-           SELECT 1 FROM session_prs p
-           WHERE p.session_id = c.session_id AND p.repo = c.repo
-         )`}`
-    )
-    .all() as Array<{ session_id: string; repo: string; branch: string }>;
-
-  // Explode the (session, repo, comma-separated-decoration) rows into
-  // (session, repo, normalized-branch) tuples. session_commits.branch
-  // looks like "HEAD -> feat/foo, origin/feat/foo" — strip the prefix
-  // and pick the branch name.
-  type Tuple = { sessionId: string; repo: string; branch: string };
-  const tuples: Tuple[] = [];
-  for (const r of rows) {
-    for (const branch of expandBranches(r.branch)) {
-      tuples.push({ sessionId: r.session_id, repo: r.repo, branch });
-    }
-  }
-  // Dedupe.
-  const seen = new Set<string>();
-  const deduped: Tuple[] = [];
-  for (const t of tuples) {
-    const key = `${t.sessionId}::${t.repo}::${t.branch}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(t);
-  }
+  const deduped = findPrCandidateTuples(db, { force: opts.force });
 
   if (deduped.length === 0) {
     console.log('No session/repo/branch tuples need a PR lookup.');

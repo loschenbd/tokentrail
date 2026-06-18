@@ -1,9 +1,11 @@
 import { escapeHtml } from './shell.js';
+import type { SetupStatus } from '../data/setup-status.js';
 
 export type TrailMapMode = 'onboarding' | 'welcome';
 
-export function renderTrailMap(opts: { mode: TrailMapMode }): string {
+export function renderTrailMap(opts: { mode: TrailMapMode; setupStatus?: SetupStatus }): string {
   const cta = renderCta(opts.mode);
+  const checklist = renderSetupChecklist(opts.setupStatus);
   return `
 <link rel="stylesheet" href="/static/trail-map.css">
 <div class="trail-map" data-trail-map>
@@ -16,6 +18,7 @@ export function renderTrailMap(opts: { mode: TrailMapMode }): string {
         <span class="corner-glyph bl">✦</span>
         <span class="corner-glyph br">✦</span>
       </div>
+      ${checklist}
       <div class="map-header">
         <h1 class="map-title">Tokentrail</h1>
         <p class="map-tagline">Here be tokens</p>
@@ -58,5 +61,58 @@ function renderCta(mode: TrailMapMode): string {
   return `
     <a href="#" class="btn btn-primary" data-copy="${escapeHtml(cmd)}">Run a session → (copy command)</a>
     <a href="https://github.com/loschenbd/tokentrail#readme" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">Read the docs</a>
+  `;
+}
+
+function renderSetupChecklist(status?: SetupStatus): string {
+  if (!status) return '';
+
+  if (status.swiftbarApp && status.menubarPlugin && status.daemon && status.skills && status.hook) {
+    return `
+      <div class="tt-setup tt-setup-done" id="tt-setup" data-tt-setup>
+        <div class="tt-done">
+          <span class="tt-dot tt-dot-ok"></span>
+          <span class="tt-label">Setup complete · all 5 steps installed</span>
+          <a href="/welcome" class="tt-recheck">Re-check</a>
+        </div>
+      </div>
+    `;
+  }
+
+  // CLI is implicitly installed — you're hitting this URL.
+  const rows: Array<{ key: keyof SetupStatus | 'cli'; label: string; action: 'run' | 'show' | 'none' }> = [
+    { key: 'cli', label: 'CLI installed', action: 'none' },
+    { key: 'swiftbarApp', label: 'SwiftBar.app', action: 'show' },
+    { key: 'menubarPlugin', label: 'Menubar plugin', action: 'run' },
+    { key: 'daemon', label: 'Dashboard daemon', action: 'run' },
+    { key: 'skills', label: 'Claude Code skills', action: 'run' },
+    { key: 'hook', label: 'Session-end hook (per repo)', action: 'show' },
+  ];
+
+  const ok = (k: keyof SetupStatus | 'cli'): boolean =>
+    k === 'cli' ? true : status[k];
+
+  const renderRow = (r: typeof rows[number]): string => {
+    const state = ok(r.key) ? 'ok' : 'pending';
+    const button =
+      r.action === 'run' && !ok(r.key)
+        ? `<button class="tt-action" data-action="${r.key}">Run</button>`
+        : r.action === 'show' && !ok(r.key)
+          ? `<button class="tt-show" data-show="${r.key}">Show command</button>`
+          : '';
+    return `
+      <div class="tt-row" data-row="${r.key}" data-state="${state}">
+        <span class="tt-dot"></span>
+        <span class="tt-label">${r.label}</span>
+        ${button}
+        <span class="tt-error" data-error="${r.key}"></span>
+      </div>
+    `;
+  };
+
+  return `
+    <div class="tt-setup" id="tt-setup" data-tt-setup>
+      ${rows.map(renderRow).join('')}
+    </div>
   `;
 }

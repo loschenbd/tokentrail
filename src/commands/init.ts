@@ -60,7 +60,7 @@ export function runInit(opts: InitOptions = {}): void {
   printNextSteps(opts);
 }
 
-function installSwiftBarPlugin(opts: InitOptions, repoRoot: string): void {
+export function installSwiftBarPlugin(opts: InitOptions, repoRoot: string): void {
   console.log('• SwiftBar plugin');
   if (!existsSync('/Applications/SwiftBar.app')) {
     console.log('    SwiftBar.app not found in /Applications.');
@@ -134,7 +134,7 @@ export function resolveTokentrailBin(argv1: string = process.argv[1] ?? ''): str
   return argv1;
 }
 
-function installDaemon(opts: InitOptions, repoRoot: string): void {
+export function installDaemon(opts: InitOptions, repoRoot: string): void {
   console.log('• Dashboard daemon (launchd)');
 
   const tokentrailBin = opts.nodePath ?? resolveTokentrailBin();

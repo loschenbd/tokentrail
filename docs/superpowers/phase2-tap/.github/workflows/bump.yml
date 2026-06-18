@@ -48,6 +48,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           V="${{ steps.version.outputs.v }}"
+          if git diff --quiet Formula/tokentrail.rb; then
+            echo "::notice::Formula already at v${V} (url + sha256 unchanged) — no bump PR needed."
+            exit 0
+          fi
           BRANCH="bump/v${V}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

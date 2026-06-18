@@ -249,6 +249,25 @@
   }
 
   function renderBranchGraph() {
+    // Swimlane Gantt + trunk arcs — the right visual for branch-lifecycle
+    // data (a list of intervals, not a commit DAG). Inspired by GitFlow /
+    // Feature-Branch Workflow diagrams. Researched alternative: a true
+    // GitHub-network graph requires commit-DAG input (each commit is a
+    // node; lanes route through commit positions). For interval data,
+    // even GitHub's own network graph degenerates into unreadable
+    // sediment when branches are short and recent.
+    //
+    // Layout:
+    //   - Horizontal trunk line at the top spans the full data window
+    //   - Each branch gets its OWN row (no lane reuse) — N rows below
+    //     the trunk, ordered by firstEventAt ascending
+    //   - Per branch: head bezier (trunk → row) at firstEventAt-X,
+    //     horizontal bar from there to the end X, tail bezier (row →
+    //     trunk) at mergedAt-X if merged; open circle at lastEventAt-X
+    //     if still open/stale
+    //   - X auto-zooms to the actual data range so short branches in a
+    //     long window aren't crammed at one edge
+    //   - Per-branch labels stacked in a fixed right gutter
     const node = document.getElementById('branch-graph');
     const dataNode = document.getElementById('branch-graph-data');
     if (!node || !dataNode) return;
@@ -256,30 +275,47 @@
     try { vm = JSON.parse(dataNode.textContent || 'null'); } catch (e) { return; }
     if (!vm || !Array.isArray(vm.branches) || vm.branches.length === 0) return;
 
-    const branches = vm.branches.slice();
-    // Sort by firstEventAt ascending — earliest branches stack at the top.
-    branches.sort(function (a, b) {
+    const branches = vm.branches.slice().sort(function (a, b) {
       return a.firstEventAt < b.firstEventAt ? -1 : a.firstEventAt > b.firstEventAt ? 1 : 0;
     });
+    const N = branches.length;
 
-    // Vertical layout: 0-24 date axis, 24-48 title row, 48 = trunk Y,
-    // then 36px per lane.
-    const TRUNK_Y = 48;
-    const LANE_HEIGHT = 36;
-    const W = node.clientWidth || 800;
-    const H = TRUNK_Y + branches.length * LANE_HEIGHT + 16;
-    const pad = { l: 40, r: 40 };
+    // Auto-zoom X to the actual data range (with a small inset on each side
+    // for the diverge/return bezier handles to live).
+    let minMs = Infinity, maxMs = -Infinity;
+    for (const b of branches) {
+      const s = new Date(b.firstEventAt).getTime();
+      const e = new Date(b.mergedAt || b.lastEventAt).getTime();
+      if (s < minMs) minMs = s;
+      if (e > maxMs) maxMs = e;
+    }
+    if (!isFinite(minMs)) return;
+    if (maxMs <= minMs) maxMs = minMs + 86400000;
+    // Pad both ends by 5% so endpoints aren't pressed against the edges.
+    const dataSpan = maxMs - minMs;
+    minMs -= dataSpan * 0.05;
+    maxMs += dataSpan * 0.05;
 
-    const windowStartMs = new Date(vm.windowStart + 'T00:00:00').getTime();
-    const windowEndMs = new Date(vm.windowEnd + 'T23:59:59').getTime();
+    // Geometry.
+    const ROW_H = 36;
+    const TRUNK_Y = 36;             // y of the horizontal trunk line
+    const HEAD_PAD = 28;            // y above trunk for date-axis ticks
+    const FOOT_PAD = 20;
+    const GUTTER_W = 340;           // right-side label gutter
+    const PAD_L = 32;
+    const PAD_R = 24;
+    const W = node.clientWidth || 960;
+    const chartR = W - PAD_R - GUTTER_W;
+    const innerW = chartR - PAD_L;
+    const labelX = chartR + 16;
+    const H = HEAD_PAD + (N + 1) * ROW_H + FOOT_PAD;
 
     function xAt(iso) {
       const t = new Date(iso).getTime();
-      const clamped = Math.max(windowStartMs, Math.min(windowEndMs, t));
-      const span = windowEndMs - windowStartMs;
-      if (span <= 0) return pad.l + (W - pad.l - pad.r) / 2;
-      return pad.l + ((clamped - windowStartMs) / span) * (W - pad.l - pad.r);
+      const clamped = Math.max(minMs, Math.min(maxMs, t));
+      return PAD_L + ((clamped - minMs) / (maxMs - minMs)) * innerW;
     }
+    function rowY(i) { return TRUNK_Y + (i + 1) * ROW_H; }
 
     const ns = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(ns, 'svg');
@@ -288,115 +324,143 @@
     svg.setAttribute('height', H);
     svg.setAttribute('class', 'branch-graph');
 
-    // Date axis ticks (above the trunk line).
-    const xTicks = niceTimeTicks(windowStartMs, windowEndMs, 6);
-    for (let i = 0; i < xTicks.length; i++) {
-      const tx = xAt(new Date(xTicks[i]).toISOString());
-      const tickLabel = document.createElementNS(ns, 'text');
-      tickLabel.setAttribute('x', tx);
-      tickLabel.setAttribute('y', 18);
-      tickLabel.setAttribute('class', 'branch-graph-axis-label');
-      tickLabel.setAttribute('text-anchor', 'middle');
-      tickLabel.textContent = fmtTickDate(xTicks[i]);
-      svg.appendChild(tickLabel);
-
+    // Date ticks (above the trunk).
+    const xTicks = niceTimeTicks(minMs, maxMs, 5);
+    for (const t of xTicks) {
+      const tx = xAt(new Date(t).toISOString());
+      const tk = document.createElementNS(ns, 'text');
+      tk.setAttribute('x', tx); tk.setAttribute('y', 14);
+      tk.setAttribute('text-anchor', 'middle');
+      tk.setAttribute('class', 'branch-graph-axis-label');
+      tk.textContent = fmtTickDate(t);
+      svg.appendChild(tk);
       const grid = document.createElementNS(ns, 'line');
       grid.setAttribute('x1', tx); grid.setAttribute('x2', tx);
-      grid.setAttribute('y1', TRUNK_Y); grid.setAttribute('y2', H - 4);
+      grid.setAttribute('y1', TRUNK_Y); grid.setAttribute('y2', H - FOOT_PAD);
       grid.setAttribute('class', 'branch-graph-grid');
       svg.appendChild(grid);
     }
 
     // Trunk line.
     const trunkLine = document.createElementNS(ns, 'line');
-    trunkLine.setAttribute('x1', pad.l); trunkLine.setAttribute('x2', W - pad.r);
+    trunkLine.setAttribute('x1', PAD_L); trunkLine.setAttribute('x2', chartR);
     trunkLine.setAttribute('y1', TRUNK_Y); trunkLine.setAttribute('y2', TRUNK_Y);
     trunkLine.setAttribute('class', 'branch-graph-trunk');
     svg.appendChild(trunkLine);
 
-    // One row per branch.
-    for (let i = 0; i < branches.length; i++) {
+    const trunkLabel = document.createElementNS(ns, 'text');
+    trunkLabel.setAttribute('x', PAD_L); trunkLabel.setAttribute('y', TRUNK_Y - 8);
+    trunkLabel.setAttribute('class', 'branch-graph-axis-label');
+    trunkLabel.textContent = vm.trunk;
+    svg.appendChild(trunkLabel);
+
+    // ARC describes the horizontal extent of each diverge/return bezier.
+    // Minimum so even single-day branches show as recognizable arcs even
+    // when xEnd === xStart on the calendar.
+    const ARC = 18;
+    for (let i = 0; i < N; i++) {
       const b = branches[i];
-      const laneY = TRUNK_Y + (i + 1) * LANE_HEIGHT;
-      const x1 = xAt(b.firstEventAt);
+      const y = rowY(i);
+      let xStart = xAt(b.firstEventAt);
       const endIso = b.mergedAt || b.lastEventAt;
-      const x2 = xAt(endIso);
-      const span = Math.max(20, x2 - x1);
-      const cp = Math.min(40, span * 0.25);  // bezier handle offset
-      const flatInset = Math.min(20, span * 0.15);
+      let xEnd = xAt(endIso);
+      // Guarantee a visible bar: each row's lifecycle bar is at least
+      // 2 × ARC wide. Extend toward the right if the natural xEnd is
+      // too close (preserves the visual diverge X on the trunk).
+      const minBarEnd = xStart + ARC * 3;
+      if (xEnd < minBarEnd) xEnd = minBarEnd;
+      // Don't run into the gutter.
+      xEnd = Math.min(xEnd, chartR);
+      const barStartX = xStart + ARC;
+      const barEndX = Math.max(barStartX + 8, xEnd - (b.status === 'merged' ? ARC : 0));
 
-      const d =
-        'M ' + x1 + ',' + TRUNK_Y +
-        ' C ' + (x1 + cp) + ',' + TRUNK_Y + ' ' + (x1 + cp) + ',' + laneY + ' ' + (x1 + flatInset) + ',' + laneY +
-        ' L ' + (x2 - flatInset) + ',' + laneY +
-        ' C ' + (x2 - cp) + ',' + laneY + ' ' + (x2 - cp) + ',' + TRUNK_Y + ' ' + x2 + ',' + TRUNK_Y;
+      // Head arc: trunk down to (barStartX, y).
+      const headPath = 'M ' + xStart + ',' + TRUNK_Y +
+        ' C ' + (xStart + ARC * 0.5) + ',' + TRUNK_Y +
+        ' '  + (xStart + ARC * 0.5) + ',' + y +
+        ' '  + barStartX + ',' + y;
+      // Lane bar.
+      const barPath = 'M ' + barStartX + ',' + y + ' L ' + barEndX + ',' + y;
+      // Tail arc (only when merged): (barEndX, y) back up to trunk at xEnd.
+      const tailPath = b.status === 'merged'
+        ? 'M ' + barEndX + ',' + y +
+          ' C ' + (xEnd - ARC * 0.5) + ',' + y +
+          ' '  + (xEnd - ARC * 0.5) + ',' + TRUNK_Y +
+          ' '  + xEnd + ',' + TRUNK_Y
+        : null;
 
-      const arc = document.createElementNS(ns, 'path');
-      arc.setAttribute('d', d);
-      arc.setAttribute('class', 'branch-graph-arc ' + b.status);
-      arc.setAttribute('data-branch', b.branch);
-      svg.appendChild(arc);
+      function appendArc(d) {
+        const arc = document.createElementNS(ns, 'path');
+        arc.setAttribute('d', d);
+        arc.setAttribute('class', 'branch-graph-arc ' + b.status);
+        arc.setAttribute('data-branch', b.branch);
+        return arc;
+      }
+      const headArc = appendArc(headPath);
+      const barArc = appendArc(barPath);
+      svg.appendChild(headArc);
+      svg.appendChild(barArc);
+      if (tailPath) svg.appendChild(appendArc(tailPath));
 
-      // Click handler — featureKey wins, then prUrl, else no-op.
+      // Diverge marker on trunk.
+      const startMarker = document.createElementNS(ns, 'circle');
+      startMarker.setAttribute('cx', xStart); startMarker.setAttribute('cy', TRUNK_Y);
+      startMarker.setAttribute('r', 4);
+      startMarker.setAttribute('class', 'branch-graph-marker ' + b.status);
+      svg.appendChild(startMarker);
+
+      // End marker.
+      const endMarker = document.createElementNS(ns, 'circle');
+      endMarker.setAttribute('r', 4);
+      if (b.status === 'merged') {
+        endMarker.setAttribute('cx', xEnd);
+        endMarker.setAttribute('cy', TRUNK_Y);
+        endMarker.setAttribute('class', 'branch-graph-marker merged');
+      } else {
+        endMarker.setAttribute('cx', barEndX);
+        endMarker.setAttribute('cy', y);
+        const cls = b.status === 'open' ? 'open-end' : 'stale-end';
+        endMarker.setAttribute('class', 'branch-graph-marker ' + cls);
+      }
+      svg.appendChild(endMarker);
+
+      // Label in the fixed right gutter. No collision possible — each
+      // branch has its own row.
+      const label = document.createElementNS(ns, 'text');
+      label.setAttribute('x', labelX);
+      label.setAttribute('y', y + 4);
+      label.setAttribute('text-anchor', 'start');
+      label.setAttribute('class', 'branch-graph-label');
+      const startDate = fmtTickDate(new Date(b.firstEventAt).getTime());
+      const endLabel = b.status === 'merged' && b.mergedAt
+        ? '→ merged ' + fmtTickDate(new Date(b.mergedAt).getTime())
+        : (b.status === 'stale'
+            ? '→ stale since ' + fmtTickDate(new Date(b.lastEventAt).getTime())
+            : '→ active');
+      const raw = b.branch + '  ·  $' + Math.round(b.totalUsd) +
+        '  ·  ' + b.sessionCount + ' sess  ·  ' + startDate + ' ' + endLabel;
+      label.textContent = truncate(raw, 64);
+      const tooltip = document.createElementNS(ns, 'title');
+      tooltip.textContent = b.branch + ' — $' + b.totalUsd.toFixed(2) + ' · ' +
+        b.sessionCount + ' sessions · ' + b.status +
+        ' · started ' + startDate +
+        (b.mergedAt ? ' · merged ' + fmtTickDate(new Date(b.mergedAt).getTime()) : '');
+      label.appendChild(tooltip);
+      svg.appendChild(label);
+
+      // Click handler — featureKey wins, then prUrl.
       const target = b.featureKey
         ? '/feature/' + encodeURIComponent(b.featureKey)
         : (b.prUrl || null);
       if (target) {
-        arc.style.cursor = 'pointer';
-        arc.addEventListener('click', function () {
-          if (b.featureKey) window.location.href = target;
-          else window.open(target, '_blank', 'noopener');
+        [headArc, barArc, label, startMarker, endMarker].forEach(function (el) {
+          el.style.cursor = 'pointer';
+          el.addEventListener('click', function () {
+            if (b.featureKey) window.location.href = target;
+            else window.open(target, '_blank', 'noopener');
+          });
         });
-      } else {
-        arc.style.cursor = 'default';
       }
-
-      // Start marker. If the branch pre-dates the window (firstEventAt is
-      // before windowStart), draw an inward « chevron at the clamped x1
-      // instead of a closed circle — communicates "this branch existed
-      // before the window starts."
-      const preDates = new Date(b.firstEventAt).getTime() < windowStartMs;
-      if (preDates) {
-        const chevron = document.createElementNS(ns, 'text');
-        chevron.setAttribute('x', x1 - 2);
-        chevron.setAttribute('y', TRUNK_Y + 4);
-        chevron.setAttribute('text-anchor', 'middle');
-        chevron.setAttribute('class', 'branch-graph-axis-label');
-        chevron.textContent = '«';
-        svg.appendChild(chevron);
-      } else {
-        const startMarker = document.createElementNS(ns, 'circle');
-        startMarker.setAttribute('cx', x1); startMarker.setAttribute('cy', TRUNK_Y);
-        startMarker.setAttribute('r', 4);
-        startMarker.setAttribute('class', 'branch-graph-marker ' + b.status);
-        svg.appendChild(startMarker);
-      }
-
-      // End marker: closed circle if merged, open circle if open/stale.
-      const endMarker = document.createElementNS(ns, 'circle');
-      endMarker.setAttribute('cx', x2); endMarker.setAttribute('cy', TRUNK_Y);
-      endMarker.setAttribute('r', 4);
-      const endClass = b.status === 'merged'
-        ? 'branch-graph-marker merged'
-        : (b.status === 'open' ? 'branch-graph-marker open-end' : 'branch-graph-marker stale-end');
-      endMarker.setAttribute('class', endClass);
-      svg.appendChild(endMarker);
-
-      // Label — placed at the lane midpoint, truncated if too long.
-      const label = document.createElementNS(ns, 'text');
-      label.setAttribute('x', (x1 + x2) / 2);
-      label.setAttribute('y', laneY + 4);
-      label.setAttribute('text-anchor', 'middle');
-      label.setAttribute('class', 'branch-graph-label');
-      const statusText = b.status === 'merged' && b.mergedAt
-        ? 'merged ' + fmtTickDate(new Date(b.mergedAt).getTime())
-        : b.status;
-      const raw = b.branch + '  $' + Math.round(b.totalUsd) + ' · ' + b.sessionCount + ' ' + (b.sessionCount === 1 ? 'session' : 'sessions') + ' · ' + statusText;
-      label.textContent = truncate(raw, 56);
-      const tooltip = document.createElementNS(ns, 'title');
-      tooltip.textContent = b.branch + ' — $' + b.totalUsd.toFixed(2) + ' · ' + b.sessionCount + ' sessions · ' + b.status;
-      label.appendChild(tooltip);
-      svg.appendChild(label);
     }
 
     node.innerHTML = '';

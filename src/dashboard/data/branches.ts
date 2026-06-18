@@ -17,6 +17,7 @@ export type BranchGraphVM = {
   trunk: string;
   windowStart: string;
   windowEnd: string;
+  days: number;
   branches: BranchLifecycle[];
   totalBranches: number;
   totalUsd: number;
@@ -40,8 +41,8 @@ export function buildBranchGraph(
 
   const days = Math.max(1, opts.days);
   const windowStart = (db
-    .prepare(`SELECT date('now', '-${days - 1} days', 'localtime') AS d`)
-    .get() as { d: string }).d;
+    .prepare(`SELECT date('now', ?, 'localtime') AS d`)
+    .get(`-${days - 1} days`) as { d: string }).d;
   const windowEnd = (db
     .prepare(`SELECT date('now', 'localtime') AS d`)
     .get() as { d: string }).d;
@@ -209,6 +210,7 @@ export function buildBranchGraph(
     trunk,
     windowStart,
     windowEnd,
+    days,
     branches,
     totalBranches: branches.length,
     totalUsd,

@@ -216,7 +216,7 @@ describe('buildBranchGraph — status, cost, session count', () => {
     assert.equal(r.branches[0]!.sessionCount, 2);
   });
 
-  test('totalUsd at the graph level sums all branches (including stub trunk cost = 0 for now)', () => {
+  test('totalUsd at the graph level sums all non-trunk branches', () => {
     const db = makeDb();
     insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: nowIso(), repo: 'o/r', branch: 'feat/a', cost: 10 });
     insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: nowIso(), repo: 'o/r', branch: 'feat/b', cost: 7 });

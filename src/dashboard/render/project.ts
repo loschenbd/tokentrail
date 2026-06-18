@@ -24,7 +24,7 @@ export function renderProject(vm: ProjectDetailVM): string {
 
   ${vm.branchGraph === null ? '' : `
   <div class="card chart-card">
-    <div class="label">Branches · last ${getWindowDays(vm)}d · ${vm.branchGraph.totalBranches} branch${vm.branchGraph.totalBranches === 1 ? '' : 'es'} · $${vm.branchGraph.totalUsd.toFixed(0)} total</div>
+    <div class="label">Branches · last ${vm.branchGraph.days}d · ${vm.branchGraph.totalBranches} branch${vm.branchGraph.totalBranches === 1 ? '' : 'es'} · $${vm.branchGraph.totalUsd.toFixed(0)} total</div>
     <div id="branch-graph" data-branch-graph style="width:100%;min-height:120px"></div>
     <script type="application/json" id="branch-graph-data">${jsonForScriptTag(vm.branchGraph)}</script>
   </div>`}
@@ -77,11 +77,4 @@ function renderFeatureList(items: ProjectDetailVM['features'], totalUsd: number)
 // See overview.ts for why we don't escapeHtml() JSON inside a <script> tag.
 function jsonForScriptTag(data: unknown): string {
   return JSON.stringify(data).replace(/</g, '\\u003c');
-}
-
-function getWindowDays(vm: ProjectDetailVM): number {
-  if (!vm.branchGraph) return 30;
-  const start = new Date(vm.branchGraph.windowStart + 'T00:00:00').getTime();
-  const end = new Date(vm.branchGraph.windowEnd + 'T00:00:00').getTime();
-  return Math.round((end - start) / 86400000) + 1;
 }

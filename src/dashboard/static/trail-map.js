@@ -309,3 +309,89 @@
   }
   if (!reduced) setTimeout(() => setInterval(tickStats, 700), 500);
 })();
+
+(function setupChecklist() {
+  const root = document.querySelector('[data-tt-setup]');
+  if (!root) return;
+
+  const ACTION_URLS = {
+    menubarPlugin: '/api/setup/menubar-plugin',
+    daemon: '/api/setup/daemon',
+    skills: '/api/setup/skills',
+  };
+
+  const SHOW_COMMANDS = {
+    swiftbarApp: 'brew install --cask swiftbar',
+    hook: 'tokentrail install-hook --repo /path/to/your/repo',
+  };
+
+  function setRowState(key, state) {
+    const row = root.querySelector(`[data-row="${key}"]`);
+    if (!row) return;
+    row.setAttribute('data-state', state);
+  }
+
+  function clearError(key) {
+    const slot = root.querySelector(`[data-error="${key}"]`);
+    if (slot) slot.textContent = '';
+  }
+
+  function setError(key, msg) {
+    const slot = root.querySelector(`[data-error="${key}"]`);
+    if (slot) slot.textContent = msg;
+  }
+
+  function applyStatus(status) {
+    if (!status) return;
+    for (const key of Object.keys(status)) {
+      setRowState(key, status[key] ? 'ok' : 'pending');
+      // Hide the action button on rows that are now OK.
+      const row = root.querySelector(`[data-row="${key}"]`);
+      if (row && status[key]) {
+        const btn = row.querySelector('.tt-action, .tt-show');
+        if (btn) btn.remove();
+      }
+    }
+  }
+
+  root.addEventListener('click', async (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    if (target.matches('.tt-action')) {
+      const key = target.getAttribute('data-action');
+      const url = ACTION_URLS[key];
+      if (!url) return;
+      clearError(key);
+      target.disabled = true;
+      const originalText = target.textContent;
+      target.textContent = 'Running…';
+      try {
+        const res = await fetch(url, { method: 'POST' });
+        const body = await res.json();
+        if (!body.ok) {
+          setError(key, body.error || 'failed');
+          target.disabled = false;
+          target.textContent = originalText;
+          return;
+        }
+        applyStatus(body.status);
+      } catch (err) {
+        setError(key, err && err.message ? err.message : String(err));
+        target.disabled = false;
+        target.textContent = originalText;
+      }
+    } else if (target.matches('.tt-show')) {
+      const key = target.getAttribute('data-show');
+      const cmd = SHOW_COMMANDS[key];
+      if (!cmd) return;
+      const row = target.closest('.tt-row');
+      const existing = row.querySelector('.tt-cmd');
+      if (existing) { existing.remove(); return; }
+      const codeEl = document.createElement('code');
+      codeEl.className = 'tt-cmd';
+      codeEl.textContent = cmd;
+      row.appendChild(codeEl);
+    }
+  });
+})();

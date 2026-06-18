@@ -249,25 +249,8 @@
   }
 
   function renderBranchGraph() {
-    // Swimlane Gantt + trunk arcs — the right visual for branch-lifecycle
-    // data (a list of intervals, not a commit DAG). Inspired by GitFlow /
-    // Feature-Branch Workflow diagrams. Researched alternative: a true
-    // GitHub-network graph requires commit-DAG input (each commit is a
-    // node; lanes route through commit positions). For interval data,
-    // even GitHub's own network graph degenerates into unreadable
-    // sediment when branches are short and recent.
-    //
-    // Layout:
-    //   - Horizontal trunk line at the top spans the full data window
-    //   - Each branch gets its OWN row (no lane reuse) — N rows below
-    //     the trunk, ordered by firstEventAt ascending
-    //   - Per branch: head bezier (trunk → row) at firstEventAt-X,
-    //     horizontal bar from there to the end X, tail bezier (row →
-    //     trunk) at mergedAt-X if merged; open circle at lastEventAt-X
-    //     if still open/stale
-    //   - X auto-zooms to the actual data range so short branches in a
-    //     long window aren't crammed at one edge
-    //   - Per-branch labels stacked in a fixed right gutter
+    // Swimlane Gantt: one row per branch, head/tail beziers to a horizontal
+    // trunk. X auto-zooms to the data range; labels live in a right gutter.
     const node = document.getElementById('branch-graph');
     const dataNode = document.getElementById('branch-graph-data');
     if (!node || !dataNode) return;

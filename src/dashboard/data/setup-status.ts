@@ -59,8 +59,33 @@ function detectHookInAnyProject(home: string): boolean {
     } catch {
       continue;
     }
-    if (raw.includes('session-end.sh') && raw.includes('tokentrail')) {
-      return true;
+    if (hasTokentrailStopHook(raw)) return true;
+  }
+  return false;
+}
+
+// Walk the parsed settings.json's Stop hooks and look for a `command` field
+// that names Tokentrail's session-end hook. Tighter than the previous
+// substring check (which matched if `tokentrail` and `session-end.sh` appeared
+// anywhere — including unrelated comments or matcher strings).
+function hasTokentrailStopHook(raw: string): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  const stop = (parsed as { hooks?: { Stop?: unknown } })?.hooks?.Stop;
+  if (!Array.isArray(stop)) return false;
+  for (const group of stop) {
+    const hooks = (group as { hooks?: unknown })?.hooks;
+    if (!Array.isArray(hooks)) continue;
+    for (const h of hooks) {
+      const cmd = (h as { command?: unknown })?.command;
+      if (typeof cmd !== 'string') continue;
+      if (cmd.includes('tokentrail') && cmd.endsWith('session-end.sh')) {
+        return true;
+      }
     }
   }
   return false;

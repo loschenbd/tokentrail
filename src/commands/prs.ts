@@ -209,7 +209,7 @@ export async function showPrs(sessionPrefix: string): Promise<void> {
 // Decorations look like "HEAD -> main, origin/main" or
 // "tag: v1, origin/feat/foo, feat/foo". Strip HEAD pointer, tag:
 // prefixes, the "origin/" remote prefix, drop mainline, dedupe.
-function expandBranches(raw: string): string[] {
+export function expandBranches(raw: string): string[] {
   const out = new Set<string>();
   for (const piece of raw.split(',')) {
     let s = piece.trim();

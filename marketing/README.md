@@ -2,11 +2,27 @@
 
 Single-file landing page for tokentrail. No build step.
 
-## Deploy
+Live at <https://tokentrail.benjaminloschen.com>.
 
-Drop `marketing/` into Vercel, Netlify, GitHub Pages, or any static
-host. `index.html` is self-contained — its only external requests are
-to `./static/logo.png` and `./static/favicon.svg`.
+## Deploy (Vercel)
+
+From this directory:
+
+```bash
+cd marketing/
+vercel              # first time: creates project, links it
+vercel --prod       # deploy to production
+```
+
+When prompted for the project's root directory, accept the default
+(`./`). Custom domain (`tokentrail.benjaminloschen.com`) is configured
+in the Vercel dashboard → Project → Settings → Domains. Vercel will
+print the CNAME target to add at Namecheap.
+
+`vercel.json` only configures cache headers for `/static/*`. The site
+is otherwise a plain static drop — `index.html` is self-contained and
+its only external requests are to `./static/logo.png` and
+`./static/favicon.svg`.
 
 ## Editing the trail visual
 

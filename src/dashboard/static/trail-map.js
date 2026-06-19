@@ -234,18 +234,18 @@
   const costSubEl = root.querySelector('#cost-sub');
   const sessCountEl = root.querySelector('#sess-count');
 
-  // ─── Clipboard CTA (onboarding only) ─────────────────────────────────
+  // ─── Clipboard CTA ────────────────────────────────────────────────────
   root.querySelectorAll('[data-copy]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       const text = btn.getAttribute('data-copy') || '';
       try { await navigator.clipboard.writeText(text); } catch (_) { /* no-op */ }
-      const original = btn.textContent;
-      btn.classList.add('btn-copied');
-      btn.textContent = 'Copied!';
+      const original = btn.innerHTML;
+      btn.classList.add('copied', 'btn-copied');
+      btn.innerHTML = '<span class="copied-label">Copied!</span>';
       setTimeout(() => {
-        btn.classList.remove('btn-copied');
-        btn.textContent = original;
+        btn.classList.remove('copied', 'btn-copied');
+        btn.innerHTML = original;
       }, 1200);
     });
   });

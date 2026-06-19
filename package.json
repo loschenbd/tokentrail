@@ -1,13 +1,13 @@
 {
   "name": "tokentrail",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A local ledger and trail-map for Claude Code spend.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/loschenbd/tokentrail.git"
   },
-  "homepage": "https://github.com/loschenbd/tokentrail#readme",
+  "homepage": "https://tokentrail.benjaminloschen.com",
   "bugs": {
     "url": "https://github.com/loschenbd/tokentrail/issues"
   },

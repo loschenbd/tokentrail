@@ -8,6 +8,8 @@ Tokentrail is a local-first CLI for tracing Claude Code token usage across
 branches, features, and pull requests. It follows the trail from raw session
 logs to feature-level cost rollups, then optionally syncs that ledger to Notion.
 
+Site: <https://tokentrail.benjaminloschen.com>
+
 ## Quickstart
 
 Prerequisites: Node.js 20+ and an existing
@@ -18,7 +20,14 @@ and the dashboard will show a "no trail yet" hint instead of charts.
 
 ### Install
 
-**From source (today):**
+**Via Homebrew (recommended):**
+
+```bash
+brew install loschenbd/tokentrail/tokentrail
+tokentrail dashboard               # opens onboarding wizard at /welcome
+```
+
+**From source:**
 
 ```bash
 git clone https://github.com/loschenbd/tokentrail
@@ -26,14 +35,6 @@ cd tokentrail
 npm install
 npm run build
 node dist/src/index.js init        # SwiftBar plugin + dashboard daemon + Claude skills + hook
-```
-
-**Via Homebrew:**
-
-```bash
-brew tap loschenbd/tokentrail
-brew install tokentrail
-tokentrail dashboard               # opens onboarding wizard at /welcome
 ```
 
 After `brew install` (or `npm install`) finishes, open the dashboard and

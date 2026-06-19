@@ -91,6 +91,16 @@ body {
 .btn-primary:hover{background:#2a1f12;}
 .btn-ghost{background:rgba(255,255,255,0.38);color:var(--tm-ink-muted);}
 .btn-ghost:hover{background:rgba(255,255,255,0.6);color:var(--tm-ink);}
+.install-cta{text-align:center;margin:4px 0 12px;}
+.install-label{font-size:9px;text-transform:uppercase;letter-spacing:3.5px;color:var(--tm-ink-muted);margin-bottom:6px;font-family:var(--tm-font-serif);}
+.install-prompt{display:inline-flex;align-items:center;gap:10px;background:var(--tm-ink);color:#fdf6e3;font-family:var(--tm-font-mono);padding:10px 16px;border:1px solid var(--tm-ink);border-radius:3px;text-decoration:none;cursor:pointer;transition:background 120ms;max-width:100%;}
+.install-prompt:hover{background:#2a1f12;}
+.install-prompt:focus-visible{outline:2px solid var(--tm-coin-rim);outline-offset:2px;}
+.install-dollar{color:var(--tm-coin-rim);font-weight:600;user-select:none;font-size:13px;}
+.install-cmd{font-family:var(--tm-font-mono);color:#fdf6e3;background:transparent;font-size:clamp(11px,1.6vw,13px);letter-spacing:0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.install-copy{font-family:var(--tm-font-serif);font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--tm-coin-rim);opacity:0.75;padding-left:10px;border-left:1px dashed rgba(196,154,58,0.4);user-select:none;}
+.install-prompt.copied{background:var(--tm-green);}
+.copied-label{font-family:var(--tm-font-serif);font-weight:600;color:#fdf6e3;letter-spacing:0.04em;font-size:12px;}
 </style>
 </head>
 <body>
@@ -127,8 +137,13 @@ body {
     <div class="stat">Sessions<span class="stat-val" id="sess-count">—</span><span class="stat-sub">today</span></div>
   </div>
   <hr class="rule">
+  <div class="install-cta">
+    <div class="install-label">Blaze the trail</div>
+    <a href="#" class="install-prompt" data-copy="brew install loschenbd/tokentrail/tokentrail" aria-label="Copy install command">
+      <span class="install-dollar">$</span><code class="install-cmd">brew install loschenbd/tokentrail/tokentrail</code><span class="install-copy">⌘C</span>
+    </a>
+  </div>
   <div class="cta-row">
-    <a href="https://github.com/loschenbd/tokentrail" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Blaze the trail →</a>
     <a href="https://github.com/loschenbd/tokentrail#readme" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">Read the docs</a>
   </div>
 </div>
@@ -372,18 +387,18 @@ body {
   const costSubEl = root.querySelector('#cost-sub');
   const sessCountEl = root.querySelector('#sess-count');
 
-  // ─── Clipboard CTA (onboarding only) ─────────────────────────────────
+  // ─── Clipboard CTA ────────────────────────────────────────────────────
   root.querySelectorAll('[data-copy]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       const text = btn.getAttribute('data-copy') || '';
       try { await navigator.clipboard.writeText(text); } catch (_) { /* no-op */ }
-      const original = btn.textContent;
-      btn.classList.add('btn-copied');
-      btn.textContent = 'Copied!';
+      const original = btn.innerHTML;
+      btn.classList.add('copied', 'btn-copied');
+      btn.innerHTML = '<span class="copied-label">Copied!</span>';
       setTimeout(() => {
-        btn.classList.remove('btn-copied');
-        btn.textContent = original;
+        btn.classList.remove('copied', 'btn-copied');
+        btn.innerHTML = original;
       }, 1200);
     });
   });

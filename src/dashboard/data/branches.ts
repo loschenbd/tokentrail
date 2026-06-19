@@ -58,23 +58,44 @@ export function buildBranchGraph(
     .get(repo) as { branch: string; n: number } | undefined;
   const trunk = trunkRow?.branch ?? 'master';
 
-  // Per-branch lifecycle aggregate from usage_events. lastEventAt filter
-  // implements the window: branches with no recent activity drop out.
+  // Discover branches from multiple sources so a repo isn't excluded just
+  // because its sessions didn't capture branch info in usage_events
+  // (common — JSONL often lacks branch context). Sources:
+  //   1. usage_events.branch — the branch checked out at event time
+  //   2. session_prs.head_branch — branches we found GitHub PRs for
+  // Lifecycle (firstEventAt/lastEventAt) is derived by joining the
+  // (session_id, branch) pairs back to usage_events.timestamp for the
+  // same repo. A branch only surfaces if at least one of its sessions
+  // has a usage_events row inside the time window — keeps stale
+  // branches with no recent activity out.
   const rows = db
     .prepare(
-      `SELECT branch,
-              MIN(timestamp) AS firstEventAt,
-              MAX(timestamp) AS lastEventAt
-         FROM usage_events
-        WHERE repo = ?
-          AND branch IS NOT NULL
-          AND branch != ''
-          AND branch NOT IN ('master','main','trunk')
-          AND date(timestamp, 'localtime') >= ?
-        GROUP BY branch
+      `WITH session_branch_links AS (
+         SELECT u.session_id AS session_id, u.branch AS branch
+           FROM usage_events u
+          WHERE u.repo = ?
+            AND u.branch IS NOT NULL AND u.branch != ''
+            AND u.branch NOT IN ('master','main','trunk','develop','staging')
+         UNION
+         SELECT pr.session_id AS session_id,
+                REPLACE(pr.head_branch, 'origin/', '') AS branch
+           FROM session_prs pr
+          WHERE pr.repo = ?
+            AND pr.head_branch IS NOT NULL AND pr.head_branch != ''
+            AND REPLACE(pr.head_branch, 'origin/', '')
+                NOT IN ('master','main','trunk','develop','staging')
+       )
+       SELECT b.branch AS branch,
+              MIN(u.timestamp) AS firstEventAt,
+              MAX(u.timestamp) AS lastEventAt
+         FROM session_branch_links b
+         JOIN usage_events u
+              ON u.session_id = b.session_id AND u.repo = ?
+        WHERE date(u.timestamp, 'localtime') >= ?
+        GROUP BY b.branch
         ORDER BY firstEventAt ASC`
     )
-    .all(repo, windowStart) as Array<{
+    .all(repo, repo, repo, windowStart) as Array<{
       branch: string;
       firstEventAt: string;
       lastEventAt: string;
@@ -133,7 +154,13 @@ export function buildBranchGraph(
     }
   }
 
-  // Cost + session aggregates per branch, single query for all branches.
+  // Cost + session aggregates: STRICT direct-match on usage_events.branch.
+  // We deliberately do NOT route through session_branch_links here: when a
+  // session links to multiple branches via session_prs (one Claude session
+  // touching N PRs), attribution-by-session would double-count cost across
+  // every branch. Honest fallback: branches surfaced only via session_prs
+  // get $0 / 0 sessions — the structural view (lifecycle, merge status)
+  // still surfaces, just without per-branch cost.
   const aggRows = branchNames.length === 0
     ? []
     : db

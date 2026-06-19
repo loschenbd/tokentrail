@@ -233,3 +233,66 @@ describe('buildBranchGraph — status, cost, session count', () => {
     assert.equal(r, null);
   });
 });
+
+describe('buildBranchGraph — multi-source branch list', () => {
+  test('surfaces a branch known only via session_prs.head_branch (no usage_events.branch)', () => {
+    const db = makeDb();
+    // Session has events on mainline (no branch info captured) AND a PR
+    // for feat/x. Branch should still appear.
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: 'main', cost: 5 });
+    insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: '2026-06-11T12:00:00Z', repo: 'o/r', branch: null, cost: 3 });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 7, headBranch: 'feat/x', state: 'merged', mergedAt: '2026-06-14T00:00:00Z' });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
+    assert.equal(r.branches.length, 1);
+    const b = r.branches[0]!;
+    assert.equal(b.branch, 'feat/x');
+    assert.equal(b.status, 'merged');
+    // Lifecycle derived from session's usage_events, not from the (missing)
+    // branch column.
+    assert.equal(b.firstEventAt, '2026-06-10T10:00:00Z');
+    assert.equal(b.lastEventAt, '2026-06-11T12:00:00Z');
+  });
+
+  test('cost is $0 for a branch surfaced only via session_prs (no usage_events.branch direct match)', () => {
+    // Honest attribution: a session whose events have branch=null could
+    // have linked to multiple PR branches — splitting cost across them
+    // would double-count, so we attribute nothing. The branch still
+    // surfaces structurally with merge status, just $0 cost.
+    const db = makeDb();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: null, cost: 4 });
+    insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: '2026-06-10T11:00:00Z', repo: 'o/r', branch: 'main', cost: 6 });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 1, headBranch: 'feat/x', state: 'merged', mergedAt: '2026-06-14T00:00:00Z' });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
+    const b = r.branches.find((x) => x.branch === 'feat/x')!;
+    assert.equal(b.status, 'merged');
+    assert.equal(b.totalUsd, 0);
+    assert.equal(b.sessionCount, 0);
+  });
+
+  test('strips origin/ prefix from session_prs.head_branch when building branch list', () => {
+    const db = makeDb();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: null, cost: 5 });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 9, headBranch: 'origin/feat/y', state: 'merged', mergedAt: '2026-06-14T00:00:00Z' });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
+    assert.equal(r.branches.length, 1);
+    assert.equal(r.branches[0]!.branch, 'feat/y');
+  });
+
+  test('mainline head_branch on session_prs does NOT surface as a separate branch', () => {
+    const db = makeDb();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: 'main', cost: 5 });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 1, headBranch: 'main', state: 'merged', mergedAt: '2026-06-14T00:00:00Z' });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 });
+    assert.equal(r, null);
+  });
+
+  test('branch is dropped if NO linked session has usage_events in the window', () => {
+    const db = makeDb();
+    // PR exists, but the only session linked to it has events 60d ago (outside 30d window)
+    const oldTs = new Date(Date.now() - 60 * 86400000).toISOString();
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: oldTs, repo: 'o/r', branch: null });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 1, headBranch: 'feat/ancient', state: 'merged', mergedAt: oldTs });
+    const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 });
+    assert.equal(r, null);
+  });
+});

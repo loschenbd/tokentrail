@@ -82,6 +82,40 @@ describe('findMergeCandidates', () => {
       { repo: 'o/r', branch: 'feat/b' },
     ]);
   });
+
+  test('expands git decoration in session_commits.branch to clean names', () => {
+    const db = makeDb();
+    insertCommit(db, {
+      sessionId: 's1', sha: 'aaa', repo: 'o/r',
+      branch: 'HEAD -> feat/x, origin/feat/x',
+      authoredAt: '2026-06-15T10:00:00Z',
+    });
+    const rows = findMergeCandidates(db);
+    assert.equal(rows.length, 1, 'decoration should expand to a single clean branch');
+    assert.deepEqual(rows[0], { repo: 'o/r', branch: 'feat/x' });
+  });
+
+  test('drops mainline from decorated session_commits branches', () => {
+    const db = makeDb();
+    insertCommit(db, {
+      sessionId: 's1', sha: 'aaa', repo: 'o/r',
+      branch: 'HEAD -> main, origin/main',
+      authoredAt: '2026-06-15T10:00:00Z',
+    });
+    assert.deepEqual(findMergeCandidates(db), []);
+  });
+
+  test('includes branches known only via session_prs.head_branch', () => {
+    const db = makeDb();
+    db.prepare(
+      `INSERT INTO session_prs
+         (session_id, repo, pr_number, pr_title, pr_url, pr_state, head_branch, merged_at)
+       VALUES (?, ?, ?, 't', 'u', 'merged', ?, ?)`
+    ).run('s1', 'o/r', 1, 'origin/feat/from-pr', '2026-06-15T11:00:00Z');
+    const rows = findMergeCandidates(db);
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0], { repo: 'o/r', branch: 'feat/from-pr' });
+  });
 });
 
 describe('isMergedIntoMain (with stub git runner)', () => {

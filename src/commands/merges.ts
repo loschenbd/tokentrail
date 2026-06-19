@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import type DatabaseType from 'better-sqlite3';
 import { getDb } from '../db/db.js';
 import { findGitRoot, isDir } from '../services/git-history.js';
+import { expandBranches } from './prs.js';
 
 export type MergesBackfillOptions = {
   // Re-scan every (repo, branch) even if already in branch_merges. Default
@@ -42,13 +43,17 @@ export function isMergedIntoMain(
 }
 
 // (repo, branch) pairs where we have session activity that hasn't been
-// checked yet (or all of them, when force=true). Same union-source logic
-// as the PR backfill: usage_events preferred, session_commits fallback.
+// checked yet (or all of them, when force=true). Sources: usage_events
+// (clean branch names), session_commits (git decoration, expanded via
+// expandBranches), and session_prs (head_branch, origin/-stripped).
+// All branch names are normalized to clean form before deduping —
+// branch_merges rows are keyed on the clean name so dashboard reads
+// can match without re-parsing decoration at query time.
 export function findMergeCandidates(
   db: DatabaseType.Database,
   opts: { force?: boolean } = {}
 ): Array<{ repo: string; branch: string }> {
-  const rows = db
+  const raw = db
     .prepare(
       `SELECT DISTINCT repo, branch FROM (
          SELECT u.repo AS repo, u.branch AS branch
@@ -63,15 +68,40 @@ export function findMergeCandidates(
           WHERE c.repo IS NOT NULL AND c.repo != ''
             AND c.repo NOT LIKE 'local/%'
             AND c.branch IS NOT NULL AND c.branch != ''
-            AND c.branch NOT IN ('main','master','develop','staging')
-       ) AS sources
-       ${opts.force ? '' : `WHERE NOT EXISTS (
-         SELECT 1 FROM branch_merges m
-          WHERE m.repo = sources.repo AND m.branch = sources.branch
-       )`}`
+         UNION ALL
+         SELECT pr.repo AS repo,
+                REPLACE(pr.head_branch, 'origin/', '') AS branch
+           FROM session_prs pr
+          WHERE pr.repo IS NOT NULL AND pr.repo != ''
+            AND pr.repo NOT LIKE 'local/%'
+            AND pr.head_branch IS NOT NULL AND pr.head_branch != ''
+            AND REPLACE(pr.head_branch, 'origin/', '')
+                NOT IN ('main','master','develop','staging')
+       ) AS sources`
     )
     .all() as Array<{ repo: string; branch: string }>;
-  return rows;
+
+  // Expand git decoration ("HEAD -> X, origin/X") into clean branch names,
+  // then dedupe. expandBranches also drops mainline + origin/ prefix.
+  const seen = new Set<string>();
+  const out: Array<{ repo: string; branch: string }> = [];
+  for (const r of raw) {
+    for (const branch of expandBranches(r.branch)) {
+      const key = `${r.repo}::${branch}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ repo: r.repo, branch });
+    }
+  }
+
+  if (opts.force) return out;
+  // Incremental: drop pairs already in branch_merges.
+  const have = new Set<string>(
+    (db.prepare(`SELECT repo, branch FROM branch_merges`).all() as Array<{
+      repo: string; branch: string;
+    }>).map((r) => `${r.repo}::${r.branch}`)
+  );
+  return out.filter((t) => !have.has(`${t.repo}::${t.branch}`));
 }
 
 // For a (repo, branch), pick a representative commit SHA to test for
@@ -148,6 +178,17 @@ export async function backfillBranchMerges(
   opts: MergesBackfillOptions = {}
 ): Promise<void> {
   const db = getDb();
+
+  // One-time cleanup of pre-existing rows that were stored with raw git
+  // decoration ("origin/X, X" / "HEAD -> X" / commas) before this
+  // backfiller learned to normalize. Idempotent on subsequent runs.
+  const cleanup = db
+    .prepare(`DELETE FROM branch_merges WHERE branch LIKE '%,%' OR branch LIKE 'origin/%' OR branch LIKE 'HEAD -> %'`)
+    .run();
+  if (cleanup.changes > 0) {
+    console.log(`Cleaned ${cleanup.changes} legacy branch_merges row${cleanup.changes === 1 ? '' : 's'} with raw git decoration.`);
+  }
+
   const candidates = findMergeCandidates(db, { force: opts.force });
 
   if (candidates.length === 0) {

@@ -31,7 +31,8 @@ node dist/src/index.js init        # SwiftBar plugin + dashboard daemon + Claude
 **Via Homebrew:**
 
 ```bash
-brew install loschenbd/tokentrail/tokentrail
+brew tap loschenbd/tokentrail
+brew install tokentrail
 tokentrail dashboard               # opens onboarding wizard at /welcome
 ```
 

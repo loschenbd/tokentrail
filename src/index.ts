@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import { Command } from 'commander';
+import { createRequire } from 'node:module';
+
+// Single source of truth for the version. Drift between package.json and a
+// hardcoded literal here once shipped a 0.2.1 tarball that reported 0.2.0
+// and broke the Homebrew formula's test block.
+const pkg = createRequire(import.meta.url)('../../package.json') as { version: string };
 
 const program = new Command();
 
 program
   .name('tokentrail')
   .description('A local ledger and trail-map for Claude Code spend.')
-  .version('0.2.0');
+  .version(pkg.version);
 
 program
   .command('ingest')

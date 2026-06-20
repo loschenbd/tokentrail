@@ -32,9 +32,9 @@ body {
   background: #b8a070;
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 20px;
+  padding: 32px 20px 48px;
 }
 .trail-map { display: contents; }
 .frame-outer { background:#b8a070; padding:10px; border-radius:3px; box-shadow:0 20px 64px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.2); width:min(980px,100%); }
@@ -101,6 +101,34 @@ body {
 .install-copy{font-family:var(--tm-font-serif);font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--tm-coin-rim);opacity:0.75;padding-left:10px;border-left:1px dashed rgba(196,154,58,0.4);user-select:none;}
 .install-prompt.copied{background:var(--tm-green);}
 .copied-label{font-family:var(--tm-font-serif);font-weight:600;color:#fdf6e3;letter-spacing:0.04em;font-size:12px;}
+
+/* ─── Expansion sections ─────────────────────────────────────────────── */
+.section-block{margin:22px 0 6px;}
+.section-eyebrow{font-size:9px;text-transform:uppercase;letter-spacing:3.5px;color:var(--tm-ink-muted);text-align:center;margin-bottom:6px;}
+.section-title{font-family:var(--tm-font-serif);font-size:clamp(18px,2.6vw,22px);font-weight:600;color:var(--tm-ink);letter-spacing:-0.01em;text-align:center;margin-bottom:4px;line-height:1.15;}
+.section-sub{font-style:italic;font-size:12px;color:var(--tm-ink-muted);text-align:center;margin:0 auto 14px;max-width:58ch;line-height:1.5;}
+.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:6px 0 2px;}
+.feature-tile{border:1px dashed rgba(139,111,71,0.45);border-radius:3px;padding:14px 14px 12px;background:rgba(255,255,255,0.18);text-align:center;}
+.feature-icon{font-family:var(--tm-font-mono);font-size:22px;line-height:1;margin-bottom:10px;display:block;}
+.feature-icon .tok-rim{color:var(--tm-coin-rim);}
+.feature-icon .tok-face{color:var(--tm-coin);text-shadow:0 0 4px rgba(196,154,58,0.55);}
+.feature-icon.branch-glyph{color:#4a7a35;font-weight:bold;letter-spacing:-1px;}
+.feature-icon.anom-glyph{color:var(--tm-red-bright);font-weight:bold;}
+.feature-headline{font-family:var(--tm-font-serif);font-size:11px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;color:var(--tm-ink);margin-bottom:6px;}
+.feature-blurb{font-size:12px;color:var(--tm-ink-muted);line-height:1.5;}
+@media (max-width:640px){.feature-grid{grid-template-columns:1fr;}}
+.shot-frame{border:1px dashed rgba(139,111,71,0.5);border-radius:3px;padding:8px;background:rgba(255,255,255,0.22);box-shadow:inset 0 2px 8px rgba(61,47,31,0.06);margin-bottom:8px;}
+.shot-img{display:block;width:100%;height:auto;border-radius:2px;}
+.shot-caption{font-style:italic;font-size:11px;color:var(--tm-ink-muted);text-align:center;line-height:1.5;margin:0 auto;max-width:60ch;}
+.notion-call{border:1px dashed rgba(139,111,71,0.45);border-radius:3px;padding:14px 18px;background:rgba(255,255,255,0.18);display:flex;flex-direction:column;gap:6px;align-items:center;text-align:center;}
+.notion-call-eyebrow{font-size:9px;text-transform:uppercase;letter-spacing:2.5px;color:var(--tm-ink-muted);}
+.notion-call-text{font-size:13px;color:var(--tm-ink);line-height:1.5;max-width:60ch;}
+.notion-call-text code{font-family:var(--tm-font-mono);font-size:12px;background:rgba(255,255,255,0.4);border:1px solid rgba(139,111,71,0.3);border-radius:2px;padding:1px 5px;}
+.notion-call-text a{color:var(--tm-ink);text-decoration:underline;text-decoration-style:dotted;}
+.notion-call-text a:hover{color:var(--tm-coin);}
+.tt-footer{text-align:center;margin-top:20px;padding-top:14px;border-top:1px dashed rgba(139,111,71,0.5);font-size:11px;color:var(--tm-ink-muted);font-style:italic;line-height:1.5;}
+.tt-footer a{color:var(--tm-ink);text-decoration:underline;text-decoration-style:dotted;font-style:normal;}
+.tt-footer a:hover{color:var(--tm-coin);}
 </style>
 </head>
 <body>
@@ -137,6 +165,55 @@ body {
     <div class="stat">Sessions<span class="stat-val" id="sess-count">—</span><span class="stat-sub">today</span></div>
   </div>
   <hr class="rule">
+
+  <section class="section-block">
+    <div class="section-eyebrow">What it does</div>
+    <h2 class="section-title">Three things, kept local</h2>
+    <p class="section-sub">Tokentrail reads what Claude Code already wrote to disk, and turns it into a ledger you can navigate by branch, feature, and PR.</p>
+    <div class="feature-grid">
+      <div class="feature-tile">
+        <span class="feature-icon" aria-hidden="true"><span class="tok-rim">(</span><span class="tok-face">⊙</span><span class="tok-rim">)</span></span>
+        <div class="feature-headline">Reads your local logs</div>
+        <p class="feature-blurb">Every session's JSONL stays on your machine. Tokentrail reads them in place — never uploaded, never proxied, never seen by anyone but you.</p>
+      </div>
+      <div class="feature-tile">
+        <span class="feature-icon branch-glyph" aria-hidden="true">─┬─</span>
+        <div class="feature-headline">Maps cost to your work</div>
+        <p class="feature-blurb">Each token step gets tied to the Git branch you ran it on, the feature it touched, and the PR that merged it.</p>
+      </div>
+      <div class="feature-tile">
+        <span class="feature-icon anom-glyph" aria-hidden="true">!</span>
+        <div class="feature-headline">Surfaces what burns</div>
+        <p class="feature-blurb">Spike days, hot sessions, and burning features get flagged automatically. Optional Notion sync mirrors your daily rollup for the team.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <section class="section-block">
+    <div class="section-eyebrow">Onboarding wizard</div>
+    <h2 class="section-title">A guided checklist on first run</h2>
+    <p class="section-sub">CLI, SwiftBar menubar widget, dashboard daemon, Claude Code skills, post-commit hook — installed one tick at a time, with the trail map building itself beside you as you go.</p>
+    <div class="shot-frame">
+      <img class="shot-img" src="./static/screenshots/welcome-wizard.png" alt="Tokentrail welcome wizard: a five-item install checklist on a parchment-themed page, with an ASCII trail map preview rendering on the right." loading="lazy" width="1192" height="800">
+    </div>
+    <p class="shot-caption">The wizard reflects live state — every box ticks itself as each piece lands.</p>
+  </section>
+
+  <hr class="rule">
+
+  <section class="section-block">
+    <div class="section-eyebrow">Daily dashboard</div>
+    <h2 class="section-title">Where the trail picks up each morning</h2>
+    <p class="section-sub">Cost today, the week so far, sparklines per top feature, and a running list of every commit Tokentrail attributed since you last looked.</p>
+    <div class="shot-frame">
+      <img class="shot-img" src="./static/screenshots/daily-overview.png" alt="Tokentrail overview page: cost sparkline chart, weekly stat block, list of top features with mini-sparklines and percentages, and a recent-commits feed." loading="lazy" width="1192" height="800">
+    </div>
+    <p class="shot-caption">Real data from the local SQLite — no demo numbers, no remote calls.</p>
+  </section>
+
+  <hr class="rule">
   <div class="install-cta">
     <div class="install-label">Blaze the trail</div>
     <a href="#" class="install-prompt" data-copy="brew install loschenbd/tokentrail/tokentrail" aria-label="Copy install command">
@@ -146,6 +223,43 @@ body {
   <div class="cta-row">
     <a href="https://github.com/loschenbd/tokentrail#readme" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">Read the docs</a>
   </div>
+
+  <hr class="rule">
+
+  <section class="section-block">
+    <div class="section-eyebrow">Spot what's burning</div>
+    <h2 class="section-title">Anomalies, surfaced before the bill is</h2>
+    <p class="section-sub">Tokentrail flags spike days, hot sessions, and burning features automatically — pulled together on a single triage view so you don't have to grep your wallet.</p>
+    <div class="shot-frame">
+      <img class="shot-img" src="./static/screenshots/worth-a-look.png" alt="Tokentrail anomalies page: a table of detected spending spikes, each row showing the affected feature, the spike amount versus the week's average, and a snooze action." loading="lazy" width="1192" height="800">
+    </div>
+    <p class="shot-caption">Each row is a real signal from the local model — snooze, investigate, or jump straight into the feature.</p>
+  </section>
+
+  <hr class="rule">
+
+  <section class="section-block">
+    <div class="section-eyebrow">Feature deep-dive</div>
+    <h2 class="section-title">Drill into any feature</h2>
+    <p class="section-sub">Cost over time, a session-level breakdown, and the exact commits that finished the work. Topic clustering groups related sessions when transcripts overlap.</p>
+    <div class="shot-frame">
+      <img class="shot-img" src="./static/screenshots/feature-detail.png" alt="Tokentrail feature detail page for the tokentrail master feature, showing breadcrumb chips, total cost, a trail-elevation cost chart, and a sessions table." loading="lazy" width="1192" height="800">
+    </div>
+    <p class="shot-caption">Branch ↔ feature ↔ PR — the same attribution chain, all the way down.</p>
+  </section>
+
+  <hr class="rule">
+
+  <section class="section-block">
+    <div class="notion-call">
+      <div class="notion-call-eyebrow">Optional — Notion sync</div>
+      <p class="notion-call-text">Tokentrail can mirror your daily rollup into a Notion database — one env var to enable, runs on the same daily cadence as <code>tokentrail rollup</code>. Setup lives in <a href="https://github.com/loschenbd/tokentrail#notion-sync" target="_blank" rel="noopener noreferrer">the README under Notion sync</a>.</p>
+    </div>
+  </section>
+
+  <footer class="tt-footer">
+    <p>Tokentrail — a local ledger and trail-map for Claude Code spend · MIT · <a href="https://github.com/loschenbd/tokentrail" target="_blank" rel="noopener noreferrer">GitHub</a></p>
+  </footer>
 </div>
 </div>
 </div>

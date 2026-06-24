@@ -116,7 +116,6 @@ body {
 .feature-icon.anom-glyph{color:var(--tm-red-bright);font-weight:bold;}
 .feature-headline{font-family:var(--tm-font-serif);font-size:11px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;color:var(--tm-ink);margin-bottom:6px;}
 .feature-blurb{font-size:12px;color:var(--tm-ink-muted);line-height:1.5;}
-@media (max-width:640px){.feature-grid{grid-template-columns:1fr;}}
 .shot-frame{border:1px dashed rgba(139,111,71,0.5);border-radius:3px;padding:8px;background:rgba(255,255,255,0.22);box-shadow:inset 0 2px 8px rgba(61,47,31,0.06);margin-bottom:8px;}
 .shot-img{display:block;width:100%;height:auto;border-radius:2px;}
 .shot-caption{font-style:italic;font-size:11px;color:var(--tm-ink-muted);text-align:center;line-height:1.5;margin:0 auto;max-width:60ch;}
@@ -129,6 +128,74 @@ body {
 .tt-footer{text-align:center;margin-top:20px;padding-top:14px;border-top:1px dashed rgba(139,111,71,0.5);font-size:11px;color:var(--tm-ink-muted);font-style:italic;line-height:1.5;}
 .tt-footer a{color:var(--tm-ink);text-decoration:underline;text-decoration-style:dotted;font-style:normal;}
 .tt-footer a:hover{color:var(--tm-coin);}
+
+.shot-img { cursor: zoom-in; }
+.shot-lightbox {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+  cursor: zoom-out;
+  animation: shotFade 120ms ease-out;
+}
+.shot-lightbox img {
+  max-width: 95vw; max-height: 95vh;
+  object-fit: contain;
+  border-radius: 3px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  cursor: zoom-out;
+}
+@keyframes shotFade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .shot-lightbox { animation: none; }
+}
+
+@media (max-width: 640px) {
+  body { padding: 16px 8px 32px; }
+  .frame-outer { padding: 6px; }
+  .parchment { padding: 20px 14px 18px; }
+  .inner-border { inset: 12px; }
+  .corner-glyph { font-size: 14px; }
+  .corner-glyph.tl { top: 8px; left: 10px; }
+  .corner-glyph.tr { top: 8px; right: 10px; }
+  .corner-glyph.bl { bottom: 8px; left: 10px; }
+  .corner-glyph.br { bottom: 8px; right: 10px; }
+  .map-header { margin-bottom: 10px; }
+  .map-wrap { padding: 8px 10px 12px; }
+  .legend { gap: 8px; font-size: 9px; margin-bottom: 10px; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .stat { padding: 10px 8px; border-right: 1px dashed rgba(139,111,71,0.4); }
+  .stat:nth-child(2n) { border-right: none; }
+  .stat:nth-child(-n+2) { border-bottom: 1px dashed rgba(139,111,71,0.4); }
+  .section-block { margin: 16px 0 4px; }
+  .feature-grid { grid-template-columns: 1fr; }
+  .ascii-map { font-size: clamp(0.65rem, 2.4vw, 0.85rem); letter-spacing: 0.02em; }
+  .install-prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 12px 14px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .install-cmd {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-all;
+    text-align: center;
+  }
+  .install-copy {
+    border-left: none;
+    border-top: 1px dashed rgba(196, 154, 58, 0.4);
+    padding-left: 0;
+    padding-top: 6px;
+    text-align: center;
+  }
+  .install-dollar { display: none; }
+}
 </style>
 </head>
 <body>
@@ -196,7 +263,10 @@ body {
     <h2 class="section-title">A guided checklist on first run</h2>
     <p class="section-sub">CLI, SwiftBar menubar widget, dashboard daemon, Claude Code skills, post-commit hook — installed one tick at a time, with the trail map building itself beside you as you go.</p>
     <div class="shot-frame">
-      <img class="shot-img" src="./static/screenshots/welcome-wizard.png" alt="Tokentrail welcome wizard: a five-item install checklist on a parchment-themed page, with an ASCII trail map preview rendering on the right." loading="lazy" width="1192" height="800">
+      <picture>
+        <source media="(max-width: 640px)" srcset="./static/screenshots/welcome-wizard-mobile.png">
+        <img class="shot-img" src="./static/screenshots/welcome-wizard.png" alt="Tokentrail welcome wizard: a five-item install checklist on a parchment-themed page, with an ASCII trail map preview rendering on the right." loading="lazy" width="1192" height="800">
+      </picture>
     </div>
     <p class="shot-caption">The wizard reflects live state — every box ticks itself as each piece lands.</p>
   </section>
@@ -208,7 +278,10 @@ body {
     <h2 class="section-title">Where the trail picks up each morning</h2>
     <p class="section-sub">Cost today, the week so far, sparklines per top feature, and a running list of every commit Tokentrail attributed since you last looked.</p>
     <div class="shot-frame">
-      <img class="shot-img" src="./static/screenshots/daily-overview.png" alt="Tokentrail overview page: cost sparkline chart, weekly stat block, list of top features with mini-sparklines and percentages, and a recent-commits feed." loading="lazy" width="1192" height="800">
+      <picture>
+        <source media="(max-width: 640px)" srcset="./static/screenshots/daily-overview-mobile.png">
+        <img class="shot-img" src="./static/screenshots/daily-overview.png" alt="Tokentrail overview page: cost sparkline chart, weekly stat block, list of top features with mini-sparklines and percentages, and a recent-commits feed." loading="lazy" width="1192" height="800">
+      </picture>
     </div>
     <p class="shot-caption">Real data from the local SQLite — no demo numbers, no remote calls.</p>
   </section>
@@ -217,7 +290,7 @@ body {
   <div class="install-cta">
     <div class="install-label">Blaze the trail</div>
     <a href="#" class="install-prompt" data-copy="brew install loschenbd/tokentrail/tokentrail" aria-label="Copy install command">
-      <span class="install-dollar">$</span><code class="install-cmd">brew install loschenbd/tokentrail/tokentrail</code>
+      <span class="install-dollar">$</span><code class="install-cmd">brew install loschenbd/tokentrail/tokentrail</code><span class="install-copy">Copy</span>
     </a>
   </div>
   <div class="cta-row">
@@ -231,7 +304,10 @@ body {
     <h2 class="section-title">Anomalies, surfaced before the bill is</h2>
     <p class="section-sub">Tokentrail flags spike days, hot sessions, and burning features automatically — pulled together on a single triage view so you don't have to grep your wallet.</p>
     <div class="shot-frame">
-      <img class="shot-img" src="./static/screenshots/worth-a-look.png" alt="Tokentrail anomalies page: a table of detected spending spikes, each row showing the affected feature, the spike amount versus the week's average, and a snooze action." loading="lazy" width="1192" height="800">
+      <picture>
+        <source media="(max-width: 640px)" srcset="./static/screenshots/worth-a-look-mobile.png">
+        <img class="shot-img" src="./static/screenshots/worth-a-look.png" alt="Tokentrail anomalies page: a table of detected spending spikes, each row showing the affected feature, the spike amount versus the week's average, and a snooze action." loading="lazy" width="1192" height="800">
+      </picture>
     </div>
     <p class="shot-caption">Each row is a real signal from the local model — snooze, investigate, or jump straight into the feature.</p>
   </section>
@@ -243,7 +319,10 @@ body {
     <h2 class="section-title">Drill into any feature</h2>
     <p class="section-sub">Cost over time, a session-level breakdown, and the exact commits that finished the work. Topic clustering groups related sessions when transcripts overlap.</p>
     <div class="shot-frame">
-      <img class="shot-img" src="./static/screenshots/feature-detail.png" alt="Tokentrail feature detail page for the tokentrail master feature, showing breadcrumb chips, total cost, a trail-elevation cost chart, and a sessions table." loading="lazy" width="1192" height="800">
+      <picture>
+        <source media="(max-width: 640px)" srcset="./static/screenshots/feature-detail-mobile.png">
+        <img class="shot-img" src="./static/screenshots/feature-detail.png" alt="Tokentrail feature detail page for the tokentrail master feature, showing breadcrumb chips, total cost, a trail-elevation cost chart, and a sessions table." loading="lazy" width="1192" height="800">
+      </picture>
     </div>
     <p class="shot-caption">Branch ↔ feature ↔ PR — the same attribution chain, all the way down.</p>
   </section>
@@ -272,7 +351,7 @@ body {
   // ═══════════════════════════════════════════════════════════════════
   //  GEOGRAPHY: 78 × 22  (lifted from user-supplied HTML — do not edit)
   // ═══════════════════════════════════════════════════════════════════
-  const BG = [
+  const BG_DESKTOP = [
     "♣♣♣ ♣♣♣  ♣♣♣   ♣♣  ▲  ▲ ▲                        ▲  ▲ ▲  ▲▲   ▲▲▲  ▲ ▲▲",
     "♣♣♣♣♣♣♣ ♣♣♣♣  ♣♣♣  ▲▲  ▲▲         · · ·           ▲▲ ▲▲▲  ▲▲   ▲▲▲▲ ▲▲▲",
     " ♣♣♣♣♣♣ ♣♣♣♣  ♣♣   ▲▲▲  ▲         · · · ·          ▲▲▲ ▲▲   ▲    ▲▲▲▲ ▲▲",
@@ -298,7 +377,7 @@ body {
   ];
 
   // ── TRAIL (lifted from user-supplied HTML — do not edit) ─────────────
-  const TRAIL = [
+  const TRAIL_DESKTOP = [
     {type:'label', r:11, c:0, text:'project*'},
     {type:'path',  r:11, c:8, ch:'─'},
     {type:'path',  r:11, c:9, ch:'─'},
@@ -421,41 +500,176 @@ body {
     {type:'label',  r:13, c:73, text:'v1.0✓'},
   ];
 
+  // ─── PORTRAIT GEOGRAPHY: 32 × 50 (mobile, top-to-bottom flow) ────────
+  const BG_MOBILE = [
+    "▲ ▲▲   ▲▲▲   ▲ ▲ ▲▲   ▲▲▲▲ ▲ ▲▲",
+    " ▲▲▲▲   ▲▲▲▲▲ ▲▲ ▲▲▲▲▲ ▲▲▲ ▲▲▲",
+    "▲▲ ▲▲▲   ▲▲▲▲▲▲▲ ▲▲▲▲▲▲▲ ▲▲▲▲▲",
+    " ▲▲▲▲     ▲▲▲ ▲    ▲▲▲▲ ▲▲▲▲▲ ",
+    "  ▲▲                  ▲▲▲ ▲▲  ",
+    "                                ",
+    "♣ ♣ ♣                      ♣ ♣ ",
+    " ♣♣♣♣                     ♣♣ ♣ ",
+    "  ♣♣                       ♣ ♣ ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ",
+    " ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈",
+    "≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "                                ",
+    "  ∿ ∿ ∿ ∿ ∿                    ",
+    "   ∿ ∿ ∿ ∿                    ",
+    "    ∿ ∿                       ",
+    "                                ",
+  ];
+
+  // ─── PORTRAIT TRAIL: trail flows downward, branches to the side ──────
+  const TRAIL_MOBILE = [
+    { type: 'label',  r: 0,  c: 0,  text: 'project*' },
+    { type: 'path',   r: 1,  c: 4,  ch: '│' },
+    { type: 'path',   r: 2,  c: 4,  ch: '│' },
+    { type: 'coin',   r: 3,  c: 4 },
+    { type: 'cost',   r: 3,  c: 7,  text: '$12' },
+    { type: 'path',   r: 4,  c: 4,  ch: '│' },
+    { type: 'path',   r: 5,  c: 4,  ch: '│' },
+    { type: 'branch', r: 6,  c: 4,  ch: '┬' },
+    { type: 'path',   r: 6,  c: 5,  ch: '─' },
+    { type: 'path',   r: 6,  c: 6,  ch: '─' },
+    { type: 'path',   r: 6,  c: 7,  ch: '─' },
+    { type: 'coin',   r: 6,  c: 9 },
+    { type: 'cost',   r: 6,  c: 12, text: '$47' },
+    { type: 'path',   r: 7,  c: 4,  ch: '│' },
+    { type: 'coin',   r: 8,  c: 4 },
+    { type: 'cost',   r: 8,  c: 7,  text: '$35' },
+    { type: 'path',   r: 9,  c: 4,  ch: '│' },
+    { type: 'merge',  r: 10, c: 4,  pr: '#1' },
+    { type: 'path',   r: 11, c: 4,  ch: '│' },
+    { type: 'path',   r: 12, c: 4,  ch: '│' },
+    { type: 'branch', r: 13, c: 4,  ch: '┼' },
+    { type: 'path',   r: 13, c: 5,  ch: '─' },
+    { type: 'path',   r: 13, c: 6,  ch: '─' },
+    { type: 'path',   r: 13, c: 7,  ch: '─' },
+    { type: 'coin',   r: 13, c: 9 },
+    { type: 'cost',   r: 13, c: 12, text: '$32' },
+    { type: 'path',   r: 14, c: 4,  ch: '│' },
+    { type: 'coin',   r: 15, c: 4 },
+    { type: 'cost',   r: 15, c: 7,  text: '$18' },
+    { type: 'path',   r: 18, c: 4,  ch: '│' },
+    { type: 'path',   r: 19, c: 4,  ch: '│' },
+    { type: 'coin',   r: 20, c: 4 },
+    { type: 'cost',   r: 20, c: 7,  text: '$24' },
+    { type: 'path',   r: 21, c: 4,  ch: '│' },
+    { type: 'merge',  r: 22, c: 4,  pr: '#2,3' },
+    { type: 'path',   r: 23, c: 4,  ch: '│' },
+    { type: 'branch', r: 24, c: 4,  ch: '┬' },
+    { type: 'path',   r: 24, c: 5,  ch: '─' },
+    { type: 'path',   r: 24, c: 6,  ch: '─' },
+    { type: 'path',   r: 24, c: 7,  ch: '─' },
+    { type: 'coin',   r: 24, c: 9 },
+    { type: 'cost',   r: 24, c: 12, text: '$14' },
+    { type: 'path',   r: 25, c: 4,  ch: '│' },
+    { type: 'coin',   r: 26, c: 4 },
+    { type: 'path',   r: 27, c: 4,  ch: '│' },
+    { type: 'branch', r: 28, c: 4,  ch: '┼' },
+    { type: 'path',   r: 28, c: 5,  ch: '─' },
+    { type: 'path',   r: 28, c: 6,  ch: '─' },
+    { type: 'path',   r: 28, c: 7,  ch: '─' },
+    { type: 'coin',   r: 28, c: 9 },
+    { type: 'cost',   r: 28, c: 12, text: '$83' },
+    { type: 'anom',   r: 28, c: 16, text: '!' },
+    { type: 'path',   r: 29, c: 4,  ch: '│' },
+    { type: 'coin',   r: 30, c: 4 },
+    { type: 'cost',   r: 30, c: 7,  text: '$61' },
+    { type: 'path',   r: 31, c: 4,  ch: '│' },
+    { type: 'merge',  r: 32, c: 4,  pr: '#6,7' },
+    { type: 'path',   r: 33, c: 4,  ch: '│' },
+    { type: 'coin',   r: 34, c: 4 },
+    { type: 'path',   r: 35, c: 4,  ch: '│' },
+    { type: 'branch', r: 36, c: 4,  ch: '┬' },
+    { type: 'path',   r: 36, c: 5,  ch: '─' },
+    { type: 'path',   r: 36, c: 6,  ch: '─' },
+    { type: 'path',   r: 36, c: 7,  ch: '─' },
+    { type: 'coin',   r: 36, c: 9 },
+    { type: 'cost',   r: 36, c: 12, text: '$29' },
+    { type: 'path',   r: 37, c: 4,  ch: '│' },
+    { type: 'coin',   r: 38, c: 4 },
+    { type: 'cost',   r: 38, c: 7,  text: '$74' },
+    { type: 'anom',   r: 38, c: 11, text: '!' },
+    { type: 'path',   r: 39, c: 4,  ch: '│' },
+    { type: 'merge',  r: 40, c: 4,  pr: '#9,11' },
+    { type: 'path',   r: 41, c: 4,  ch: '│' },
+    { type: 'cost',   r: 41, c: 7,  text: 'total:$429' },
+    { type: 'trophy', r: 42, c: 3,  text: '⚑' },
+    { type: 'trophy', r: 42, c: 4,  text: '|' },
+    { type: 'trophy', r: 42, c: 5,  text: '|' },
+    { type: 'label',  r: 43, c: 1,  text: ' v1.0✓' },
+  ];
+
   // ─── BUILD FRAME ──────────────────────────────────────────────────────
-  function baseGrid() {
-    return BG.map(l => l.padEnd(80, ' ').split(''));
+  function baseGrid(BG) {
+    const width = Math.max(...BG.map(l => l.length));
+    return BG.map(l => l.padEnd(width, ' ').split(''));
   }
-  function buildFrame(visible, flash) {
-    const grid = baseGrid();
+  function buildFrame(visible, flash, BG, TRAIL) {
+    const width = Math.max(...BG.map(l => l.length));
+    const grid = baseGrid(BG);
     let mergedCount = 0, anomCount = 0;
     for (let i = 0; i < visible && i < TRAIL.length; i++) {
       const s = TRAIL[i];
       const f = flash ? 'F' : 'N';
       if (s.type === 'coin') {
-        if (s.c > 0)    grid[s.r][s.c-1] = `\x01CL${f}\x01`;
-        grid[s.r][s.c]  = `\x01CM${f}\x01`;
-        if (s.c+1 < 80) grid[s.r][s.c+1] = `\x01CR${f}\x01`;
+        if (s.c > 0)       grid[s.r][s.c-1] = `\x01CL${f}\x01`;
+        grid[s.r][s.c]     = `\x01CM${f}\x01`;
+        if (s.c+1 < width) grid[s.r][s.c+1] = `\x01CR${f}\x01`;
       } else if (s.type === 'path') {
         grid[s.r][s.c] = `\x01PA${s.ch}\x01`;
       } else if (s.type === 'branch') {
         grid[s.r][s.c] = `\x01BR${s.ch}\x01`;
       } else if (s.type === 'label') {
-        for (let ci = 0; ci < s.text.length && s.c+ci < 80; ci++)
+        for (let ci = 0; ci < s.text.length && s.c+ci < width; ci++)
           grid[s.r][s.c+ci] = `\x01LA${s.text[ci]}\x01`;
       } else if (s.type === 'cost') {
-        for (let ci = 0; ci < s.text.length && s.c+ci < 80; ci++)
+        for (let ci = 0; ci < s.text.length && s.c+ci < width; ci++)
           grid[s.r][s.c+ci] = `\x01CO${s.text[ci]}\x01`;
       } else if (s.type === 'anom') {
         grid[s.r][s.c] = `\x01AN${s.text}\x01`;
         anomCount++;
       } else if (s.type === 'trophy') {
         const glyph = flash ? 'TF' : 'TN';
-        for (let ci = 0; ci < s.text.length && s.c+ci < 80; ci++)
+        for (let ci = 0; ci < s.text.length && s.c+ci < width; ci++)
           grid[s.r][s.c+ci] = `\x01${glyph}${s.text[ci]}\x01`;
       } else if (s.type === 'merge') {
         grid[s.r][s.c] = `\x01ME${f}X\x01`;
         const pr = s.pr || '';
-        for (let ci = 0; ci < pr.length && s.c+2+ci < 80; ci++)
+        for (let ci = 0; ci < pr.length && s.c+2+ci < width; ci++)
           grid[s.r][s.c+2+ci] = `\x01LA${pr[ci]}\x01`;
         mergedCount++;
       }
@@ -520,42 +734,65 @@ body {
   // ─── ANIMATION ────────────────────────────────────────────────────────
   let step = 0, phase = 'reveal';
   const STEP_MS = 100, HOLD_MS = 2400, FLASH_MS = 220, RESET_MS = 1100;
+
+  const mq = window.matchMedia('(max-width: 640px)');
+  let activeBG    = mq.matches ? BG_MOBILE    : BG_DESKTOP;
+  let activeTRAIL = mq.matches ? TRAIL_MOBILE : TRAIL_DESKTOP;
+  let pendingTimeout = null;
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   function tick() {
     let delay;
     if (phase === 'reveal') {
-      const { html, mergedCount, anomCount } = buildFrame(step, false);
+      const { html, mergedCount, anomCount } = buildFrame(step, false, activeBG, activeTRAIL);
       el.innerHTML = html;
       prsEl.textContent = mergedCount;
       anomEl.textContent = anomCount || '—';
       anomSubEl.textContent = anomCount === 2 ? '1 hot_session · 1 spike_day' : anomCount === 1 ? '1 active' : 'none detected';
       step++;
-      if (step > TRAIL.length) { phase = 'hold'; delay = HOLD_MS; }
+      if (step > activeTRAIL.length) { phase = 'hold'; delay = HOLD_MS; }
       else delay = STEP_MS;
     } else if (phase === 'hold') {
-      const { html, mergedCount, anomCount } = buildFrame(TRAIL.length, true);
+      const { html, mergedCount, anomCount } = buildFrame(activeTRAIL.length, true, activeBG, activeTRAIL);
       el.innerHTML = html; prsEl.textContent = mergedCount;
       anomEl.textContent = anomCount;
       phase = 'flash'; delay = FLASH_MS;
     } else if (phase === 'flash') {
-      const { html, mergedCount } = buildFrame(TRAIL.length, false);
+      const { html, mergedCount } = buildFrame(activeTRAIL.length, false, activeBG, activeTRAIL);
       el.innerHTML = html; prsEl.textContent = mergedCount;
       phase = 'flash2'; delay = FLASH_MS;
     } else if (phase === 'flash2') {
-      const { html, mergedCount } = buildFrame(TRAIL.length, true);
+      const { html, mergedCount } = buildFrame(activeTRAIL.length, true, activeBG, activeTRAIL);
       el.innerHTML = html; prsEl.textContent = mergedCount;
       phase = 'reset'; delay = FLASH_MS;
     } else {
-      const { html } = buildFrame(0, false);
+      const { html } = buildFrame(0, false, activeBG, activeTRAIL);
       el.innerHTML = html; prsEl.textContent = 0;
       anomEl.textContent = '—'; anomSubEl.textContent = 'active';
       step = 0; phase = 'reveal'; delay = RESET_MS;
     }
-    setTimeout(tick, delay);
+    pendingTimeout = setTimeout(tick, delay);
   }
 
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function rebindForViewport() {
+    if (pendingTimeout) clearTimeout(pendingTimeout);
+    activeBG    = mq.matches ? BG_MOBILE    : BG_DESKTOP;
+    activeTRAIL = mq.matches ? TRAIL_MOBILE : TRAIL_DESKTOP;
+    step = 0; phase = 'reveal';
+    if (reduced) {
+      const { html, mergedCount, anomCount } = buildFrame(activeTRAIL.length, false, activeBG, activeTRAIL);
+      el.innerHTML = html;
+      prsEl.textContent = mergedCount;
+      anomEl.textContent = anomCount;
+    } else {
+      tick();
+    }
+  }
+
+  mq.addEventListener('change', rebindForViewport);
+
   if (reduced) {
-    const { html, mergedCount, anomCount } = buildFrame(TRAIL.length, false);
+    const { html, mergedCount, anomCount } = buildFrame(activeTRAIL.length, false, activeBG, activeTRAIL);
     el.innerHTML = html;
     prsEl.textContent = mergedCount;
     anomEl.textContent = anomCount;
@@ -575,6 +812,60 @@ body {
     sessCountEl.textContent = sessToday;
   }
   if (!reduced) setTimeout(() => setInterval(tickStats, 700), 500);
+
+// ─── Screenshot lightbox ──────────────────────────────────────────────
+(function attachLightbox() {
+  const imgs = document.querySelectorAll('.shot-img');
+  if (!imgs.length) return;
+  let overlay = null;
+  let lastTrigger = null;
+  let prevOverflow = '';
+
+  function close() {
+    if (!overlay) return;
+    overlay.remove();
+    overlay = null;
+    document.body.style.overflow = prevOverflow;
+    document.removeEventListener('keydown', onKey);
+    if (lastTrigger && typeof lastTrigger.focus === 'function') lastTrigger.focus();
+    lastTrigger = null;
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+  }
+
+  function open(src, alt, trigger) {
+    if (!src) return; // fail-soft
+    lastTrigger = trigger;
+    prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    overlay = document.createElement('div');
+    overlay.className = 'shot-lightbox';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', alt || 'Screenshot');
+    overlay.tabIndex = -1;
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = alt || '';
+    overlay.appendChild(img);
+    overlay.addEventListener('click', close);
+    document.body.appendChild(overlay);
+    overlay.focus();
+    document.addEventListener('keydown', onKey);
+  }
+
+  imgs.forEach(img => {
+    img.setAttribute('aria-label', 'Open full size');
+    img.addEventListener('click', () => {
+      // Prefer the highest-resolution source available — desktop src is the fallback.
+      const picture = img.closest('picture');
+      const desktopSrc = img.getAttribute('src') || img.currentSrc;
+      open(desktopSrc, img.getAttribute('alt'), img);
+    });
+  });
+})();
 })();
 </script>
 </body>

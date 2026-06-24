@@ -596,7 +596,7 @@ body {
     { type: 'coin',   r: 24, c: 9 },
     { type: 'cost',   r: 24, c: 12, text: '$14' },
     { type: 'path',   r: 25, c: 4,  ch: '│' },
-    { type: 'coin',   r: 26, c: 4 },
+    { type: 'coin',   r: 26, c: 4 },  // no cost tag — commit without attribution
     { type: 'path',   r: 27, c: 4,  ch: '│' },
     { type: 'branch', r: 28, c: 4,  ch: '┼' },
     { type: 'path',   r: 28, c: 5,  ch: '─' },
@@ -812,6 +812,7 @@ body {
     sessCountEl.textContent = sessToday;
   }
   if (!reduced) setTimeout(() => setInterval(tickStats, 700), 500);
+})();
 
 // ─── Screenshot lightbox ──────────────────────────────────────────────
 (function attachLightbox() {
@@ -859,13 +860,12 @@ body {
   imgs.forEach(img => {
     img.setAttribute('aria-label', 'Open full size');
     img.addEventListener('click', () => {
-      // Prefer the highest-resolution source available — desktop src is the fallback.
-      const picture = img.closest('picture');
+      // Open the desktop-resolution fallback src, not the mobile crop the
+      // browser may have selected via <picture><source>.
       const desktopSrc = img.getAttribute('src') || img.currentSrc;
       open(desktopSrc, img.getAttribute('alt'), img);
     });
   });
-})();
 })();
 </script>
 </body>

@@ -129,6 +129,28 @@ body {
 .tt-footer a{color:var(--tm-ink);text-decoration:underline;text-decoration-style:dotted;font-style:normal;}
 .tt-footer a:hover{color:var(--tm-coin);}
 
+.shot-img { cursor: zoom-in; }
+.shot-lightbox {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+  cursor: zoom-out;
+  animation: shotFade 120ms ease-out;
+}
+.shot-lightbox img {
+  max-width: 95vw; max-height: 95vh;
+  object-fit: contain;
+  border-radius: 3px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  cursor: zoom-out;
+}
+@keyframes shotFade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .shot-lightbox { animation: none; }
+}
+
 @media (max-width: 640px) {
   body { padding: 16px 8px 32px; }
   .frame-outer { padding: 6px; }
@@ -620,6 +642,60 @@ body {
     sessCountEl.textContent = sessToday;
   }
   if (!reduced) setTimeout(() => setInterval(tickStats, 700), 500);
+
+// ─── Screenshot lightbox ──────────────────────────────────────────────
+(function attachLightbox() {
+  const imgs = document.querySelectorAll('.shot-img');
+  if (!imgs.length) return;
+  let overlay = null;
+  let lastTrigger = null;
+  let prevOverflow = '';
+
+  function close() {
+    if (!overlay) return;
+    overlay.remove();
+    overlay = null;
+    document.body.style.overflow = prevOverflow;
+    document.removeEventListener('keydown', onKey);
+    if (lastTrigger && typeof lastTrigger.focus === 'function') lastTrigger.focus();
+    lastTrigger = null;
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+  }
+
+  function open(src, alt, trigger) {
+    if (!src) return; // fail-soft
+    lastTrigger = trigger;
+    prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    overlay = document.createElement('div');
+    overlay.className = 'shot-lightbox';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', alt || 'Screenshot');
+    overlay.tabIndex = -1;
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = alt || '';
+    overlay.appendChild(img);
+    overlay.addEventListener('click', close);
+    document.body.appendChild(overlay);
+    overlay.focus();
+    document.addEventListener('keydown', onKey);
+  }
+
+  imgs.forEach(img => {
+    img.setAttribute('aria-label', 'Open full size');
+    img.addEventListener('click', () => {
+      // Prefer the highest-resolution source available — desktop src is the fallback.
+      const picture = img.closest('picture');
+      const desktopSrc = img.getAttribute('src') || img.currentSrc;
+      open(desktopSrc, img.getAttribute('alt'), img);
+    });
+  });
+})();
 })();
 </script>
 </body>

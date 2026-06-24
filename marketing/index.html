@@ -263,7 +263,10 @@ body {
     <h2 class="section-title">A guided checklist on first run</h2>
     <p class="section-sub">CLI, SwiftBar menubar widget, dashboard daemon, Claude Code skills, post-commit hook — installed one tick at a time, with the trail map building itself beside you as you go.</p>
     <div class="shot-frame">
-      <img class="shot-img" src="./static/screenshots/welcome-wizard.png" alt="Tokentrail welcome wizard: a five-item install checklist on a parchment-themed page, with an ASCII trail map preview rendering on the right." loading="lazy" width="1192" height="800">
+      <picture>
+        <source media="(max-width: 640px)" srcset="./static/screenshots/welcome-wizard-mobile.png">
+        <img class="shot-img" src="./static/screenshots/welcome-wizard.png" alt="Tokentrail welcome wizard: a five-item install checklist on a parchment-themed page, with an ASCII trail map preview rendering on the right." loading="lazy" width="1192" height="800">
+      </picture>
     </div>
     <p class="shot-caption">The wizard reflects live state — every box ticks itself as each piece lands.</p>
   </section>
@@ -275,7 +278,10 @@ body {
     <h2 class="section-title">Where the trail picks up each morning</h2>
     <p class="section-sub">Cost today, the week so far, sparklines per top feature, and a running list of every commit Tokentrail attributed since you last looked.</p>
     <div class="shot-frame">
-      <img class="shot-img" src="./static/screenshots/daily-overview.png" alt="Tokentrail overview page: cost sparkline chart, weekly stat block, list of top features with mini-sparklines and percentages, and a recent-commits feed." loading="lazy" width="1192" height="800">
+      <picture>
+        <source media="(max-width: 640px)" srcset="./static/screenshots/daily-overview-mobile.png">
+        <img class="shot-img" src="./static/screenshots/daily-overview.png" alt="Tokentrail overview page: cost sparkline chart, weekly stat block, list of top features with mini-sparklines and percentages, and a recent-commits feed." loading="lazy" width="1192" height="800">
+      </picture>
     </div>
     <p class="shot-caption">Real data from the local SQLite — no demo numbers, no remote calls.</p>
   </section>
@@ -298,7 +304,10 @@ body {
     <h2 class="section-title">Anomalies, surfaced before the bill is</h2>
     <p class="section-sub">Tokentrail flags spike days, hot sessions, and burning features automatically — pulled together on a single triage view so you don't have to grep your wallet.</p>
     <div class="shot-frame">
-      <img class="shot-img" src="./static/screenshots/worth-a-look.png" alt="Tokentrail anomalies page: a table of detected spending spikes, each row showing the affected feature, the spike amount versus the week's average, and a snooze action." loading="lazy" width="1192" height="800">
+      <picture>
+        <source media="(max-width: 640px)" srcset="./static/screenshots/worth-a-look-mobile.png">
+        <img class="shot-img" src="./static/screenshots/worth-a-look.png" alt="Tokentrail anomalies page: a table of detected spending spikes, each row showing the affected feature, the spike amount versus the week's average, and a snooze action." loading="lazy" width="1192" height="800">
+      </picture>
     </div>
     <p class="shot-caption">Each row is a real signal from the local model — snooze, investigate, or jump straight into the feature.</p>
   </section>
@@ -310,7 +319,10 @@ body {
     <h2 class="section-title">Drill into any feature</h2>
     <p class="section-sub">Cost over time, a session-level breakdown, and the exact commits that finished the work. Topic clustering groups related sessions when transcripts overlap.</p>
     <div class="shot-frame">
-      <img class="shot-img" src="./static/screenshots/feature-detail.png" alt="Tokentrail feature detail page for the tokentrail master feature, showing breadcrumb chips, total cost, a trail-elevation cost chart, and a sessions table." loading="lazy" width="1192" height="800">
+      <picture>
+        <source media="(max-width: 640px)" srcset="./static/screenshots/feature-detail-mobile.png">
+        <img class="shot-img" src="./static/screenshots/feature-detail.png" alt="Tokentrail feature detail page for the tokentrail master feature, showing breadcrumb chips, total cost, a trail-elevation cost chart, and a sessions table." loading="lazy" width="1192" height="800">
+      </picture>
     </div>
     <p class="shot-caption">Branch ↔ feature ↔ PR — the same attribution chain, all the way down.</p>
   </section>

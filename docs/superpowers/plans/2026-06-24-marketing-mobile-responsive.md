@@ -219,7 +219,7 @@ git commit -m "feat(marketing): stack install CTA and never ellipsize brew cmd o
 
 - [ ] **Step 1: Write a Playwright verification test as a runnable JS expression**
 
-This codebase has no JS unit-test framework for the marketing site — verification IS the Playwright sequence. Save the following sequence as the spec you'll run after implementation, then keep it as a comment block at the bottom of `marketing/index.html`:
+This codebase has no JS unit-test framework for the marketing site — verification IS the Playwright sequence. Hold the following sequence as the contract you'll run against the live page after implementation (record it in the PR description, NOT in `index.html` — the production file stays free of test-only commentary):
 
 ```
 LIGHTBOX VERIFICATION (Playwright):
@@ -360,17 +360,18 @@ In `marketing/index.html`, inside the IIFE:
 - Rename `const BG = [...]` → `const BG_DESKTOP = [...]`
 - Rename `const TRAIL = [...]` → `const TRAIL_DESKTOP = [...]`
 
-Update `baseGrid()` to take the dataset as a parameter:
+Update `baseGrid()` to take the dataset as a parameter and pad all rows to the widest row's width so both datasets work:
 
 ```js
 function baseGrid(BG) {
-  return BG.map(l => l.padEnd(l.length, ' ').split(''));
+  const width = Math.max(...BG.map(l => l.length));
+  return BG.map(l => l.padEnd(width, ' ').split(''));
 }
 ```
 
-Note: `BG_DESKTOP` rows are 78 characters and were previously padded to 80. Replace `l.padEnd(80, ' ')` with `l.padEnd(BG[0].length, ' ')` so it works for both datasets regardless of width.
+(Previously the function hardcoded `padEnd(80, ' ')` for the 78-char desktop rows. Computing the width per call removes the magic number and works for both datasets regardless of row count or width.)
 
-Update `buildFrame()` similarly to take `(visible, flash, BG, TRAIL)` as parameters, and update every reference to `TRAIL` inside `buildFrame()` to use the passed parameter. Update the grid-width clamp (`s.c+1 < 80`, `s.c+ci < 80`, etc.) to use `BG[0].length` instead of `80`.
+Update `buildFrame()` similarly to take `(visible, flash, BG, TRAIL)` as parameters, and update every reference to `TRAIL` inside `buildFrame()` to use the passed parameter. Update the grid-width clamp (`s.c+1 < 80`, `s.c+ci < 80`, etc.) to use the same computed width — call it once at the top of the function: `const width = Math.max(...BG.map(l => l.length));` and use `width` in place of every `80`.
 
 - [ ] **Step 2: Add the portrait dataset**
 

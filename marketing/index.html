@@ -149,6 +149,30 @@ body {
   .section-block { margin: 16px 0 4px; }
   .feature-grid { grid-template-columns: 1fr; }
   .ascii-map { font-size: clamp(0.65rem, 2.4vw, 0.85rem); letter-spacing: 0.02em; }
+  .install-prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 12px 14px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .install-cmd {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-all;
+    text-align: center;
+  }
+  .install-copy {
+    border-left: none;
+    border-top: 1px dashed rgba(196, 154, 58, 0.4);
+    padding-left: 0;
+    padding-top: 6px;
+    text-align: center;
+  }
+  .install-dollar { display: none; }
 }
 </style>
 </head>
@@ -238,7 +262,7 @@ body {
   <div class="install-cta">
     <div class="install-label">Blaze the trail</div>
     <a href="#" class="install-prompt" data-copy="brew install loschenbd/tokentrail/tokentrail" aria-label="Copy install command">
-      <span class="install-dollar">$</span><code class="install-cmd">brew install loschenbd/tokentrail/tokentrail</code>
+      <span class="install-dollar">$</span><code class="install-cmd">brew install loschenbd/tokentrail/tokentrail</code><span class="install-copy">Copy</span>
     </a>
   </div>
   <div class="cta-row">

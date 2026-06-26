@@ -13,6 +13,29 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH"
 URL="http://127.0.0.1:4920/"
 LOG="/tmp/tokentrail-dashboard.log"
 
+# `tokentrail` resolves its SQLite path from $TRACKER_DB_PATH, falling back
+# to cwd-relative `data/tracker.db`. Apps launched via Finder inherit no
+# meaningful cwd, so we must pin the path explicitly — otherwise the
+# dashboard spawns a fresh empty DB somewhere unhelpful and the user sees
+# zero history despite having data from CLI runs. Search common locations
+# for an existing DB and reuse it; otherwise fall back to the standard
+# macOS Application Support location.
+if [ -z "$TRACKER_DB_PATH" ]; then
+  for candidate in \
+    "$HOME/Projects/tokentrail/data/tracker.db" \
+    "$HOME/tokentrail/data/tracker.db" \
+    "$HOME/Library/Application Support/tokentrail/tracker.db"
+  do
+    if [ -f "$candidate" ]; then
+      export TRACKER_DB_PATH="$candidate"
+      break
+    fi
+  done
+  if [ -z "$TRACKER_DB_PATH" ]; then
+    export TRACKER_DB_PATH="$HOME/Library/Application Support/tokentrail/tracker.db"
+  fi
+fi
+
 probe() {
   curl -fsS --max-time 0.4 "$URL" -o /dev/null 2>&1
 }

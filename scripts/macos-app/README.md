@@ -40,6 +40,21 @@ skips that step.
 
 Logs from the spawned dashboard go to `/tmp/tokentrail-dashboard.log`.
 
+## Data directory
+
+`tokentrail` resolves its SQLite path from `$TRACKER_DB_PATH`, falling
+back to `<cwd>/data/tracker.db`. Apps launched from Finder/Spotlight
+inherit no meaningful cwd, so the launcher pins `$TRACKER_DB_PATH`
+explicitly. Search order:
+
+1. `~/Projects/tokentrail/data/tracker.db` (typical dev-checkout layout)
+2. `~/tokentrail/data/tracker.db`
+3. `~/Library/Application Support/tokentrail/tracker.db` (created fresh
+   if none of the above exist)
+
+If your data lives somewhere else, set `TRACKER_DB_PATH` in your shell
+profile or edit `launch.sh` directly before `make app`.
+
 ## Notes
 
 - Apps launched from Finder/Spotlight inherit a minimal `PATH`; the

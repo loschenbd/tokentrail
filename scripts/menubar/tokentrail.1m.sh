@@ -25,6 +25,13 @@
 
 set -u
 
+# Resolve $0 through any symlinks (SwiftBar installs plugins via symlink
+# from ~/Library/Application Support/SwiftBar/, so $0 is typically the
+# link path, not the repo path). We need the real path to locate sibling
+# scripts (tokentrail-power-off.sh) for the Power off menu action.
+PLUGIN_REAL_PATH="$(perl -MCwd=abs_path -le 'print abs_path(shift)' "$0")"
+export TT_POWER_OFF_SCRIPT="$(dirname "$PLUGIN_REAL_PATH")/tokentrail-power-off.sh"
+
 # Load nvm so a user's default node ends up on PATH.
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
   export NVM_DIR="$HOME/.nvm"
@@ -99,13 +106,15 @@ function fmtAgo(ms) {
 }
 
 function renderError(message) {
-  return [
+  const lines = [
     `$— | color=#8b6f47`,
     `---`,
     `${message} | color=#8b6f47`,
     `Install / docs | href=${REPO_URL}`,
     `Refresh | refresh=true`,
-  ].join('\n');
+  ];
+  appendPowerOff(lines);
+  return lines.join('\n');
 }
 
 function sanitizeLabel(s) {
@@ -178,7 +187,23 @@ function renderHappy(data) {
   lines.push(`Open dashboard | href=${DASHBOARD_URL}/`);
   lines.push(`Today | href=${DASHBOARD_URL}/today`);
   lines.push('Refresh | refresh=true');
+  appendPowerOff(lines);
   return lines.join('\n');
+}
+
+// Power off menu item — kills the dashboard daemon and quits SwiftBar.
+// Only rendered when the sibling script is present and executable, so
+// users who haven't pulled the latest scripts/menubar/ don't see a
+// broken-on-click menu item.
+function appendPowerOff(lines) {
+  const script = process.env.TT_POWER_OFF_SCRIPT;
+  if (!script) return;
+  try {
+    require('fs').accessSync(script, require('fs').constants.X_OK);
+  } catch {
+    return;
+  }
+  lines.push(`Power off | shell=${script} terminal=false ${META_STYLE}`);
 }
 
 (async () => {

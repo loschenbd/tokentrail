@@ -32,6 +32,12 @@ in Finder and choosing **Open** — macOS then remembers your approval.
 | Daemon not running, `tokentrail` on PATH | Spawns `tokentrail dashboard --no-open` detached, polls for ~4 s, opens browser when ready |
 | `tokentrail` not installed             | Shows alert: "Install with: brew install loschenbd/tokentrail/tokentrail" |
 
+The launcher additionally starts **SwiftBar** (so the `tokentrail.1m.sh`
+menubar plugin under `scripts/menubar/` becomes visible) if SwiftBar is
+installed at `/Applications/SwiftBar.app` and isn't already running.
+SwiftBar is optional — if it's not installed, the launcher silently
+skips that step.
+
 Logs from the spawned dashboard go to `/tmp/tokentrail-dashboard.log`.
 
 ## Notes

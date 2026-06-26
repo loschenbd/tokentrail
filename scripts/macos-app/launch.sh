@@ -1,7 +1,8 @@
 #!/bin/bash
 # Tokentrail.app launcher. Opens the local dashboard in the browser.
 # If the dashboard server isn't running, spawns it detached and waits
-# briefly for it to come up before opening.
+# briefly for it to come up before opening. Also starts SwiftBar (for
+# the menubar plugin) if it's installed and not already running.
 
 set -e
 
@@ -15,6 +16,13 @@ LOG="/tmp/tokentrail-dashboard.log"
 probe() {
   curl -fsS --max-time 0.4 "$URL" -o /dev/null 2>&1
 }
+
+# Start SwiftBar (which runs the tokentrail.1m.sh menubar plugin) if it's
+# installed and not already running. Optional — silently skip otherwise.
+# `-g` keeps SwiftBar from stealing focus from the browser tab we open below.
+if [ -d "/Applications/SwiftBar.app" ] && ! pgrep -x SwiftBar >/dev/null 2>&1; then
+  open -g -a SwiftBar 2>/dev/null || true
+fi
 
 if probe; then
   open "$URL"

@@ -261,7 +261,7 @@ body {
   <section class="section-block">
     <div class="section-eyebrow">Onboarding wizard</div>
     <h2 class="section-title">A guided checklist on first run</h2>
-    <p class="section-sub">CLI, SwiftBar menubar widget, dashboard daemon, Claude Code skills, post-commit hook — installed one tick at a time, with the trail map building itself beside you as you go.</p>
+    <p class="section-sub">CLI, SwiftBar menubar widget, dashboard daemon, Claude Code skills, session-end hook, and a clickable Tokentrail.app launcher — installed one tick at a time, with the trail map building itself beside you as you go.</p>
     <div class="shot-frame">
       <picture>
         <source media="(max-width: 640px)" srcset="./static/screenshots/welcome-wizard-mobile.png">
@@ -289,8 +289,8 @@ body {
   <hr class="rule">
   <div class="install-cta">
     <div class="install-label">Blaze the trail</div>
-    <a href="#" class="install-prompt" data-copy="brew install loschenbd/tokentrail/tokentrail" aria-label="Copy install command">
-      <span class="install-dollar">$</span><code class="install-cmd">brew install loschenbd/tokentrail/tokentrail</code><span class="install-copy">Copy</span>
+    <a href="#" class="install-prompt" data-copy="brew install loschenbd/tokentrail/tokentrail && tokentrail init" aria-label="Copy install command">
+      <span class="install-dollar">$</span><code class="install-cmd">brew install loschenbd/tokentrail/tokentrail &amp;&amp; tokentrail init</code><span class="install-copy">Copy</span>
     </a>
   </div>
   <div class="cta-row">

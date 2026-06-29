@@ -320,6 +320,7 @@ program
   .option('--skip-swiftbar', 'Skip the SwiftBar plugin step.')
   .option('--skip-daemon', "Skip the launchd dashboard daemon step.")
   .option('--skip-hook', "Skip installing the session-end hook into this repo.")
+  .option('--skip-app', 'Skip symlinking Tokentrail.app into ~/Applications/.')
   .option('--node-path <path>', 'Override the tokentrail binary path written into the launchd plist (rarely needed).')
   .action(
     async (opts: {
@@ -328,6 +329,7 @@ program
       skipSwiftbar?: boolean;
       skipDaemon?: boolean;
       skipHook?: boolean;
+      skipApp?: boolean;
       nodePath?: string;
     }) => {
       const { runInit } = await import('./commands/init.js');

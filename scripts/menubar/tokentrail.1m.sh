@@ -22,6 +22,16 @@
 # <bitbar.author>Tokentrail</bitbar.author>
 # <bitbar.desc>Today's Claude Code spend, refreshed every minute.</bitbar.desc>
 # <bitbar.environment>[PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin]</bitbar.environment>
+#
+# Hide SwiftBar's per-plugin footer (Updated X Ago, Run in Terminal,
+# Disable Plugin, About, SwiftBar submenu). Our own dropdown items
+# (Open dashboard, Power off) are all the user needs; SwiftBar's
+# debug-oriented defaults are noise.
+# <swiftbar.hideAbout>true</swiftbar.hideAbout>
+# <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
+# <swiftbar.hideLastUpdated>true</swiftbar.hideLastUpdated>
+# <swiftbar.hideDisablePlugin>true</swiftbar.hideDisablePlugin>
+# <swiftbar.hideSwiftBar>true</swiftbar.hideSwiftBar>
 
 set -u
 
@@ -111,7 +121,6 @@ function renderError(message) {
     `---`,
     `${message} | color=#8b6f47`,
     `Install / docs | href=${REPO_URL}`,
-    `Refresh | refresh=true`,
   ];
   appendPowerOff(lines);
   return lines.join('\n');
@@ -185,8 +194,6 @@ function renderHappy(data) {
 
   lines.push('---');
   lines.push(`Open dashboard | href=${DASHBOARD_URL}/`);
-  lines.push(`Today | href=${DASHBOARD_URL}/today`);
-  lines.push('Refresh | refresh=true');
   appendPowerOff(lines);
   return lines.join('\n');
 }

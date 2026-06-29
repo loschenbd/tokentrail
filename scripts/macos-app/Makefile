@@ -4,13 +4,15 @@
 #   make install   → builds + copies the .app to /Applications/
 #   make clean     → removes dist/
 #
-# The .app is a thin launcher: it opens http://127.0.0.1:9876/ in your
+# The .app is a thin launcher: it opens http://127.0.0.1:4920/ in your
 # browser, spawning the dashboard server first if needed. See launch.sh.
 
 APP_NAME   := Tokentrail
 BUNDLE_ID  := com.benjaminloschen.tokentrail
-REPO_ROOT  := $(shell git rev-parse --show-toplevel)
-VERSION    := $(shell node -p "require('$(REPO_ROOT)/package.json').version")
+# REPO_ROOT falls back to a Makefile-relative path so this builds inside
+# the Homebrew install sandbox (no .git/, no `git rev-parse`).
+REPO_ROOT  ?= $(shell git rev-parse --show-toplevel 2>/dev/null || realpath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
+VERSION    ?= $(shell node -p "require('$(REPO_ROOT)/package.json').version")
 DIST       := dist
 APP        := $(DIST)/$(APP_NAME).app
 ICON_SRC   := $(REPO_ROOT)/docs/logo.png

@@ -1,4 +1,4 @@
-import { describe, test } from 'node:test';
+import { describe, test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';
@@ -126,5 +126,64 @@ describe('inferMainlineFeatures()', () => {
     const second = await inferMainlineFeatures(db);
     assert.equal(first.sessionsRelabeled, 1);
     assert.equal(second.sessionsRelabeled, 0);
+  });
+
+  test('Rule B: non-conventional commit subjects get LLM-named features', async () => {
+    const db = makeDb();
+    seed(db);
+    db.exec(`
+      INSERT INTO session_commits (session_id, commit_sha, subject, authored_at) VALUES
+        ('s1', 'a', 'whatever I did today', '2026-06-29T10:00:00Z'),
+        ('s1', 'b', 'more progress on the thing', '2026-06-29T12:00:00Z');
+      INSERT INTO usage_events (id, session_id, timestamp, repo, branch, model, estimated_cost_usd) VALUES
+        ('e1', 's1', '2026-06-29T11:00:00Z', 'octo/tokentrail', 'main', 'm', 0.1),
+        ('e2', 's1', '2026-06-29T12:30:00Z', 'octo/tokentrail', 'main', 'm', 0.1);
+    `);
+
+    const fakeClient = {
+      backend: 'openrouter' as const,
+      model: 'anthropic/claude-haiku-4.5',
+      client: {
+        chat: {
+          completions: {
+            create: mock.fn(async () => ({
+              choices: [{ message: { content: JSON.stringify({
+                labels: [
+                  { commit_sha: 'a', topic_slug: 'menubar-rework' },
+                  { commit_sha: 'b', topic_slug: 'menubar-rework' },
+                ],
+              })}}],
+            })),
+          },
+        },
+      } as any,
+    };
+    const summary = await inferMainlineFeatures(db, { getLLMClient: () => fakeClient });
+    assert.equal(summary.llmCalls, 1);
+    const rows = db.prepare(`SELECT inferred_feature_key, inference_source FROM usage_events WHERE session_id='s1'`).all() as Array<{inferred_feature_key:string; inference_source:string}>;
+    assert.ok(rows.every(r => r.inferred_feature_key === 'menubar-rework'));
+    assert.ok(rows.every(r => r.inference_source === 'session-title-llm'));
+  });
+
+  test('Rule B malformed response → falls to no-signal, summary.llmCalls still 1', async () => {
+    const db = makeDb();
+    seed(db);
+    db.exec(`
+      INSERT INTO session_commits (session_id, commit_sha, subject, authored_at) VALUES
+        ('s1', 'a', 'whatever I did today', '2026-06-29T10:00:00Z');
+      INSERT INTO usage_events (id, session_id, timestamp, repo, branch, model, estimated_cost_usd) VALUES
+        ('e1', 's1', '2026-06-29T11:00:00Z', 'octo/tokentrail', 'main', 'm', 0.1);
+    `);
+    const fakeClient = {
+      backend: 'openrouter' as const,
+      model: 'anthropic/claude-haiku-4.5',
+      client: { chat: { completions: { create: mock.fn(async () => ({ choices: [{ message: { content: 'not json' }}]})) }} } as any,
+    };
+
+    const summary = await inferMainlineFeatures(db, { getLLMClient: () => fakeClient });
+    assert.equal(summary.llmCalls, 1);
+    const r = db.prepare(`SELECT inferred_feature_key, inference_source FROM usage_events WHERE session_id='s1'`).get() as {inferred_feature_key:string; inference_source:string};
+    assert.equal(r.inferred_feature_key, 'uncategorized-mainline');
+    assert.equal(r.inference_source, 'no-signal');
   });
 });

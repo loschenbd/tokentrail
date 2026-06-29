@@ -23,6 +23,8 @@ and the dashboard will show a "no trail yet" hint instead of charts.
 **Via Homebrew (recommended):**
 
 ```bash
+brew install loschenbd/tokentrail/tokentrail && tokentrail init
+# Or run them separately and use the onboarding wizard:
 brew install loschenbd/tokentrail/tokentrail
 tokentrail dashboard               # opens onboarding wizard at /welcome
 ```
@@ -34,7 +36,7 @@ git clone https://github.com/loschenbd/tokentrail
 cd tokentrail
 npm install
 npm run build
-node dist/src/index.js init        # SwiftBar plugin + dashboard daemon + Claude skills + hook
+node dist/src/index.js init        # SwiftBar + daemon + Claude skills + hook + Tokentrail.app
 ```
 
 After `brew install` (or `npm install`) finishes, open the dashboard and
@@ -54,11 +56,13 @@ which does all of that non-interactively.
 plugin into `~/Library/Application Support/SwiftBar/`, writes a
 `com.tokentrail.daemon` launchd plist so the dashboard auto-starts at
 login, symlinks the Claude Code skill and `/today` + `/rollup` +
-`/anomalies` slash
-commands into `~/.claude/`, and adds Tokentrail's Stop hook to this
-repo's `.claude/settings.json`. Re-runnable; pass `--dry-run` to preview
-or `--force` to replace existing entries. Skip individual steps with
-`--skip-swiftbar`, `--skip-daemon`, or `--skip-hook`.
+`/anomalies` slash commands into `~/.claude/`, adds Tokentrail's Stop
+hook to this repo's `.claude/settings.json`, and symlinks
+`Tokentrail.app` into `~/Applications/` so the launcher is one click
+away from Spotlight / LaunchPad. Re-runnable; pass `--dry-run` to
+preview or `--force` to replace existing entries. Skip individual
+steps with `--skip-swiftbar`, `--skip-daemon`, `--skip-hook`, or
+`--skip-app`.
 
 Once `init` finishes, the menu bar widget shows today's running total
 within a minute and the dashboard is live at `http://127.0.0.1:4920`.
@@ -148,7 +152,7 @@ land, so you don't want it committed.
 ## Commands
 
 ```
-tokentrail init        # One-shot setup: SwiftBar + daemon + Claude skills + hook.
+tokentrail init        # One-shot setup: SwiftBar + daemon + Claude skills + hook + Tokentrail.app.
 tokentrail ingest      # Load new usage events into the local ledger.
 tokentrail enrich      # Pull PR metadata for branches we've seen.
 tokentrail rollup      # Aggregate events into daily feature rollups.

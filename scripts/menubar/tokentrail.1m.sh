@@ -74,17 +74,35 @@ const FETCH_TIMEOUT_MS = 2000;
 const TREE_BRANCH = '├';
 const TREE_LAST = '└';
 
-// SwiftBar font params. Menlo (monospace, shipped with macOS) is used
-// anywhere we need right-aligned columnar values via padding.
-const HERO_SUB = 'sfimage=clock sfcolor=#8b6f47 color=#8b6f47 size=12';
-const STAT_FONT = 'font=Menlo size=12';
-// Sparkline bumped to size=22 so the trend is glanceable, not buried.
-const SPARK_FONT = 'font=Menlo size=22 color=#6b563d';
-const SPARK_LABEL = 'color=#8b6f47 size=10';
-const PROJECT_FONT = 'font=Menlo-Bold size=13';
-const FEATURE_STYLE = 'color=#6b563d size=11';
-const META_STYLE = 'color=#6b563d size=11';
-const SECTION_LABEL = 'color=#8b6f47 size=10';
+// Brand palette as semantic tokens, with light/dark mode pairs on
+// every color so the plugin reads cleanly in both appearances.
+//   strong   — body / headline text (4.5:1 on parchment / dark)
+//   medium   — secondary stat values, sparkline data ink
+//   muted    — section labels, freshness / "ago" text (large-text 3:1)
+//   amber    — warning / "Worth a look" SF Symbol (burnt amber light,
+//              bright amber dark; both ≥4.5:1 against expected bg)
+//   red      — destructive (Power off) — warm terracotta light, Apple
+//              systemRed dark variant
+const C_STRONG = '#3a2f1f,#e5d3a7';
+const C_MEDIUM = '#6b563d,#c4a373';
+const C_MUTED  = '#8b6f47,#c4a373';
+const C_AMBER  = '#B85C00,#F5B547';
+const C_RED    = '#C0392B,#FF453A';
+const C_SPARK  = '#5a4630,#c4a373';
+
+const HERO_SUB = `sfimage=clock sfcolor=${C_MUTED} color=${C_MUTED} size=12`;
+// Today is the headline — promoted to bold/13 (same weight as project
+// rows) so it visually anchors the dropdown. 7d/30d stay regular/12 as
+// supporting context.
+const STAT_HEADLINE_FONT = `font=Menlo-Bold size=13 color=${C_STRONG}`;
+const STAT_FONT = `font=Menlo size=12 color=${C_MEDIUM}`;
+const SPARK_FONT = `font=Menlo size=22 color=${C_SPARK}`;
+const SPARK_LABEL = `color=${C_MUTED} size=10`;
+const PROJECT_FONT = `font=Menlo-Bold size=13 color=${C_STRONG}`;
+const FEATURE_STYLE = `color=${C_MEDIUM} size=11`;
+const META_STYLE = `color=${C_MEDIUM} size=11`;
+const SECTION_LABEL = `color=${C_MUTED} size=10`;
+const ACTION_STYLE = `color=${C_STRONG}`;
 
 // Right-align values in monospace columns. Adjust LABEL_W / VALUE_W to
 // taste. SwiftBar uses true monospace Menlo, so padding gives clean
@@ -141,10 +159,10 @@ function fmtAgo(ms) {
 }
 
 function renderError(message) {
-  const lines = [`$— | color=#8b6f47`, `---`];
-  lines.push(`${message} | sfimage=exclamationmark.triangle sfcolor=#8b6f47 color=#8b6f47 size=12`);
+  const lines = [`$— | color=${C_MUTED}`, `---`];
+  lines.push(`${message} | sfimage=exclamationmark.triangle sfcolor=${C_MUTED} color=${C_MUTED} size=12`);
   lines.push('---');
-  lines.push(`Install / docs | href=${REPO_URL} sfimage=book`);
+  lines.push(`Install / docs | href=${REPO_URL} sfimage=book ${ACTION_STYLE}`);
   appendPowerOff(lines);
   return lines.join('\n');
 }
@@ -174,7 +192,7 @@ function renderHappy(data) {
   // its context once it leaves the hero.
   const deltaText = fmtDelta(menubar.deltaVsYesterday);
   const todayValue = deltaText ? `${fmtUsd(data.todayUsd)} ${deltaText}` : fmtUsd(data.todayUsd);
-  lines.push(`${padRow('Today', todayValue)} | ${STAT_FONT}`);
+  lines.push(`${padRow('Today', todayValue)} | ${STAT_HEADLINE_FONT}`);
   lines.push(`${padRow('Last 7d', fmtUsd(menubar.last7Usd))} | ${STAT_FONT}`);
   lines.push(`${padRow('Last 30d', fmtUsd(menubar.last30Usd))} | ${STAT_FONT}`);
   lines.push('---');
@@ -222,7 +240,7 @@ function renderHappy(data) {
   }
 
   lines.push('---');
-  lines.push(`Open dashboard | href=${DASHBOARD_URL}/ sfimage=chart.line.uptrend.xyaxis`);
+  lines.push(`Open dashboard | href=${DASHBOARD_URL}/ sfimage=chart.line.uptrend.xyaxis ${ACTION_STYLE}`);
   appendPowerOff(lines);
   return lines.join('\n');
 }
@@ -244,11 +262,13 @@ function appendFreshness(lines, projectCount, lastEventAt) {
 function appendWorthALook(lines, anomalyCount) {
   const url = `${DASHBOARD_URL}/worth-a-look`;
   if (anomalyCount > 0) {
+    // Amber warning — promoted to bold/13 (same weight as Today)
+    // because this row is a callout, not background context.
     const label = sanitizeLabel(padRow('Worth a look', `${anomalyCount} active`));
-    lines.push(`${label} | href=${url} sfimage=exclamationmark.triangle.fill sfcolor=systemYellow ${STAT_FONT}`);
+    lines.push(`${label} | href=${url} sfimage=exclamationmark.triangle.fill sfcolor=${C_AMBER} ${STAT_HEADLINE_FONT}`);
   } else {
     const label = sanitizeLabel(padRow('Worth a look', '—'));
-    lines.push(`${label} | href=${url} sfimage=checkmark.circle sfcolor=#8b6f47 ${STAT_FONT} color=#8b6f47`);
+    lines.push(`${label} | href=${url} sfimage=checkmark.circle sfcolor=${C_MUTED} ${STAT_FONT}`);
   }
 }
 
@@ -264,7 +284,11 @@ function appendPowerOff(lines) {
   } catch {
     return;
   }
-  lines.push(`Power off | shell=${script} terminal=false sfimage=power sfcolor=systemRed`);
+  // Text stays neutral (system label) — only the icon carries the
+  // destructive-action red. Standard macOS pattern for "quit" / "log out"
+  // / "delete" rows. C_RED is hex-pair (terracotta light, Apple red dark)
+  // because SwiftBar's sfcolor parser doesn't recognize "systemRed".
+  lines.push(`Power off | shell=${script} terminal=false sfimage=power sfcolor=${C_RED} ${ACTION_STYLE}`);
 }
 
 (async () => {

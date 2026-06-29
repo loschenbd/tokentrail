@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { readSettings, type LLMBackend } from './settings.js';
+import { readSettings, type LLMBackend, type Settings } from './settings.js';
 
 export type LLMClient = {
   backend: 'openrouter' | 'ollama';
@@ -11,7 +11,7 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 export function getLLMClient(): LLMClient | null {
   const settings = readSettings();
-  const backend = resolveBackend(settings.llm.backend);
+  const backend = resolveBackend(settings.llm.backend, settings);
 
   if (backend === 'openrouter') {
     const apiKey = process.env.OPENROUTER_API_KEY ?? settings.llm.openrouter.apiKey;
@@ -39,14 +39,14 @@ export function getLLMClient(): LLMClient | null {
   return null;
 }
 
-function resolveBackend(setting: LLMBackend): 'openrouter' | 'ollama' | 'none' {
+function resolveBackend(setting: LLMBackend, settings: Settings): 'openrouter' | 'ollama' | 'none' {
   const envOverride = process.env.TOKENTRAIL_LLM_BACKEND as LLMBackend | undefined;
   const choice = envOverride ?? setting;
   if (choice === 'openrouter' || choice === 'ollama') return choice;
   if (choice === 'none') return 'none';
   // auto: no network probe — pick openrouter if key set, else none.
   // Users wanting ollama must select it explicitly in settings.
-  if (process.env.OPENROUTER_API_KEY || readSettings().llm.openrouter.apiKey) {
+  if (process.env.OPENROUTER_API_KEY || settings.llm.openrouter.apiKey) {
     return 'openrouter';
   }
   return 'none';

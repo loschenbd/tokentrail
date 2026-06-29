@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type DatabaseType from 'better-sqlite3';
 import { getLLMClient as defaultGetLLMClient } from '../lib/llm.js';
+import { slugify } from '../lib/attribution.js';
 import { classifyCommit } from './mainline-inference-rules.js';
 import { sliceEventsByCommits } from './mainline-inference-slicing.js';
 
@@ -21,8 +22,7 @@ type EventRow = { id: string; timestamp: string };
 
 export async function inferMainlineFeatures(
   db: DatabaseType.Database,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  deps?: MainlineInferenceDeps
+  deps: MainlineInferenceDeps = { getLLMClient: defaultGetLLMClient }
 ): Promise<MainlineInferenceSummary> {
   const summary: MainlineInferenceSummary = {
     sessionsConsidered: 0,
@@ -84,6 +84,9 @@ export async function inferMainlineFeatures(
      WHERE id = @id
   `);
 
+  // Acquire the LLM client once and reuse across all sessions.
+  const llm = deps.getLLMClient();
+
   for (const s of sessions) {
     try {
       const commits = getCommits.all(s.session_id) as CommitRow[];
@@ -98,41 +101,120 @@ export async function inferMainlineFeatures(
 
       let labeled = 0;
 
-      db.transaction(() => {
-        if (commits.length === 0) {
-          // No commits → Rule C: uncategorized (LLM fallback lands in Task 7).
+      if (commits.length === 0) {
+        // No commits: Rule B (LLM on session title) → Rule C fallback.
+        let cls: { key: string; name: string; source: string } = {
+          key: 'uncategorized-mainline',
+          name: 'Uncategorized mainline',
+          source: 'no-signal',
+        };
+        if (llm) {
+          summary.llmCalls++;
+          try {
+            const resp = await llm.client.chat.completions.create({
+              model: llm.model,
+              messages: [
+                { role: 'system', content: 'Pick a single kebab-case topic_slug (≤30 chars) for this engineering session. STRICT JSON: {"topic_slug":string}' },
+                { role: 'user', content: JSON.stringify({ session_title: s.title ?? '' }) },
+              ],
+              response_format: { type: 'json_object' },
+              max_tokens: 200,
+            });
+            const parsed = JSON.parse(resp.choices[0]?.message?.content ?? '') as { topic_slug?: string };
+            const key = slugify(parsed.topic_slug ?? '');
+            if (key) cls = { key, name: humanizeFromSlug(key), source: 'session-title-llm' };
+          } catch (e) {
+            console.log(`[infer-mainline] LLM call failed (no-commits) for ${s.session_id}: ${(e as Error).message}`);
+          }
+        }
+        db.transaction(() => {
           for (const e of events) {
-            updateEvent.run({
-              id: e.id,
+            updateEvent.run({ id: e.id, key: cls.key, name: cls.name, source: cls.source });
+            labeled++;
+          }
+          upsertRun.run({
+            session_id: s.session_id,
+            ran_at: new Date().toISOString(),
+            events_relabeled: labeled,
+            llm_calls: llm ? 1 : 0,
+            commit_set_hash: hash,
+          });
+        })();
+      } else {
+        // Rule A: classify commits by conventional-commit scope.
+        const classBySha = new Map<string, { key: string; name: string; source: string }>();
+        const unresolved: Array<{ sha: string; subject: string }> = [];
+        for (const c of commits) {
+          const r = classifyCommit(c.subject);
+          if (r) {
+            classBySha.set(c.sha, r);
+          } else {
+            unresolved.push({ sha: c.sha, subject: c.subject });
+          }
+        }
+
+        // Rule B: batch LLM call for unresolved commits.
+        if (unresolved.length > 0 && llm) {
+          summary.llmCalls++;
+          try {
+            const resp = await llm.client.chat.completions.create({
+              model: llm.model,
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You label engineering work by topic. Output STRICT JSON only matching schema {"labels":[{"commit_sha":string,"topic_slug":string}]}. Slugs are kebab-case, ≤30 chars, no commit-type words (feat/fix/chore/refactor/docs/test/perf/style/build/ci/revert).',
+                },
+                {
+                  role: 'user',
+                  content: JSON.stringify({
+                    session_title: s.title ?? '',
+                    commits: unresolved.slice(0, 80).map((c) => ({ sha: c.sha, subject: c.subject })),
+                  }),
+                },
+              ],
+              response_format: { type: 'json_object' },
+              max_tokens: 800,
+            });
+            const content = resp.choices[0]?.message?.content ?? '';
+            const parsed = JSON.parse(content) as { labels?: Array<{ commit_sha: string; topic_slug: string }> };
+            if (Array.isArray(parsed.labels)) {
+              for (const lbl of parsed.labels) {
+                const key = slugify(lbl.topic_slug ?? '');
+                if (!key) continue;
+                classBySha.set(lbl.commit_sha, {
+                  key,
+                  name: humanizeFromSlug(key),
+                  source: 'session-title-llm',
+                });
+              }
+            }
+          } catch (e) {
+            console.log(
+              `[infer-mainline] LLM call failed for session ${s.session_id}: ${(e as Error).message}`
+            );
+          }
+        }
+
+        // Rule C: final fallback for any commit still unresolved.
+        for (const c of commits) {
+          if (!classBySha.has(c.sha)) {
+            classBySha.set(c.sha, {
               key: 'uncategorized-mainline',
               name: 'Uncategorized mainline',
               source: 'no-signal',
             });
-            labeled++;
           }
-        } else {
-          const slices = sliceEventsByCommits(
-            events,
-            commits.map((c) => ({ sha: c.sha, authoredAt: c.authored_at }))
-          );
+        }
 
-          // Build sha → classification map (Rule A first, Rule C fallback).
-          const classBySha = new Map<string, { key: string; name: string; source: string }>();
-          for (const c of commits) {
-            const r = classifyCommit(c.subject);
-            if (r) {
-              classBySha.set(c.sha, r);
-            } else {
-              classBySha.set(c.sha, {
-                key: 'uncategorized-mainline',
-                name: 'Uncategorized mainline',
-                source: 'no-signal',
-              });
-            }
-          }
+        const slices = sliceEventsByCommits(
+          events,
+          commits.map((c) => ({ sha: c.sha, authoredAt: c.authored_at }))
+        );
 
+        db.transaction(() => {
           for (const slice of slices) {
-            // classBySha is populated for every commit sha in slices — safe to assert.
+            // classBySha is built from the same commits passed to sliceEventsByCommits,
+            // so every commitSha in a slice is guaranteed to have a class entry.
             const cls = classBySha.get(slice.commitSha)!;
             for (const e of slice.events) {
               updateEvent.run({
@@ -144,16 +226,16 @@ export async function inferMainlineFeatures(
               labeled++;
             }
           }
-        }
 
-        upsertRun.run({
-          session_id: s.session_id,
-          ran_at: new Date().toISOString(),
-          events_relabeled: labeled,
-          llm_calls: 0,
-          commit_set_hash: hash,
-        });
-      })();
+          upsertRun.run({
+            session_id: s.session_id,
+            ran_at: new Date().toISOString(),
+            events_relabeled: labeled,
+            llm_calls: unresolved.length > 0 && llm ? 1 : 0,
+            commit_set_hash: hash,
+          });
+        })();
+      }
 
       if (labeled > 0) summary.sessionsRelabeled++;
       summary.eventsRelabeled += labeled;
@@ -171,4 +253,10 @@ function hashCommitSet(shas: string[]): string {
   // Sort so insertion order doesn't affect the fingerprint.
   for (const sha of [...shas].sort()) h.update(sha);
   return h.digest('hex');
+}
+
+function humanizeFromSlug(slug: string): string {
+  const s = slug.replace(/-/g, ' ').trim();
+  if (!s) return 'Uncategorized';
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

@@ -912,6 +912,9 @@ git commit -m "refactor(clustering): consume getLLMClient instead of direct Open
 - Produces:
 
   ```ts
+  export type MainlineInferenceDeps = {
+    getLLMClient: typeof import('../lib/llm.js').getLLMClient;
+  };
   export type MainlineInferenceSummary = {
     sessionsConsidered: number;
     sessionsRelabeled: number;
@@ -919,9 +922,12 @@ git commit -m "refactor(clustering): consume getLLMClient instead of direct Open
     llmCalls: number;
   };
   export async function inferMainlineFeatures(
-    db: Database
+    db: Database,
+    deps?: MainlineInferenceDeps
   ): Promise<MainlineInferenceSummary>;
   ```
+
+**DI seam:** `getLLMClient` is injected via the `deps` parameter so Task 7's tests can pass a fake. Default `deps = { getLLMClient: (await import('../lib/llm.js')).getLLMClient }` — production callers pass nothing.
 
 This task implements RULE A (commit-scope) and RULE C (no-signal) only. RULE B (LLM) lands in Task 7.
 
@@ -967,7 +973,7 @@ function makeDb(): DB {
 }
 
 describe('inferMainlineFeatures()', () => {
-  test('single-commit session: all events get the same key', () => {
+  test('single-commit session: all events get the same key', async () => {
     const db = makeDb();
     seed(db);
     db.exec(`
@@ -1247,7 +1253,6 @@ Add to `tests/mainline-inference.test.ts`:
 
 ```ts
 import { mock } from 'node:test';
-import * as llmModule from '../src/lib/llm.js';
 
 test('Rule B: non-conventional commit subjects get LLM-named features', async () => {
   const db = makeDb();
@@ -1279,15 +1284,11 @@ test('Rule B: non-conventional commit subjects get LLM-named features', async ()
       },
     } as any,
   };
-  mock.method(llmModule, 'getLLMClient', () => fakeClient);
-
-  const summary = await inferMainlineFeatures(db);
+  const summary = await inferMainlineFeatures(db, { getLLMClient: () => fakeClient });
   assert.equal(summary.llmCalls, 1);
   const rows = db.prepare(`SELECT inferred_feature_key, inference_source FROM usage_events WHERE session_id='s1'`).all() as Array<{inferred_feature_key:string; inference_source:string}>;
   assert.ok(rows.every(r => r.inferred_feature_key === 'menubar-rework'));
   assert.ok(rows.every(r => r.inference_source === 'session-title-llm'));
-
-  mock.restoreAll();
 });
 
 test('Rule B malformed response → falls to no-signal, summary.llmCalls still 1', async () => {
@@ -1304,14 +1305,12 @@ test('Rule B malformed response → falls to no-signal, summary.llmCalls still 1
     model: 'anthropic/claude-haiku-4.5',
     client: { chat: { completions: { create: mock.fn(async () => ({ choices: [{ message: { content: 'not json' }}]})) }} } as any,
   };
-  mock.method(llmModule, 'getLLMClient', () => fakeClient);
 
-  const summary = await inferMainlineFeatures(db);
+  const summary = await inferMainlineFeatures(db, { getLLMClient: () => fakeClient });
   assert.equal(summary.llmCalls, 1);
   const r = db.prepare(`SELECT inferred_feature_key, inference_source FROM usage_events WHERE session_id='s1'`).get() as {inferred_feature_key:string; inference_source:string};
   assert.equal(r.inferred_feature_key, 'uncategorized-mainline');
   assert.equal(r.inference_source, 'no-signal');
-  mock.restoreAll();
 });
 ```
 
@@ -1325,11 +1324,17 @@ Expected: FAIL — `llmCalls` is 0, no LLM is invoked.
 Edit `src/services/mainline-inference.ts`:
 
 ```ts
-import { getLLMClient } from '../lib/llm.js';
+import { getLLMClient as defaultGetLLMClient } from '../lib/llm.js';
 import { slugify } from '../lib/attribution.js';
 
+// Change the function signature to accept optional deps:
+//   export async function inferMainlineFeatures(
+//     db: DatabaseType.Database,
+//     deps: MainlineInferenceDeps = { getLLMClient: defaultGetLLMClient }
+//   ): Promise<MainlineInferenceSummary>
+
 // Inside inferMainlineFeatures, BEFORE the for-loop:
-const llm = getLLMClient();
+const llm = deps.getLLMClient();
 // We'll reuse the same client for all sessions in this run; cheaper than
 // per-session connect.
 

@@ -38,9 +38,27 @@ set -u
 # Resolve $0 through any symlinks (SwiftBar installs plugins via symlink
 # from ~/Library/Application Support/SwiftBar/, so $0 is typically the
 # link path, not the repo path). We need the real path to locate sibling
-# scripts (tokentrail-power-off.sh) for the Power off menu action.
+# scripts (tokentrail-power-off.sh) for the Power off menu action and
+# the repo's docs/logo.png for the hero brand mark.
 PLUGIN_REAL_PATH="$(perl -MCwd=abs_path -le 'print abs_path(shift)' "$0")"
-export TT_POWER_OFF_SCRIPT="$(dirname "$PLUGIN_REAL_PATH")/tokentrail-power-off.sh"
+PLUGIN_DIR="$(dirname "$PLUGIN_REAL_PATH")"
+export TT_POWER_OFF_SCRIPT="$PLUGIN_DIR/tokentrail-power-off.sh"
+
+# Embed the brand logo as a 32×32 Base64-encoded PNG for the hero row.
+# Regenerate each run (~50ms via sips + base64) — cheap enough that
+# caching adds more complexity than it saves. If the source isn't
+# reachable (brew install without repo checkout), node falls back to a
+# text-only hero — no error surfaced.
+TT_LOGO_B64=""
+LOGO_SRC="$PLUGIN_DIR/../../docs/logo.png"
+if [ -f "$LOGO_SRC" ]; then
+  TMP_PNG="$(mktemp -t tt-menubar)"
+  if sips -s format png -z 32 32 "$LOGO_SRC" --out "$TMP_PNG" >/dev/null 2>&1; then
+    TT_LOGO_B64="$(base64 < "$TMP_PNG" | tr -d '\n')"
+  fi
+  rm -f "$TMP_PNG"
+fi
+export TT_LOGO_B64
 
 # Load nvm so a user's default node ends up on PATH.
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
@@ -74,13 +92,33 @@ const FETCH_TIMEOUT_MS = 2000;
 const TREE_BRANCH = '├';
 const TREE_LAST = '└';
 
-// SwiftBar font params. Menlo-Bold is shipped with macOS — safe to assume.
+// SwiftBar font params. Menlo (monospace, shipped with macOS) is used
+// anywhere we need right-aligned columnar values via padding.
+const HERO_TITLE = 'font=HelveticaNeue-Bold size=14 color=#3a2f1f,#e5d3a7';
+const HERO_SUB = 'sfimage=clock sfcolor=#8b6f47 color=#8b6f47 size=12';
+const STAT_FONT = 'font=Menlo size=12';
 const PROJECT_FONT = 'font=Menlo-Bold size=13';
 const FEATURE_STYLE = 'color=#6b563d size=11';
 const META_STYLE = 'color=#6b563d size=11';
+const SECTION_LABEL = 'color=#8b6f47 size=10';
+
+// Right-align values in monospace columns. Adjust LABEL_W / VALUE_W to
+// taste. SwiftBar uses true monospace Menlo, so padding gives clean
+// column alignment without resorting to `badge=` (which renders as a
+// notification-style pill on macOS).
+const LABEL_W = 12;
+const VALUE_W = 14;
+function padRow(label, value) {
+  return `${String(label).padEnd(LABEL_W)}${String(value).padStart(VALUE_W)}`;
+}
 
 function fmtUsd(n) {
-  return `$${Number(n).toFixed(2)}`;
+  // toLocaleString gives us "1,234.56" — standard money formatting.
+  // minimumFractionDigits=2 keeps cents from being dropped on whole dollars.
+  return '$' + Number(n).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function plural(n, singular, pluralForm) {
@@ -116,12 +154,16 @@ function fmtAgo(ms) {
 }
 
 function renderError(message) {
-  const lines = [
-    `$— | color=#8b6f47`,
-    `---`,
-    `${message} | color=#8b6f47`,
-    `Install / docs | href=${REPO_URL}`,
-  ];
+  const lines = [`$— | color=#8b6f47`, `---`];
+  // Same hero as the happy path — keeps brand identity consistent
+  // across states. Subtitle becomes the error message itself, with the
+  // clock symbol swapped for an exclamation to signal something's off.
+  const logo = process.env.TT_LOGO_B64 || '';
+  const titleParams = logo ? `image=${logo} ${HERO_TITLE}` : HERO_TITLE;
+  lines.push(`Tokentrail | ${titleParams}`);
+  lines.push(`${message} | sfimage=exclamationmark.triangle sfcolor=#8b6f47 color=#8b6f47 size=12`);
+  lines.push('---');
+  lines.push(`Install / docs | href=${REPO_URL} sfimage=book`);
   appendPowerOff(lines);
   return lines.join('\n');
 }
@@ -133,69 +175,99 @@ function sanitizeLabel(s) {
 
 function renderHappy(data) {
   const lines = [];
+  const menubar = data.menubar || { sparkline: [], last7Usd: 0, last30Usd: 0, deltaVsYesterday: 0, yesterdayUsd: 0 };
+  const projectCount = data.topProjects.length;
+
+  // Menubar title — single source of truth for today's number.
   lines.push(`${fmtUsd(data.todayUsd)} | font=Menlo size=12`);
   lines.push('---');
 
-  // Hero row + stat block (CodexBar-inspired). Defensive: older daemons
-  // without the menubar field fall back to zero state.
-  const menubar = data.menubar || { sparkline: [], last7Usd: 0, last30Usd: 0, deltaVsYesterday: 0, yesterdayUsd: 0 };
-  const sparkText = menubar.sparkline && menubar.sparkline.length ? spark(menubar.sparkline) : '';
+  // Hero — brand mark + bold title + dim freshness/scope subtitle.
+  appendHero(lines, projectCount, data.lastEventAt);
+  lines.push('---');
+
+  // Stat block — three rows, right-aligned values via Menlo monospace.
+  // Today carries the delta inline so the headline number doesn't lose
+  // its context once it leaves the hero.
   const deltaText = fmtDelta(menubar.deltaVsYesterday);
-  const heroBits = [`${fmtUsd(data.todayUsd)} today`];
-  if (deltaText) heroBits.push(deltaText);
-  if (sparkText) heroBits.push(sparkText);
-  lines.push(`${sanitizeLabel(heroBits.join('   '))} | font=Menlo size=12`);
-
-  // lastEventAt is the timestamp of the most recent usage_event we've
-  // ingested. The old `asOf = now` value always rendered "0s ago" and
-  // told the user nothing about whether their data was flowing.
-  const ago = data.lastEventAt ? fmtAgo(new Date(data.lastEventAt).getTime()) : '—';
-  lines.push(`Last event ${ago} ago | ${META_STYLE}`);
+  const todayValue = deltaText ? `${fmtUsd(data.todayUsd)} ${deltaText}` : fmtUsd(data.todayUsd);
+  lines.push(`${padRow('Today', todayValue)} | ${STAT_FONT}`);
+  lines.push(`${padRow('Last 7d', fmtUsd(menubar.last7Usd))} | ${STAT_FONT}`);
+  lines.push(`${padRow('Last 30d', fmtUsd(menubar.last30Usd))} | ${STAT_FONT}`);
   lines.push('---');
 
-  // Stat rows (stacked — see spec's risk note about SwiftBar grid jank).
-  lines.push(`Today      ${fmtUsd(data.todayUsd)} | ${META_STYLE}`);
-  lines.push(`Last 7d    ${fmtUsd(menubar.last7Usd)} | ${META_STYLE}`);
-  lines.push(`Last 30d   ${fmtUsd(menubar.last30Usd)} | ${META_STYLE}`);
-  const anomaliesLabel = data.anomalyCount > 0
-    ? `⚠ Worth a look   ${plural(data.anomalyCount, 'active', 'active')}`
-    : `Worth a look   —`;
-  lines.push(`${sanitizeLabel(anomaliesLabel)} | href=${DASHBOARD_URL}/worth-a-look ${META_STYLE}`);
+  // Worth a look — SF Symbol warning triangle (yellow when active, dim
+  // when none). Always present so the row isn't visually load-bearing
+  // only some days.
+  appendWorthALook(lines, data.anomalyCount);
   lines.push('---');
 
-  if (data.topProjects.length === 0) {
-    lines.push(`TODAY · no activity yet | ${META_STYLE}`);
-  } else {
-    lines.push(
-      `TODAY · ${plural(data.topProjects.length, 'project', 'projects')} · ` +
-      `${plural(data.anomalyCount, 'anomaly', 'anomalies')} | ${META_STYLE}`
-    );
-    lines.push('---');
-    for (let i = 0; i < data.topProjects.length; i++) {
+  // Top projects (today). Suppressed entirely when there's no activity —
+  // the empty "TODAY · no activity yet" header was dead weight.
+  if (projectCount > 0) {
+    lines.push(`TOP PROJECTS · TODAY | ${SECTION_LABEL}`);
+    // Use the widest project name as the label column width so values
+    // right-align cleanly when names exceed the stat-block default
+    // (e.g. "mudandsilicon" at 13 chars > LABEL_W of 12).
+    const projW = Math.max(LABEL_W, ...data.topProjects.map(p => p.name.length + 1));
+    for (let i = 0; i < projectCount; i++) {
       const p = data.topProjects[i];
-      const projLabel = sanitizeLabel(`${p.name}  ${fmtUsd(p.usd)}`);
+      const projLabel = sanitizeLabel(
+        String(p.name).padEnd(projW) + String(fmtUsd(p.usd)).padStart(VALUE_W)
+      );
       lines.push(`${projLabel} | href=${p.href} ${PROJECT_FONT}`);
-      // Single-feature projects: the indented sub-row would just duplicate
-      // the project row's number. Skip it to keep the dropdown compact.
+      // Features expanded inline only when there's more than one —
+      // single-feature projects would just duplicate the parent row.
       if (p.features.length > 1) {
         for (let j = 0; j < p.features.length; j++) {
           const f = p.features[j];
           const glyph = j === p.features.length - 1 ? TREE_LAST : TREE_BRANCH;
-          const fLabel = sanitizeLabel(`  ${glyph} ${f.name}  ${fmtUsd(f.usd)}`);
+          const fLabel = sanitizeLabel(`  ${glyph} ${padRow(f.name, fmtUsd(f.usd))}`);
           lines.push(`${fLabel} | href=${f.href} ${FEATURE_STYLE}`);
         }
-      }
-      // Divider between project groups (not after last project).
-      if (i < data.topProjects.length - 1) {
-        lines.push('---');
       }
     }
   }
 
+  // Sparkline — 14-day spend trend. Lives between projects and actions
+  // so the eye lands on it after scanning the project list.
+  const sparkText = menubar.sparkline && menubar.sparkline.length ? spark(menubar.sparkline) : '';
+  if (sparkText) {
+    if (projectCount > 0) lines.push('---');
+    lines.push(`${sparkText}  last 14 days | ${STAT_FONT} color=#6b563d`);
+  }
+
   lines.push('---');
-  lines.push(`Open dashboard | href=${DASHBOARD_URL}/`);
+  lines.push(`Open dashboard | href=${DASHBOARD_URL}/ sfimage=chart.line.uptrend.xyaxis`);
   appendPowerOff(lines);
   return lines.join('\n');
+}
+
+// Hero row — brand mark + bold title + dim freshness subtitle.
+// The logo image and clock SF Symbol both gracefully degrade if absent.
+function appendHero(lines, projectCount, lastEventAt) {
+  const logo = process.env.TT_LOGO_B64 || '';
+  const titleParams = logo ? `image=${logo} ${HERO_TITLE}` : HERO_TITLE;
+  lines.push(`Tokentrail | ${titleParams}`);
+  const ago = lastEventAt ? fmtAgo(new Date(lastEventAt).getTime()) : '—';
+  const projectsBit = projectCount > 0
+    ? ` · ${plural(projectCount, 'project', 'projects')} today`
+    : ' · no activity yet';
+  lines.push(`Updated ${ago} ago${projectsBit} | ${HERO_SUB}`);
+}
+
+// Worth a look — SF Symbol warning triangle with anomaly count as a
+// trailing badge-style number. Yellow when there's something to look at,
+// dim when there isn't.
+function appendWorthALook(lines, anomalyCount) {
+  const url = `${DASHBOARD_URL}/worth-a-look`;
+  if (anomalyCount > 0) {
+    const label = sanitizeLabel(padRow('Worth a look', `${anomalyCount} active`));
+    lines.push(`${label} | href=${url} sfimage=exclamationmark.triangle.fill sfcolor=systemYellow ${STAT_FONT}`);
+  } else {
+    const label = sanitizeLabel(padRow('Worth a look', '—'));
+    lines.push(`${label} | href=${url} sfimage=checkmark.circle sfcolor=#8b6f47 ${STAT_FONT} color=#8b6f47`);
+  }
 }
 
 // Power off menu item — kills the dashboard daemon and quits SwiftBar.
@@ -210,7 +282,7 @@ function appendPowerOff(lines) {
   } catch {
     return;
   }
-  lines.push(`Power off | shell=${script} terminal=false ${META_STYLE}`);
+  lines.push(`Power off | shell=${script} terminal=false sfimage=power sfcolor=systemRed`);
 }
 
 (async () => {

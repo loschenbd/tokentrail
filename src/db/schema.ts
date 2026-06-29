@@ -189,4 +189,17 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     detected_at  TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (repo, branch)
   )`,
+
+  // --- Mainline feature inference (2026-06-29 spec) ---
+  // mainline_inference_runs table created here (no column dependencies).
+  // Index on inferred_feature_key is created in migrations.ts after columns
+  // are added, since CREATE INDEX IF NOT EXISTS fails if the column doesn't
+  // exist yet.
+  `CREATE TABLE IF NOT EXISTS mainline_inference_runs (
+    session_id        TEXT PRIMARY KEY,
+    ran_at            TEXT NOT NULL,
+    events_relabeled  INTEGER NOT NULL,
+    llm_calls         INTEGER NOT NULL DEFAULT 0,
+    commit_set_hash   TEXT NOT NULL
+  )`,
 ];

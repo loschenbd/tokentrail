@@ -16,16 +16,16 @@ describe('sliceEventsByCommits()', () => {
     const commits = [co('A', '2026-06-29T10:00:00Z')];
     const out = sliceEventsByCommits(events, commits);
     assert.equal(out.length, 1);
-    assert.equal(out[0].commitSha, 'A');
-    assert.equal(out[0].events.length, 2);
+    assert.equal(out[0]!.commitSha, 'A');
+    assert.equal(out[0]!.events.length, 2);
   });
 
   test('preamble events route to first commit', () => {
     const events = [ev('2026-06-29T08:00:00Z')];
     const commits = [co('A', '2026-06-29T10:00:00Z'), co('B', '2026-06-29T12:00:00Z')];
     const out = sliceEventsByCommits(events, commits);
-    assert.equal(out[0].commitSha, 'A');
-    assert.equal(out[0].events[0].id, '2026-06-29T08:00:00Z');
+    assert.equal(out[0]!.commitSha, 'A');
+    assert.equal(out[0]!.events[0]!.id, '2026-06-29T08:00:00Z');
   });
 
   test('events between commits go to the earlier commit', () => {
@@ -56,8 +56,8 @@ describe('sliceEventsByCommits()', () => {
     const events = [ev('2026-06-29T11:00:00Z')];
     const commits = [co('B', '2026-06-29T12:00:00Z'), co('A', '2026-06-29T10:00:00Z')];
     const out = sliceEventsByCommits(events, commits);
-    assert.equal(out[0].commitSha, 'A');
-    assert.equal(out[1].commitSha, 'B');
+    assert.equal(out[0]!.commitSha, 'A');
+    assert.equal(out[1]!.commitSha, 'B');
   });
 
   test('commits with no events get empty slice (still returned)', () => {
@@ -65,6 +65,6 @@ describe('sliceEventsByCommits()', () => {
     const commits = [co('A', '2026-06-29T10:00:00Z')];
     const out = sliceEventsByCommits(events, commits);
     assert.equal(out.length, 1);
-    assert.equal(out[0].events.length, 0);
+    assert.equal(out[0]!.events.length, 0);
   });
 });

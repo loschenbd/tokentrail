@@ -18,7 +18,8 @@ export function sliceEventsByCommits<
     let idx = sorted.findIndex((c) => c.authoredAt > e.timestamp);
     if (idx === -1) idx = sorted.length; // tail
     const target = Math.max(0, idx - 1);
-    slices[target].events.push(e);
+    // target is guaranteed in range [0, slices.length) by the clamped Math.max.
+    slices[target]!.events.push(e);
   }
 
   // Preamble (events earlier than first commit) were assigned to target 0

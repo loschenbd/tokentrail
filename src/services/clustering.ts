@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type DatabaseType from 'better-sqlite3';
+import type OpenAI from 'openai';
 import { getLLMClient } from '../lib/llm.js';
 
 // One LLM call per feature, grouped by feature_key. Each call returns a list

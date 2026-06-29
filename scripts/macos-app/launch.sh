@@ -58,6 +58,39 @@ if [ -z "$TT" ]; then
   exit 1
 fi
 
+# First-run check — has `tokentrail init` been run? `init` symlinks
+# Tokentrail's Claude Code skills into ~/.claude/skills/, so the
+# presence of that link is the canonical "user has set up the hook"
+# signal. If missing, prompt to run init in a Terminal window before
+# opening the dashboard (which would otherwise show zero history).
+SKILL_LINK="$HOME/.claude/skills/tokentrail-spend"
+if [ ! -e "$SKILL_LINK" ]; then
+  CHOICE=$(osascript <<APPLESCRIPT 2>&1 || true
+display dialog "Tokentrail needs to install its Claude Code hook so it can track your sessions.
+
+Setup will:
+  • symlink the Tokentrail skills into ~/.claude/
+  • install the Stop hook into this repo's .claude/settings.json
+  • start the dashboard daemon via launchd
+  • install the SwiftBar menubar widget (if SwiftBar is present)
+
+This opens Terminal so you can see the steps." with title "Welcome to Tokentrail" buttons {"Skip for now", "Run setup"} default button "Run setup" with icon note
+APPLESCRIPT
+)
+  if echo "$CHOICE" | grep -q "Run setup"; then
+    # Launch Terminal with init; it's interactive (prompts for paths,
+    # confirms hook install) so the user needs to see and respond to it.
+    osascript <<APPLESCRIPT
+tell application "Terminal"
+  activate
+  do script "$TT init"
+end tell
+APPLESCRIPT
+    exit 0
+  fi
+  # Skip → continue to dashboard launch with whatever state exists.
+fi
+
 # Spawn dashboard detached; --no-open because we open below ourselves
 # after confirming the server is reachable.
 nohup "$TT" dashboard --no-open >"$LOG" 2>&1 </dev/null &

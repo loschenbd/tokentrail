@@ -186,4 +186,37 @@ describe('inferMainlineFeatures()', () => {
     assert.equal(r.inferred_feature_key, 'uncategorized-mainline');
     assert.equal(r.inference_source, 'no-signal');
   });
+
+  test('Rule B no-commits path: LLM names the session topic from title alone', async () => {
+    const db = makeDb();
+    seed(db);
+    db.exec(`
+      INSERT INTO usage_events (id, session_id, timestamp, repo, branch, model, estimated_cost_usd) VALUES
+        ('e1', 's3', '2026-06-29T09:30:00Z', 'octo/tokentrail', 'main', 'm', 0.1);
+    `);
+
+    const fakeClient = {
+      backend: 'openrouter' as const,
+      model: 'anthropic/claude-haiku-4.5',
+      client: {
+        chat: {
+          completions: {
+            create: mock.fn(async () => ({
+              choices: [{ message: { content: JSON.stringify({ topic_slug: 'no-commits-session-rework' }) }}],
+            })),
+          },
+        },
+      } as any,
+    };
+
+    const summary = await inferMainlineFeatures(db, { getLLMClient: () => fakeClient });
+    assert.equal(summary.llmCalls, 1);
+    const r = db.prepare(
+      `SELECT inferred_feature_key, inferred_feature_name, inference_source
+         FROM usage_events WHERE session_id='s3'`
+    ).get() as { inferred_feature_key: string; inferred_feature_name: string; inference_source: string };
+    assert.equal(r.inferred_feature_key, 'no-commits-session-rework');
+    assert.equal(r.inferred_feature_name, 'No commits session rework');
+    assert.equal(r.inference_source, 'session-title-llm');
+  });
 });

@@ -38,27 +38,9 @@ set -u
 # Resolve $0 through any symlinks (SwiftBar installs plugins via symlink
 # from ~/Library/Application Support/SwiftBar/, so $0 is typically the
 # link path, not the repo path). We need the real path to locate sibling
-# scripts (tokentrail-power-off.sh) for the Power off menu action and
-# the repo's docs/logo.png for the hero brand mark.
+# scripts (tokentrail-power-off.sh) for the Power off menu action.
 PLUGIN_REAL_PATH="$(perl -MCwd=abs_path -le 'print abs_path(shift)' "$0")"
-PLUGIN_DIR="$(dirname "$PLUGIN_REAL_PATH")"
-export TT_POWER_OFF_SCRIPT="$PLUGIN_DIR/tokentrail-power-off.sh"
-
-# Embed the brand logo as a 32×32 Base64-encoded PNG for the hero row.
-# Regenerate each run (~50ms via sips + base64) — cheap enough that
-# caching adds more complexity than it saves. If the source isn't
-# reachable (brew install without repo checkout), node falls back to a
-# text-only hero — no error surfaced.
-TT_LOGO_B64=""
-LOGO_SRC="$PLUGIN_DIR/../../docs/logo.png"
-if [ -f "$LOGO_SRC" ]; then
-  TMP_PNG="$(mktemp -t tt-menubar)"
-  if sips -s format png -z 32 32 "$LOGO_SRC" --out "$TMP_PNG" >/dev/null 2>&1; then
-    TT_LOGO_B64="$(base64 < "$TMP_PNG" | tr -d '\n')"
-  fi
-  rm -f "$TMP_PNG"
-fi
-export TT_LOGO_B64
+export TT_POWER_OFF_SCRIPT="$(dirname "$PLUGIN_REAL_PATH")/tokentrail-power-off.sh"
 
 # Load nvm so a user's default node ends up on PATH.
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
@@ -94,9 +76,11 @@ const TREE_LAST = '└';
 
 // SwiftBar font params. Menlo (monospace, shipped with macOS) is used
 // anywhere we need right-aligned columnar values via padding.
-const HERO_TITLE = 'font=HelveticaNeue-Bold size=14 color=#3a2f1f,#e5d3a7';
 const HERO_SUB = 'sfimage=clock sfcolor=#8b6f47 color=#8b6f47 size=12';
 const STAT_FONT = 'font=Menlo size=12';
+// Sparkline bumped to size=22 so the trend is glanceable, not buried.
+const SPARK_FONT = 'font=Menlo size=22 color=#6b563d';
+const SPARK_LABEL = 'color=#8b6f47 size=10';
 const PROJECT_FONT = 'font=Menlo-Bold size=13';
 const FEATURE_STYLE = 'color=#6b563d size=11';
 const META_STYLE = 'color=#6b563d size=11';
@@ -125,8 +109,11 @@ function plural(n, singular, pluralForm) {
   return `${n} ${n === 1 ? singular : pluralForm}`;
 }
 
-// Block glyphs for the 14-day sparkline (' ' is empty, '█' is the max).
-const BLOCKS = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+// Block glyphs for the 14-day sparkline. Index 0 is '▁' (the smallest
+// visible block) rather than space — even a zero-spend day shows a
+// baseline tick so the chart has a continuous horizontal axis instead
+// of gaps that read like missing data.
+const BLOCKS = ['▁', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 function spark(values) {
   const max = Math.max.apply(null, values.concat(1));
   return values
@@ -155,12 +142,6 @@ function fmtAgo(ms) {
 
 function renderError(message) {
   const lines = [`$— | color=#8b6f47`, `---`];
-  // Same hero as the happy path — keeps brand identity consistent
-  // across states. Subtitle becomes the error message itself, with the
-  // clock symbol swapped for an exclamation to signal something's off.
-  const logo = process.env.TT_LOGO_B64 || '';
-  const titleParams = logo ? `image=${logo} ${HERO_TITLE}` : HERO_TITLE;
-  lines.push(`Tokentrail | ${titleParams}`);
   lines.push(`${message} | sfimage=exclamationmark.triangle sfcolor=#8b6f47 color=#8b6f47 size=12`);
   lines.push('---');
   lines.push(`Install / docs | href=${REPO_URL} sfimage=book`);
@@ -182,8 +163,10 @@ function renderHappy(data) {
   lines.push(`${fmtUsd(data.todayUsd)} | font=Menlo size=12`);
   lines.push('---');
 
-  // Hero — brand mark + bold title + dim freshness/scope subtitle.
-  appendHero(lines, projectCount, data.lastEventAt);
+  // Freshness line — top of dropdown. Brand identity is already
+  // carried by the menubar value and the .app icon, so the title row
+  // would just be redundant.
+  appendFreshness(lines, projectCount, data.lastEventAt);
   lines.push('---');
 
   // Stat block — three rows, right-aligned values via Menlo monospace.
@@ -229,12 +212,13 @@ function renderHappy(data) {
     }
   }
 
-  // Sparkline — 14-day spend trend. Lives between projects and actions
-  // so the eye lands on it after scanning the project list.
+  // Sparkline — 14-day spend trend, rendered chunky at size=22 so it
+  // reads as a real chart, not a footnote. Label below it (small dim).
   const sparkText = menubar.sparkline && menubar.sparkline.length ? spark(menubar.sparkline) : '';
   if (sparkText) {
     if (projectCount > 0) lines.push('---');
-    lines.push(`${sparkText}  last 14 days | ${STAT_FONT} color=#6b563d`);
+    lines.push(`${sparkText} | ${SPARK_FONT}`);
+    lines.push(`last 14 days | ${SPARK_LABEL}`);
   }
 
   lines.push('---');
@@ -243,12 +227,10 @@ function renderHappy(data) {
   return lines.join('\n');
 }
 
-// Hero row — brand mark + bold title + dim freshness subtitle.
-// The logo image and clock SF Symbol both gracefully degrade if absent.
-function appendHero(lines, projectCount, lastEventAt) {
-  const logo = process.env.TT_LOGO_B64 || '';
-  const titleParams = logo ? `image=${logo} ${HERO_TITLE}` : HERO_TITLE;
-  lines.push(`Tokentrail | ${titleParams}`);
+// Freshness row — dim "Updated Xs ago · N projects today" with clock
+// SF Symbol. Brand identity is carried by the menubar title and the
+// .app icon, so we don't repeat "Tokentrail" here.
+function appendFreshness(lines, projectCount, lastEventAt) {
   const ago = lastEventAt ? fmtAgo(new Date(lastEventAt).getTime()) : '—';
   const projectsBit = projectCount > 0
     ? ` · ${plural(projectCount, 'project', 'projects')} today`

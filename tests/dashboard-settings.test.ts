@@ -65,6 +65,54 @@ describe('dashboard /api/settings', () => {
     assert.equal(r.statusCode, 400);
   });
 
+  test('POST /api/settings with apiKey: null clears a stored key', async () => {
+    writeSettings({
+      llm: {
+        backend: 'openrouter',
+        openrouter: { apiKey: 'sk-or-v1-abcdefg1234', model: 'anthropic/claude-haiku-4.5' },
+        ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:3b' },
+      },
+    });
+    const app = buildServer({ defaultDays: 30 });
+    // Verify key is present before clearing.
+    const before = await app.inject({ method: 'GET', url: '/api/settings' });
+    assert.equal(before.json().llm.openrouter.hasKey, true);
+    // POST with apiKey: null to clear.
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/settings',
+      payload: {
+        llm: {
+          backend: 'openrouter',
+          openrouter: { apiKey: null, model: 'anthropic/claude-haiku-4.5' },
+          ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:3b' },
+        },
+      },
+    });
+    assert.equal(r.statusCode, 200);
+    // Subsequent GET must report no key.
+    const after = await app.inject({ method: 'GET', url: '/api/settings' });
+    assert.equal(after.json().llm.openrouter.hasKey, false);
+    assert.equal(after.json().llm.openrouter.keyTail, null);
+  });
+
+  test('GET /api/settings includes keyTail for typed-confirm consumption', async () => {
+    writeSettings({
+      llm: {
+        backend: 'openrouter',
+        openrouter: { apiKey: 'sk-or-v1-XXXX5678', model: 'anthropic/claude-haiku-4.5' },
+        ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:3b' },
+      },
+    });
+    const app = buildServer({ defaultDays: 30 });
+    const r = await app.inject({ method: 'GET', url: '/api/settings' });
+    const body = r.json();
+    assert.equal(body.llm.openrouter.hasKey, true);
+    assert.equal(body.llm.openrouter.keyTail, '5678');
+    // The raw key must NOT be exposed.
+    assert.equal(body.llm.openrouter.apiKey, undefined);
+  });
+
   test('POST /api/settings/test returns ok=false when backend is not configured', async () => {
     const prevOR = process.env.OPENROUTER_API_KEY;
     const prevBackend = process.env.TOKENTRAIL_LLM_BACKEND;

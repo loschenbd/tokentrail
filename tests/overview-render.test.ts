@@ -83,3 +83,26 @@ test('trend-data JSON embeds both days and features arrays', () => {
   assert.ok(Array.isArray(parsed.features));
   assert.equal(parsed.features[0].key, 'menubar');
 });
+
+test('shows infer-mainline hint when only uncategorized-mainline has spend', () => {
+  const vm = makeVm({
+    totalUsd: 12,
+    features: [{ key: 'uncategorized-mainline', name: 'uncategorized-mainline', color: '__striped__', totalUsd: 12, clickable: false, stackPosition: 0 }],
+    days: [{ date: '2026-06-29', total: 12, bands: { 'uncategorized-mainline': 12 }, commits: 0, prs: 0 }],
+  });
+  const html = renderOverview(vm);
+  assert.match(html, /Run <code>tokentrail infer-mainline<\/code>/);
+});
+
+test('does NOT show the hint when at least one real feature has spend', () => {
+  const vm = makeVm({
+    totalUsd: 15,
+    features: [
+      { key: 'menubar', name: 'menubar', color: '#0072B2', totalUsd: 10, clickable: true, stackPosition: 0 },
+      { key: 'uncategorized-mainline', name: 'uncategorized-mainline', color: '__striped__', totalUsd: 5, clickable: false, stackPosition: 1 },
+    ],
+    days: [{ date: '2026-06-29', total: 15, bands: { menubar: 10, 'uncategorized-mainline': 5 }, commits: 0, prs: 0 }],
+  });
+  const html = renderOverview(vm);
+  assert.doesNotMatch(html, /Run <code>tokentrail infer-mainline<\/code>/);
+});

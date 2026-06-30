@@ -241,6 +241,7 @@ function renderHappy(data) {
 
   lines.push('---');
   lines.push(`Open dashboard | href=${DASHBOARD_URL}/ sfimage=chart.line.uptrend.xyaxis ${ACTION_STYLE}`);
+  lines.push(`Settings… | href=${DASHBOARD_URL}/settings sfimage=gear ${ACTION_STYLE}`);
   appendPowerOff(lines);
   return lines.join('\n');
 }

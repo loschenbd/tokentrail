@@ -64,4 +64,33 @@ describe('dashboard /api/settings', () => {
     const r = await app.inject({ method: 'POST', url: '/api/settings', payload: { llm: { backend: 'nonsense' } } });
     assert.equal(r.statusCode, 400);
   });
+
+  test('POST /api/settings/test returns ok=false when backend is not configured', async () => {
+    const prevOR = process.env.OPENROUTER_API_KEY;
+    const prevBackend = process.env.TOKENTRAIL_LLM_BACKEND;
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.TOKENTRAIL_LLM_BACKEND;
+    try {
+      writeSettings({
+        llm: {
+          backend: 'none',
+          openrouter: { apiKey: null, model: 'anthropic/claude-haiku-4.5' },
+          ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:3b' },
+        },
+      });
+      const app = buildServer({ defaultDays: 30 });
+      const r = await app.inject({
+        method: 'POST',
+        url: '/api/settings/test',
+        payload: { backend: 'none' },
+      });
+      assert.equal(r.statusCode, 200);
+      const body = r.json();
+      assert.equal(body.ok, false);
+      assert.match(body.error, /not configured/i);
+    } finally {
+      if (prevOR !== undefined) process.env.OPENROUTER_API_KEY = prevOR;
+      if (prevBackend !== undefined) process.env.TOKENTRAIL_LLM_BACKEND = prevBackend;
+    }
+  });
 });

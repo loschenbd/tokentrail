@@ -21,6 +21,12 @@ export function getDb(): DatabaseType.Database {
   return db;
 }
 
+// Test seam: allows tests to inject an in-memory Database instance.
+// Production code never calls this.
+export function _setDbForTest(db: DatabaseType.Database | null): void {
+  instance = db;
+}
+
 export function closeDb(): void {
   if (instance) {
     instance.close();

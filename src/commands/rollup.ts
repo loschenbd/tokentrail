@@ -32,8 +32,8 @@ export async function runRollup(): Promise<RollupSummary> {
          COALESCE(e.repo, '')                    AS repo,
          COALESCE(e.branch, '')                  AS branch,
          COALESCE(e.project_dir, '')             AS project_dir,
-         w.feature_key                            AS feature_key,
-         w.feature_name                           AS feature_name,
+         COALESCE(e.inferred_feature_key, w.feature_key)   AS feature_key,
+         COALESCE(e.inferred_feature_name, w.feature_name) AS feature_name,
          s.feature_override                       AS override_key,
          s.feature_override_name                  AS override_name,
          SUM(e.input_tokens)                      AS in_tokens,
@@ -47,7 +47,8 @@ export async function runRollup(): Promise<RollupSummary> {
        LEFT JOIN sessions s
          ON s.session_id = e.session_id
        GROUP BY date(e.timestamp, 'localtime'), e.repo, e.branch, e.project_dir,
-                w.feature_key, w.feature_name,
+                COALESCE(e.inferred_feature_key, w.feature_key),
+                COALESCE(e.inferred_feature_name, w.feature_name),
                 s.feature_override, s.feature_override_name`
     )
     .all() as Array<{

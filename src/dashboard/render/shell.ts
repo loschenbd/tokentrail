@@ -18,6 +18,7 @@ export function renderShell(opts: ShellOptions, body: string): string {
       ${navItem('overview', '/', 'Overview')}
       ${navItem('today', '/today', 'Today')}
       ${navItem('worth-a-look', '/worth-a-look', 'Worth a look')}
+      ${navItem('settings', '/settings', 'Settings')}
     </nav>`;
   return `<!doctype html>
 <html lang="en">

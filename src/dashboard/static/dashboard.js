@@ -43,6 +43,9 @@
     function fmtUsd(n) {
       return '$' + (typeof n === 'number' ? n.toFixed(2) : n);
     }
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
 
     // Striped fill: a tiny canvas pattern, created lazily so it's bound to the
     // chart's own canvas context (uPlot will call the fill function per draw).
@@ -132,9 +135,9 @@
                 const pct = Math.round((r.usd / denom) * 100);
                 const swatch = r.color === '__striped__'
                   ? '<span class="tooltip-swatch swatch--striped"></span>'
-                  : '<span class="tooltip-swatch" style="background:' + r.color + '"></span>';
+                  : '<span class="tooltip-swatch" style="background:' + esc(r.color) + '"></span>';
                 body += '<div class="chart-tooltip-row">' + swatch +
-                  '<span class="name">' + r.name + '</span>' +
+                  '<span class="name">' + esc(r.name) + '</span>' +
                   '<span class="amt">' + fmtUsd(r.usd) + ' <span class="muted">(' + pct + '%)</span></span></div>';
               }
               body += '</div>';
@@ -147,7 +150,9 @@
             tooltip.style.display = 'block';
 
             const left = self.valToPos(xs[idx], 'x');
-            const top = self.valToPos(seriesYs[seriesYs.length - 1][idx], 'y');
+            const top = total === 0
+              ? (self.cursor.top != null ? self.cursor.top : 0)
+              : self.valToPos(seriesYs[seriesYs.length - 1][idx], 'y');
             const rect = node.getBoundingClientRect();
             const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
             let px = left + 12, py = top - th - 8;

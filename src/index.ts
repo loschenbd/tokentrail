@@ -247,6 +247,15 @@ program
   });
 
 program
+  .command('infer-mainline')
+  .description('Infer per-feature attribution for work on mainline branches.')
+  .option('--dry-run', 'Print what would change without writing.')
+  .action(async (opts: { dryRun?: boolean }) => {
+    const { runInferMainline } = await import('./commands/infer-mainline.js');
+    await runInferMainline({ dryRun: opts.dryRun });
+  });
+
+program
   .command('anomaly')
   .description('List, dismiss, or restore anomalies.')
   .argument('[action]', '"list" (default), "dismiss", or "restore".')

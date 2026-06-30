@@ -315,14 +315,16 @@ program
 
 program
   .command('run-all')
-  .description('Walk the full trail: ingest → enrich → rollup → sync.')
+  .description('Walk the full trail: ingest → commits/prs backfill → enrich → infer-mainline → rollup → sync.')
   .option('--skip-sync', 'Stop before the Notion sync step.')
   .option('--skip-enrich', 'Skip the GitHub enrichment step.')
-  .action(async (opts: { skipSync?: boolean; skipEnrich?: boolean }) => {
+  .option('--skip-backfill', 'Skip the commits + prs backfills (faster, less coherent).')
+  .action(async (opts: { skipSync?: boolean; skipEnrich?: boolean; skipBackfill?: boolean }) => {
     const { runAll } = await import('./commands/run-all.js');
     await runAll({
       skipSync: opts.skipSync ?? false,
       skipEnrich: opts.skipEnrich ?? false,
+      skipBackfill: opts.skipBackfill ?? false,
     });
   });
 

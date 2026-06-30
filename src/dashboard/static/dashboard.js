@@ -79,6 +79,19 @@
       return `rgba(${parseInt(m[1],16)},${parseInt(m[2],16)},${parseInt(m[3],16)},${alpha})`;
     }
 
+    // Helper: determine which band (if any) the y-value falls into at a given x-index.
+    // Returns the stackOrder feature object or null.
+    function hitBand(yVal, idx) {
+      for (let i = 0; i < stackOrder.length; i++) {
+        const bandTop = seriesYs[i][idx];
+        const bandBot = i === 0 ? 0 : seriesYs[i - 1][idx];
+        if (yVal >= bandBot && yVal <= bandTop) {
+          return stackOrder[i];
+        }
+      }
+      return null;
+    }
+
     // uPlot series + bands wiring.
     // series[0] is the x-axis pseudo-series. Real series start at 1.
     const series = [{}].concat(stackOrder.map((feat) => ({
@@ -96,6 +109,19 @@
     }
 
     const data = [xs].concat(seriesYs);
+
+    // Declare setActiveKey before opts so it can be safely called from hooks.
+    let chartCanvas;
+    function setActiveKey(key) {
+      if (!chartCanvas) return;
+      chartCanvas.classList.toggle('chart-dimmed', !!key);
+      if (legend) {
+        legend.querySelectorAll('.trend-legend-row').forEach((li) => {
+          li.classList.toggle('active', li.getAttribute('data-feature-key') === key);
+          li.classList.toggle('inactive', !!key && li.getAttribute('data-feature-key') !== key);
+        });
+      }
+    }
 
     const opts = {
       width: node.clientWidth,
@@ -163,13 +189,8 @@
 
             // Determine which band the cursor is over and highlight it.
             const yVal = self.posToVal(self.cursor.top, 'y');
-            let activeKey = null;
-            for (let i = 0; i < stackOrder.length; i++) {
-              const bandTop = seriesYs[i][idx];
-              const bandBot = i === 0 ? 0 : seriesYs[i - 1][idx];
-              if (yVal >= bandBot && yVal <= bandTop) { activeKey = stackOrder[i].key; break; }
-            }
-            setActiveKey(activeKey);
+            const band = hitBand(yVal, idx);
+            setActiveKey(band ? band.key : null);
           },
         ],
       },
@@ -179,18 +200,7 @@
     node.__uplot = u;
 
     const legend = document.getElementById('trend-legend');
-    const chartCanvas = node.querySelector('canvas');
-
-    function setActiveKey(key) {
-      if (!chartCanvas) return;
-      chartCanvas.classList.toggle('chart-dimmed', !!key);
-      if (legend) {
-        legend.querySelectorAll('.trend-legend-row').forEach((li) => {
-          li.classList.toggle('active', li.getAttribute('data-feature-key') === key);
-          li.classList.toggle('inactive', !!key && li.getAttribute('data-feature-key') !== key);
-        });
-      }
-    }
+    chartCanvas = node.querySelector('canvas');
 
     if (legend) {
       legend.querySelectorAll('.trend-legend-row').forEach((li) => {
@@ -213,12 +223,7 @@
       const clickIdx = cu.cursor.idx;
       if (clickIdx == null) return;
       const yVal = cu.posToVal(cu.cursor.top, 'y');
-      let active = null;
-      for (let i = 0; i < stackOrder.length; i++) {
-        const bandTop = seriesYs[i][clickIdx];
-        const bandBot = i === 0 ? 0 : seriesYs[i - 1][clickIdx];
-        if (yVal >= bandBot && yVal <= bandTop) { active = stackOrder[i]; break; }
-      }
+      const active = hitBand(yVal, clickIdx);
       if (active && active.clickable !== false && active.key !== '__other__' && active.key !== 'uncategorized-mainline') {
         window.location.href = '/feature/' + encodeURIComponent(active.key);
       }
@@ -226,7 +231,9 @@
 
     node.addEventListener('mouseleave', () => {
       tooltip.style.display = 'none';
-      setActiveKey(null);
+      if (!legend || !legend.matches(':hover')) {
+        setActiveKey(null);
+      }
     });
   }
 

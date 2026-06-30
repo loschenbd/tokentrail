@@ -148,8 +148,8 @@ export function buildOverview(
   const tail = realFeatures.slice(6);
   const otherTotal = round2(tail.reduce((s, f) => s + f.totalUsd, 0));
 
-  // Build the `features` array in legend display order (top-to-bottom of legend):
-  // uncategorized, Other, then real features by totalUsd desc.
+  // Built bottom-up in stack order (largest real first → Other → uncategorized).
+  // The render layer re-sorts for the legend.
   // `stackPosition` is assigned bottom-up: largest real feature = 0;
   // uncategorized = highest position.
   const features: OverviewVM['features'] = [];

@@ -112,6 +112,9 @@
 
     // Declare setActiveKey before opts so it can be safely called from hooks.
     let chartCanvas;
+    // Whole-canvas dim instead of per-series alpha — keeps the striped fill
+    // for uncategorized-mainline dimmable. Upgrade path: store original
+    // series fills, swap to alpha-reduced fills + u.redraw() per active key.
     function setActiveKey(key) {
       if (!chartCanvas) return;
       chartCanvas.classList.toggle('chart-dimmed', !!key);

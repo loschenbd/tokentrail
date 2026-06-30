@@ -196,24 +196,18 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.post('/api/settings/test', async (req) => {
     const { backend, model } = req.body as { backend: string; model?: string };
-    // Temporarily override env so getLLMClient picks the requested backend.
-    const prev = process.env.TOKENTRAIL_LLM_BACKEND;
-    process.env.TOKENTRAIL_LLM_BACKEND = backend;
+    const c = getLLMClient({ backend: backend as any, model });
+    if (!c) return { ok: false, error: 'backend not configured' };
+    const t0 = Date.now();
     try {
-      const c = getLLMClient();
-      if (!c) return { ok: false, error: 'backend not configured' };
-      const t0 = Date.now();
       await c.client.chat.completions.create({
-        model: model ?? c.model,
+        model: c.model,
         messages: [{ role: 'user', content: 'ping' }],
         max_tokens: 1,
       });
       return { ok: true, latencyMs: Date.now() - t0 };
     } catch (e) {
-      return { ok: false, error: (e as Error).message };
-    } finally {
-      if (prev === undefined) delete process.env.TOKENTRAIL_LLM_BACKEND;
-      else process.env.TOKENTRAIL_LLM_BACKEND = prev;
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
   });
 

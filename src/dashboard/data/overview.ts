@@ -202,7 +202,7 @@ export function buildOverview(
   // Pre-build empty day rows (zero-filled).
   const days: OverviewVM['days'] = [];
   const dayIndex = new Map<string, OverviewVM['days'][number]>();
-  for (let i = opts.days - 1; i >= 0; i--) {
+  for (let i = windowDays - 1; i >= 0; i--) {
     const d = (db.prepare(`SELECT date('now', '-${i} days', 'localtime') AS d`).get() as { d: string }).d;
     const row = {
       date: d,

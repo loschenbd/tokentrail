@@ -160,6 +160,16 @@
             if (py < 0) py = top + 12;
             tooltip.style.left = px + 'px';
             tooltip.style.top = py + 'px';
+
+            // Determine which band the cursor is over and highlight it.
+            const yVal = self.posToVal(self.cursor.top, 'y');
+            let activeKey = null;
+            for (let i = 0; i < stackOrder.length; i++) {
+              const bandTop = seriesYs[i][idx];
+              const bandBot = i === 0 ? 0 : seriesYs[i - 1][idx];
+              if (yVal >= bandBot && yVal <= bandTop) { activeKey = stackOrder[i].key; break; }
+            }
+            setActiveKey(activeKey);
           },
         ],
       },
@@ -168,7 +178,56 @@
     const u = new uPlot(opts, data, node);
     node.__uplot = u;
 
-    node.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+    const legend = document.getElementById('trend-legend');
+    const chartCanvas = node.querySelector('canvas');
+
+    function setActiveKey(key) {
+      if (!chartCanvas) return;
+      chartCanvas.classList.toggle('chart-dimmed', !!key);
+      if (legend) {
+        legend.querySelectorAll('.trend-legend-row').forEach((li) => {
+          li.classList.toggle('active', li.getAttribute('data-feature-key') === key);
+          li.classList.toggle('inactive', !!key && li.getAttribute('data-feature-key') !== key);
+        });
+      }
+    }
+
+    if (legend) {
+      legend.querySelectorAll('.trend-legend-row').forEach((li) => {
+        const key = li.getAttribute('data-feature-key');
+        const clickable = li.getAttribute('data-clickable') === '1';
+        li.addEventListener('mouseenter', () => setActiveKey(key));
+        li.addEventListener('mouseleave', () => setActiveKey(null));
+        if (clickable && key) {
+          li.addEventListener('click', () => {
+            window.location.href = '/feature/' + encodeURIComponent(key);
+          });
+        }
+      });
+    }
+
+    // Chart click: derive the active band from cursor position and navigate.
+    node.addEventListener('click', () => {
+      const cu = node.__uplot;
+      if (!cu) return;
+      const clickIdx = cu.cursor.idx;
+      if (clickIdx == null) return;
+      const yVal = cu.posToVal(cu.cursor.top, 'y');
+      let active = null;
+      for (let i = 0; i < stackOrder.length; i++) {
+        const bandTop = seriesYs[i][clickIdx];
+        const bandBot = i === 0 ? 0 : seriesYs[i - 1][clickIdx];
+        if (yVal >= bandBot && yVal <= bandTop) { active = stackOrder[i]; break; }
+      }
+      if (active && active.clickable !== false && active.key !== '__other__' && active.key !== 'uncategorized-mainline') {
+        window.location.href = '/feature/' + encodeURIComponent(active.key);
+      }
+    });
+
+    node.addEventListener('mouseleave', () => {
+      tooltip.style.display = 'none';
+      setActiveKey(null);
+    });
   }
 
   function renderTrailElevation() {

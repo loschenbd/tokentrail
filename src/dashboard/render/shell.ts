@@ -1,6 +1,6 @@
 export type ShellOptions = {
   title: string;
-  activeTab?: 'overview' | 'today' | 'feature' | 'project' | 'worth-a-look';
+  activeTab?: 'overview' | 'today' | 'feature' | 'project' | 'worth-a-look' | 'settings';
   days: number;          // current time-window selection
   showBack?: boolean;
   showDismissed?: boolean;

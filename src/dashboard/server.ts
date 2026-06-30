@@ -22,6 +22,10 @@ import { readSetupStatus } from './data/setup-status.js';
 import { runInstallSkills } from '../commands/install-skills.js';
 import { installSwiftBarPlugin, installDaemon } from '../commands/init.js';
 import { pkgRoot } from '../lib/pkg-root.js';
+import { buildSettingsVM } from './data/settings.js';
+import { renderSettings } from './render/settings.js';
+import { readSettings, writeSettings, type Settings } from '../lib/settings.js';
+import { getLLMClient } from '../lib/llm.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
 
@@ -153,6 +157,66 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     }
   });
 
+  app.get('/settings', async (_req, reply) => {
+    const vm = buildSettingsVM();
+    const body = renderSettings(vm);
+    reply.type('text/html; charset=utf-8');
+    return renderShell({ title: 'Tokentrail · Settings', activeTab: 'settings', days: opts.defaultDays }, body);
+  });
+
+  app.get('/api/settings', async () => buildSettingsVM());
+
+  app.post('/api/settings', async (req, reply) => {
+    const body = req.body as Partial<Settings>;
+    // Validate backend enum.
+    const backend = body?.llm?.backend;
+    if (!backend || !['ollama', 'openrouter', 'none', 'auto'].includes(backend)) {
+      reply.code(400);
+      return { error: 'invalid backend' };
+    }
+    const current = readSettings();
+    const next: Settings = {
+      llm: {
+        backend,
+        openrouter: {
+          apiKey: body.llm?.openrouter?.apiKey === '__KEEP__'
+            ? current.llm.openrouter.apiKey
+            : (body.llm?.openrouter?.apiKey ?? null),
+          model: body.llm?.openrouter?.model ?? current.llm.openrouter.model,
+        },
+        ollama: {
+          baseUrl: body.llm?.ollama?.baseUrl ?? current.llm.ollama.baseUrl,
+          model: body.llm?.ollama?.model ?? current.llm.ollama.model,
+        },
+      },
+    };
+    writeSettings(next);
+    return { ok: true };
+  });
+
+  app.post('/api/settings/test', async (req) => {
+    const { backend, model } = req.body as { backend: string; model?: string };
+    // Temporarily override env so getLLMClient picks the requested backend.
+    const prev = process.env.TOKENTRAIL_LLM_BACKEND;
+    process.env.TOKENTRAIL_LLM_BACKEND = backend;
+    try {
+      const c = getLLMClient();
+      if (!c) return { ok: false, error: 'backend not configured' };
+      const t0 = Date.now();
+      await c.client.chat.completions.create({
+        model: model ?? c.model,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1,
+      });
+      return { ok: true, latencyMs: Date.now() - t0 };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    } finally {
+      if (prev === undefined) delete process.env.TOKENTRAIL_LLM_BACKEND;
+      else process.env.TOKENTRAIL_LLM_BACKEND = prev;
+    }
+  });
+
   // Static asset serving — small bespoke handler instead of @fastify/static
   // to keep dep count low. Only allows files whose basename matches a
   // whitelist (no path traversal).
@@ -165,6 +229,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     'favicon.svg',
     'trail-map.css',
     'trail-map.js',
+    'settings.js',
   ]);
 
   app.get('/static/tokens.css', async (_req, reply) => {

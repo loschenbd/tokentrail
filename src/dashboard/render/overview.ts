@@ -2,6 +2,7 @@ import type { OverviewVM } from '../data/overview.js';
 import { escapeHtml } from './shell.js';
 import { claudeProjectsDir } from '../../services/jsonl-reader.js';
 import { renderTrailMap } from './trail-map.js';
+import { colorFor, STRIPED_SENTINEL } from '../lib/feature-colors.js';
 
 export function renderOverview(vm: OverviewVM): string {
   if (isEmpty(vm)) return renderEmptyState();
@@ -98,9 +99,16 @@ function renderTopProjects(items: OverviewVM['topProjects'], totalUsd: number): 
       const featuresLabel = p.features.length === 1
         ? ''
         : `<span class="muted">· ${p.features.length} features</span>`;
+      // Dominant feature swatch (first entry, already sorted by totalUsd desc)
+      const dominantKey = p.features[0]?.featureKey ?? '';
+      const dominantColor = colorFor(dominantKey);
+      const projectSwatch = dominantColor === STRIPED_SENTINEL
+        ? '<span class="swatch swatch--striped"></span>'
+        : `<span class="swatch" style="background:${dominantColor}"></span>`;
       return `
         <a class="project-row" href="${href}">
           <span class="mile">${i + 1}</span>
+          ${projectSwatch}
           <span class="name">${escapeHtml(p.projectName)} ${featuresLabel}</span>
           <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
         </a>

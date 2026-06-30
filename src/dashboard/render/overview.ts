@@ -11,7 +11,7 @@ export function renderOverview(vm: OverviewVM): string {
     <div class="card chart-card">
       <div class="label">Trend · last ${vm.windowDays} days</div>
       <div id="trend-chart" style="width:100%;height:280px"></div>
-      <script type="application/json" id="trend-data">${jsonForScriptTag(vm.dailySeries)}</script>
+      <script type="application/json" id="trend-data">${jsonForScriptTag(vm.days)}</script>
     </div>
 
     <div class="card">

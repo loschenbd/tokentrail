@@ -1,4 +1,11 @@
 import type DatabaseType from 'better-sqlite3';
+import {
+  colorFor,
+  OTHER_KEY,
+  OTHER_NAME,
+  OTHER_COLOR,
+  UNCATEGORIZED_KEY,
+} from '../lib/feature-colors.js';
 
 export type OverviewVM = {
   windowDays: number;
@@ -14,16 +21,22 @@ export type OverviewVM = {
     totalUsd: number;
     features: Array<{ featureKey: string; featureName: string; totalUsd: number }>;
   }>;
-  dailySeries: Array<{ date: string; total: number; commits: number; prs: number }>;
-  anomalies: Array<{
-    id: number;
-    kind: string;
-    date: string;
-    featureKey: string | null;
-    sessionId: string | null;
-    amount: number;
-    reason: string;
+  features: Array<{
+    key: string;
+    name: string;
+    color: string;
+    totalUsd: number;
+    clickable: boolean;
+    stackPosition: number;
   }>;
+  days: Array<{
+    date: string;
+    total: number;
+    bands: Record<string, number>;
+    commits: number;
+    prs: number;
+  }>;
+  anomalies: Array<{ id: number; kind: string; date: string; featureKey: string | null; sessionId: string | null; amount: number; reason: string }>;
   recentCommits: Array<{ sha: string; subject: string; repo: string | null; authoredAt: string | null }>;
 };
 
@@ -31,12 +44,12 @@ export function buildOverview(
   db: DatabaseType.Database,
   opts: { days: number }
 ): OverviewVM {
-  const days = Math.max(1, opts.days);
+  const windowDays = Math.max(1, opts.days);
   // All date arithmetic uses the server's local time so the dashboard
   // matches the user's calendar — same machine, same timezone.
-  const startExpr = `date('now', '-${days - 1} days', 'localtime')`;
-  const priorStartExpr = `date('now', '-${days * 2 - 1} days', 'localtime')`;
-  const priorEndExpr = `date('now', '-${days} days', 'localtime')`;
+  const startExpr = `date('now', '-${windowDays - 1} days', 'localtime')`;
+  const priorStartExpr = `date('now', '-${windowDays * 2 - 1} days', 'localtime')`;
+  const priorEndExpr = `date('now', '-${windowDays} days', 'localtime')`;
 
   const totalRow = db
     .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM feature_rollups WHERE date >= ${startExpr}`)
@@ -101,7 +114,7 @@ export function buildOverview(
     .sort((a, b) => b.totalUsd - a.totalUsd)
     .slice(0, 12);
 
-  // Daily series — one row per day in window, zero-filled.
+  // Daily totals / commits / PRs — shared by both old dailySeries and new days array.
   const observed = db
     .prepare(`SELECT date, SUM(total_cost_usd) AS total FROM feature_rollups WHERE date >= ${startExpr} GROUP BY date`)
     .all() as Array<{ date: string; total: number }>;
@@ -114,15 +127,99 @@ export function buildOverview(
     .prepare(`SELECT date(merged_at, 'localtime') AS d, COUNT(*) AS n FROM session_prs WHERE merged_at IS NOT NULL AND date(merged_at, 'localtime') >= ${startExpr} GROUP BY date(merged_at, 'localtime')`)
     .all() as Array<{ d: string; n: number }>;
   const prsMap = new Map(prsByDay.map((r) => [r.d, r.n]));
-  const dailySeries: OverviewVM['dailySeries'] = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const date = db.prepare(`SELECT date('now', '-${i} days', 'localtime') AS d`).get() as { d: string };
-    dailySeries.push({
-      date: date.d,
-      total: observedMap.get(date.d) ?? 0,
-      commits: commitsMap.get(date.d) ?? 0,
-      prs: prsMap.get(date.d) ?? 0,
+
+  // --- features array (top 6 + Other + uncategorized-mainline) ---
+  type FeatureAgg = { key: string; name: string; totalUsd: number };
+  const allFeatureRows = db
+    .prepare(`
+      SELECT feature_key AS key,
+             MAX(feature_name) AS name,
+             ROUND(SUM(total_cost_usd), 2) AS totalUsd
+      FROM feature_rollups
+      WHERE date >= ${startExpr}
+      GROUP BY feature_key
+      ORDER BY totalUsd DESC
+    `)
+    .all() as FeatureAgg[];
+
+  const uncat = allFeatureRows.find((f) => f.key === UNCATEGORIZED_KEY);
+  const realFeatures = allFeatureRows.filter((f) => f.key !== UNCATEGORIZED_KEY);
+  const top6 = realFeatures.slice(0, 6);
+  const tail = realFeatures.slice(6);
+  const otherTotal = round2(tail.reduce((s, f) => s + f.totalUsd, 0));
+
+  // Build the `features` array in legend display order (top-to-bottom of legend):
+  // uncategorized, Other, then real features by totalUsd desc.
+  // `stackPosition` is assigned bottom-up: largest real feature = 0;
+  // uncategorized = highest position.
+  const features: OverviewVM['features'] = [];
+  // Stack from bottom (largest real first), increasing position.
+  top6.forEach((f, i) => {
+    features.push({
+      key: f.key,
+      name: f.name,
+      color: colorFor(f.key),
+      totalUsd: f.totalUsd,
+      clickable: true,
+      stackPosition: i,                  // 0 = bottom
     });
+  });
+  let nextPos = top6.length;
+  if (otherTotal > 0) {
+    features.push({
+      key: OTHER_KEY,
+      name: OTHER_NAME,
+      color: OTHER_COLOR,
+      totalUsd: otherTotal,
+      clickable: false,
+      stackPosition: nextPos++,
+    });
+  }
+  if (uncat) {
+    features.push({
+      key: UNCATEGORIZED_KEY,
+      name: uncat.name || UNCATEGORIZED_KEY,
+      color: colorFor(UNCATEGORIZED_KEY),
+      totalUsd: uncat.totalUsd,
+      clickable: false,
+      stackPosition: nextPos++,
+    });
+  }
+
+  // --- days array: per-day per-feature breakdown ---
+  const includedKeys = new Set(features.map((f) => f.key));
+  const perDayRows = db
+    .prepare(`
+      SELECT date,
+             feature_key AS featureKey,
+             ROUND(SUM(total_cost_usd), 2) AS usd
+      FROM feature_rollups
+      WHERE date >= ${startExpr}
+      GROUP BY date, feature_key
+    `)
+    .all() as Array<{ date: string; featureKey: string; usd: number }>;
+
+  // Pre-build empty day rows (zero-filled).
+  const days: OverviewVM['days'] = [];
+  const dayIndex = new Map<string, OverviewVM['days'][number]>();
+  for (let i = opts.days - 1; i >= 0; i--) {
+    const d = (db.prepare(`SELECT date('now', '-${i} days', 'localtime') AS d`).get() as { d: string }).d;
+    const row = {
+      date: d,
+      total: observedMap.get(d) ?? 0,
+      bands: {} as Record<string, number>,
+      commits: commitsMap.get(d) ?? 0,
+      prs: prsMap.get(d) ?? 0,
+    };
+    days.push(row);
+    dayIndex.set(d, row);
+  }
+
+  for (const r of perDayRows) {
+    const row = dayIndex.get(r.date);
+    if (!row) continue;
+    const key = includedKeys.has(r.featureKey) ? r.featureKey : OTHER_KEY;
+    row.bands[key] = round2((row.bands[key] ?? 0) + r.usd);
   }
 
   const anomalies = db
@@ -151,7 +248,7 @@ export function buildOverview(
   const deltaPct = prior > 0 ? Math.round(((total - prior) / prior) * 100) : (total > 0 ? 100 : 0);
 
   return {
-    windowDays: days,
+    windowDays: windowDays,
     totalUsd: total,
     priorUsd: prior,
     deltaPct,
@@ -159,7 +256,8 @@ export function buildOverview(
     weekSessions: weekRow.sessions,
     topFeatures,
     topProjects,
-    dailySeries,
+    features,
+    days,
     anomalies,
     recentCommits,
   };

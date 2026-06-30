@@ -21,7 +21,7 @@ describe('buildOverview', () => {
     const vm = buildOverview(db, { days: 30 });
     assert.equal(vm.totalUsd, 0);
     assert.equal(vm.topFeatures.length, 0);
-    assert.equal(vm.dailySeries.length, 30);  // zero-filled
+    assert.equal(vm.days.length, 30);  // zero-filled
     assert.equal(vm.recentCommits.length, 0);
     assert.equal(vm.anomalies.length, 0);
   });
@@ -60,18 +60,123 @@ describe('buildOverview', () => {
     assert.equal(second!.totalUsd, 60);
   });
 
-  test('dailySeries returns one entry per day in window, zero-filled', () => {
+  test('days returns one entry per day in window, zero-filled', () => {
     const db = makeDb();
     seedRollups(db, [
       { date: daysAgo(1), cost: 10 },
       { date: daysAgo(3), cost: 20 },
     ]);
     const vm = buildOverview(db, { days: 7 });
-    assert.equal(vm.dailySeries.length, 7);
-    const totals = vm.dailySeries.map((d) => d.total);
+    assert.equal(vm.days.length, 7);
+    const totals = vm.days.map((d) => d.total);
     assert.ok(totals.includes(10));
     assert.ok(totals.includes(20));
     assert.equal(totals.filter((t) => t === 0).length, 5);
+  });
+
+  test('features array: top 6 real features by window-total, sorted desc, with stable colors', () => {
+    const db = makeDb();
+    // 7 features, costs 70..10 — only top 6 should keep own bands.
+    seedRollups(db, [
+      { date: daysAgo(1), cost: 70, featureKey: 'menubar', featureName: 'menubar' },
+      { date: daysAgo(1), cost: 60, featureKey: 'ingest', featureName: 'ingest' },
+      { date: daysAgo(1), cost: 50, featureKey: 'rollup', featureName: 'rollup' },
+      { date: daysAgo(1), cost: 40, featureKey: 'enrich', featureName: 'enrich' },
+      { date: daysAgo(1), cost: 30, featureKey: 'dashboard', featureName: 'dashboard' },
+      { date: daysAgo(1), cost: 20, featureKey: 'infer-mainline', featureName: 'infer-mainline' },
+      { date: daysAgo(1), cost: 10, featureKey: 'misc', featureName: 'misc' },
+    ]);
+    const vm = buildOverview(db, { days: 30 });
+
+    // 6 real bands + 1 Other (no uncategorized in this fixture).
+    assert.equal(vm.features.length, 7);
+    const realFeatures = vm.features.filter((f) => f.clickable);
+    assert.deepEqual(
+      realFeatures.map((f) => f.key),
+      ['menubar', 'ingest', 'rollup', 'enrich', 'dashboard', 'infer-mainline']
+    );
+
+    // Other is present, holds the tail.
+    const other = vm.features.find((f) => f.key === '__other__');
+    assert.ok(other);
+    assert.equal(other!.totalUsd, 10);
+    assert.equal(other!.clickable, false);
+
+    // stackPosition: bottom (0) = biggest real feature; top = __other__ when no uncategorized.
+    const byPos = [...vm.features].sort((a, b) => a.stackPosition - b.stackPosition);
+    assert.equal(byPos[0]!.key, 'menubar');
+    assert.equal(byPos[byPos.length - 1]!.key, '__other__');
+  });
+
+  test('uncategorized-mainline always gets its own band and stacks above Other', () => {
+    const db = makeDb();
+    seedRollups(db, [
+      { date: daysAgo(1), cost: 100, featureKey: 'menubar', featureName: 'menubar' },
+      { date: daysAgo(1), cost: 5,   featureKey: 'uncategorized-mainline', featureName: 'uncategorized-mainline' },
+      { date: daysAgo(1), cost: 3,   featureKey: 'tail', featureName: 'tail' },
+    ]);
+    const vm = buildOverview(db, { days: 30 });
+
+    const uncat = vm.features.find((f) => f.key === 'uncategorized-mainline');
+    assert.ok(uncat);
+    assert.equal(uncat!.clickable, false);
+    assert.equal(uncat!.color, '__striped__');
+
+    // Top of stack = uncategorized; just below = Other (tail feature); bottom = menubar.
+    const byPos = [...vm.features].sort((a, b) => a.stackPosition - b.stackPosition);
+    assert.equal(byPos[0]!.key, 'menubar');
+    assert.equal(byPos[byPos.length - 1]!.key, 'uncategorized-mainline');
+    // 'tail' is within the top-6 cap (only 2 real features), so it gets its own band.
+    assert.equal(byPos[byPos.length - 2]!.key, 'tail');
+  });
+
+  test('days[].bands: per-day breakdown, zero-filled, totals match', () => {
+    const db = makeDb();
+    seedRollups(db, [
+      { date: daysAgo(1), cost: 2.10, featureKey: 'menubar', featureName: 'menubar' },
+      { date: daysAgo(1), cost: 1.21, featureKey: 'ingest',  featureName: 'ingest' },
+      { date: daysAgo(2), cost: 0.50, featureKey: 'menubar', featureName: 'menubar' },
+    ]);
+    const vm = buildOverview(db, { days: 30 });
+
+    assert.equal(vm.days.length, 30);
+    const yesterday = vm.days.find((d) => d.date === daysAgo(1))!;
+    assert.equal(yesterday.bands['menubar'], 2.10);
+    assert.equal(yesterday.bands['ingest'], 1.21);
+    assert.equal(yesterday.total, 3.31);
+
+    const dayBefore = vm.days.find((d) => d.date === daysAgo(2))!;
+    assert.equal(dayBefore.bands['menubar'], 0.50);
+    // Missing band for ingest on this day → either absent or 0; both acceptable.
+    assert.ok((dayBefore.bands['ingest'] ?? 0) === 0);
+
+    // Untouched days: bands empty/zero, total 0.
+    const zeroDay = vm.days.find((d) => d.date === daysAgo(10))!;
+    assert.equal(zeroDay.total, 0);
+  });
+
+  test('fewer than 6 features: features array length matches reality, no empty bands', () => {
+    const db = makeDb();
+    seedRollups(db, [
+      { date: daysAgo(1), cost: 5, featureKey: 'menubar', featureName: 'menubar' },
+      { date: daysAgo(1), cost: 3, featureKey: 'ingest',  featureName: 'ingest' },
+    ]);
+    const vm = buildOverview(db, { days: 30 });
+
+    // 2 real + 0 Other (no tail) + 0 uncategorized = 2.
+    assert.equal(vm.features.length, 2);
+    assert.equal(vm.features.find((f) => f.key === '__other__'), undefined);
+  });
+
+  test('days[].commits and days[].prs survive on the new shape', () => {
+    // Keeps parity with the prior dailySeries semantics.
+    const db = makeDb();
+    // Existing fixture helpers add commits/prs already; assert presence of the keys.
+    const vm = buildOverview(db, { days: 30 });
+    for (const d of vm.days) {
+      assert.equal(typeof d.commits, 'number');
+      assert.equal(typeof d.prs, 'number');
+    }
   });
 });
 
@@ -107,30 +212,30 @@ describe('buildFeatureDetail', () => {
   });
 });
 
-// The `date` placeholder is resolved inside seedRollups using SQLite's
-// date('now', '-N days') — ensures test data uses the same "today" reference
-// as buildOverview's SQL.
+// daysAgo returns the actual local date string N days ago in YYYY-MM-DD format,
+// matching SQLite's date('now', '-N days', 'localtime'). Using JS Date arithmetic
+// here keeps test-data dates and assertion comparisons in sync.
 function daysAgo(n: number): string {
-  return `__${n}__`;
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toLocaleDateString('en-CA'); // 'en-CA' produces YYYY-MM-DD
 }
 
 function seedRollups(
   db: DatabaseType.Database,
-  rows: Array<{ date: string; cost: number; feature_key?: string; feature_name?: string }>
+  rows: Array<{ date: string; cost: number; feature_key?: string; feature_name?: string; featureKey?: string; featureName?: string }>
 ): void {
   const insert = db.prepare(`
     INSERT INTO feature_rollups (id, date, feature_key, feature_name, total_cost_usd, sessions_count)
-    VALUES (@id, date('now', @offset), @key, @name, @cost, 1)
+    VALUES (@id, @date, @key, @name, @cost, 1)
   `);
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]!;
-    const offsetMatch = /^__(\d+)__$/.exec(r.date);
-    const offset = offsetMatch ? `-${offsetMatch[1]} days` : '+0 days';
     insert.run({
       id: `t-${i}`,
-      offset,
-      key: r.feature_key ?? `feat-${i}`,
-      name: r.feature_name ?? `Feature ${i}`,
+      date: r.date,
+      key: r.featureKey ?? r.feature_key ?? 'misc',
+      name: r.featureName ?? r.feature_name ?? 'misc',
       cost: r.cost,
     });
   }

@@ -13,7 +13,8 @@ function emptyVM(): OverviewVM {
     weekSessions: 0,
     topFeatures: [],
     topProjects: [],
-    dailySeries: [],
+    features: [],
+    days: [],
     anomalies: [],
     recentCommits: [],
   };

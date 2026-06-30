@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type DatabaseType from 'better-sqlite3';
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
+import { getLLMClient } from '../lib/llm.js';
 
 // One LLM call per feature, grouped by feature_key. Each call returns a list
 // of named topic clusters covering every session in that feature.
@@ -17,8 +18,6 @@ import OpenAI from 'openai';
 //     a network failure must not crash the rollup. Errors are logged and the
 //     run record is NOT written, so the next rollup retries.
 
-const DEFAULT_MODEL = 'anthropic/claude-haiku-4.5';
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const MIN_SESSIONS_FOR_CLUSTERING = 5;
 const MAX_TITLES_PER_FEATURE = 80;
 const MAX_COMMITS_PER_SESSION = 3;
@@ -54,14 +53,15 @@ export async function recomputeClusters(
     llmCalls: 0,
   };
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
+  const llm = getLLMClient();
+  if (!llm) {
     console.log(
-      'OPENROUTER_API_KEY not set. Add it to .env to enable topic clustering.'
+      'No LLM backend configured. Run `tokentrail llm setup` (or set OPENROUTER_API_KEY) to enable topic clustering.'
     );
     return summary;
   }
-  const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
+  const model = llm.model;
+  const client = llm.client;
 
   const features = db
     .prepare(
@@ -83,16 +83,6 @@ export async function recomputeClusters(
 
   if (features.length === 0) return summary;
 
-  const client = new OpenAI({
-    apiKey,
-    baseURL: OPENROUTER_BASE_URL,
-    // OpenRouter recommends attribution headers — surface tokentrail so
-    // your usage shows up cleanly in the OpenRouter dashboard.
-    defaultHeaders: {
-      'HTTP-Referer': 'https://github.com/loschenbd/tokentrail',
-      'X-Title': 'Tokentrail',
-    },
-  });
   const upsertRun = db.prepare(
     `INSERT INTO feature_cluster_runs (feature_key, session_count, session_id_hash, computed_at)
      VALUES (@feature_key, @session_count, @session_id_hash, datetime('now'))

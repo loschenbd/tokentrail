@@ -38,6 +38,13 @@ export function runMigrations(db: Database.Database): void {
             AND ue.repo IS NOT NULL
         )
     `);
+    // Mainline feature inference columns (2026-06-29 spec)
+    addColumnIfMissing(db, 'usage_events', 'inferred_feature_key', 'TEXT');
+    addColumnIfMissing(db, 'usage_events', 'inferred_feature_name', 'TEXT');
+    addColumnIfMissing(db, 'usage_events', 'inference_source', 'TEXT');
+    // Create index after columns exist
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_usage_events_inferred_feature
+      ON usage_events (inferred_feature_key)`);
   });
   tx();
 }

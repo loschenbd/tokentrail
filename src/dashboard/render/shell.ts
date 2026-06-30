@@ -1,6 +1,6 @@
 export type ShellOptions = {
   title: string;
-  activeTab?: 'overview' | 'today' | 'feature' | 'project' | 'worth-a-look';
+  activeTab?: 'overview' | 'today' | 'feature' | 'project' | 'worth-a-look' | 'settings';
   days: number;          // current time-window selection
   showBack?: boolean;
   showDismissed?: boolean;
@@ -18,6 +18,7 @@ export function renderShell(opts: ShellOptions, body: string): string {
       ${navItem('overview', '/', 'Overview')}
       ${navItem('today', '/today', 'Today')}
       ${navItem('worth-a-look', '/worth-a-look', 'Worth a look')}
+      ${navItem('settings', '/settings', 'Settings')}
     </nav>`;
   return `<!doctype html>
 <html lang="en">

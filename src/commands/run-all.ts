@@ -20,6 +20,10 @@ export async function runAll(opts: RunAllOptions = {}): Promise<void> {
     await runEnrich();
   }
 
+  console.log('\n→ infer-mainline');
+  const { runInferMainline } = await import('./infer-mainline.js');
+  await runInferMainline();
+
   console.log('\n→ rollup');
   await runRollup();
 

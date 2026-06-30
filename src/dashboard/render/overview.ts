@@ -10,8 +10,13 @@ export function renderOverview(vm: OverviewVM): string {
   <section class="main-col">
     <div class="card chart-card">
       <div class="label">Trend · last ${vm.windowDays} days</div>
-      <div id="trend-chart" style="width:100%;height:280px"></div>
-      <script type="application/json" id="trend-data">${jsonForScriptTag(vm.days)}</script>
+      <div class="trend-layout">
+        <div id="trend-chart" style="width:100%;height:280px"></div>
+        <ul id="trend-legend" class="trend-legend">
+          ${renderTrendLegend(vm.features)}
+        </ul>
+      </div>
+      <script type="application/json" id="trend-data">${jsonForScriptTag({ days: vm.days, features: vm.features })}</script>
     </div>
 
     <div class="card">
@@ -133,4 +138,28 @@ function renderCommits(items: OverviewVM['recentCommits']): string {
 // which JSON.parse accepts as a normal character.
 function jsonForScriptTag(data: unknown): string {
   return JSON.stringify(data).replace(/</g, '\\u003c');
+}
+
+function renderTrendLegend(features: OverviewVM['features']): string {
+  // Legend order: non-clickable buckets (highest stackPosition first), then
+  // real/clickable features sorted by totalUsd descending (largest spend first).
+  const ordered = [...features].sort((a, b) => {
+    const aReal = a.clickable ? 1 : 0;
+    const bReal = b.clickable ? 1 : 0;
+    if (aReal !== bReal) return aReal - bReal; // non-clickable before clickable
+    if (!a.clickable) return b.stackPosition - a.stackPosition; // non-clickable: highest pos first
+    return b.totalUsd - a.totalUsd; // clickable: largest spend first
+  });
+  return ordered
+    .map((f) => {
+      const swatchClass = f.color === '__striped__' ? 'swatch swatch--striped' : 'swatch';
+      const swatchStyle = f.color === '__striped__' ? '' : ` style="background:${f.color}"`;
+      const clickable = f.clickable ? '1' : '0';
+      return `<li class="trend-legend-row" data-feature-key="${escapeHtml(f.key)}" data-feature-color="${escapeHtml(f.color)}" data-clickable="${clickable}">
+        <span class="${swatchClass}"${swatchStyle}></span>
+        <span class="name">${escapeHtml(f.name)}</span>
+        <span class="amt">$${f.totalUsd.toFixed(2)}</span>
+      </li>`;
+    })
+    .join('');
 }

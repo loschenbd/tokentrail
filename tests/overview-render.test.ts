@@ -68,6 +68,7 @@ test('renders the legend scaffold next to the chart with one li per feature', ()
   // clickable flags.
   assert.match(html, /data-feature-key="menubar"[^>]*data-clickable="1"/);
   assert.match(html, /data-feature-key="__other__"[^>]*data-clickable="0"/);
+  assert.match(html, /data-feature-key="uncategorized-mainline"[^>]*data-clickable="0"/);
 });
 
 test('trend-data JSON embeds both days and features arrays', () => {

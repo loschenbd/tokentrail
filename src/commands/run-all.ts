@@ -6,6 +6,7 @@ import { runSync } from './sync.js';
 export type RunAllOptions = {
   skipSync?: boolean;
   skipEnrich?: boolean;
+  skipBackfill?: boolean;
 };
 
 export async function runAll(opts: RunAllOptions = {}): Promise<void> {
@@ -14,6 +15,16 @@ export async function runAll(opts: RunAllOptions = {}): Promise<void> {
 
   console.log('→ ingest');
   await runIngest();
+
+  if (!opts.skipBackfill) {
+    console.log('\n→ commits --backfill');
+    const { backfillCommits } = await import('./commits.js');
+    await backfillCommits();
+
+    console.log('\n→ prs --backfill');
+    const { backfillPrs } = await import('./prs.js');
+    await backfillPrs();
+  }
 
   if (!opts.skipEnrich) {
     console.log('\n→ enrich');

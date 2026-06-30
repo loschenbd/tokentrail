@@ -255,6 +255,23 @@ program
     await runInferMainline({ dryRun: opts.dryRun });
   });
 
+const llm = program.command('llm').description('Configure the LLM backend for topic inference.');
+
+llm.command('status').description('Show current LLM backend + model.').action(async () => {
+  const { runLlmStatus } = await import('./commands/llm.js');
+  await runLlmStatus();
+});
+
+llm.command('test').description('Send a one-token ping to the configured backend.').action(async () => {
+  const { runLlmTest } = await import('./commands/llm.js');
+  await runLlmTest();
+});
+
+llm.command('setup').description('Interactive backend setup.').action(async () => {
+  const { runLlmSetup } = await import('./commands/llm.js');
+  await runLlmSetup();
+});
+
 program
   .command('anomaly')
   .description('List, dismiss, or restore anomalies.')

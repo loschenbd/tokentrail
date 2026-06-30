@@ -322,6 +322,33 @@ refresh. If you're running the SwiftBar widget and want near-realtime
 totals, drop the cron interval to `*/1` (every minute) and set
 `TOKENTRAIL_FLAGS=--skip-sync --skip-enrich` so each tick stays cheap.
 
+## LLM backend (optional)
+
+Topic inference for work-on-`main` and session clustering both benefit from a
+small LLM. Tokentrail supports two backends:
+
+- **Ollama** (recommended) — local, free, private. Commit subjects and session
+  titles stay on your machine.
+
+      brew install ollama
+      ollama pull qwen2.5:3b
+      tokentrail llm setup           # pick "ollama"
+
+- **OpenRouter** — cloud; sends commit subjects + session titles to a
+  third-party LLM. Cheap (Haiku is ≈ $0.001 / session) but not private.
+
+      tokentrail llm setup           # pick "openrouter", paste key
+
+- **none** — deterministic rules only. Still useful: conventional commit
+  scopes (`feat(menubar): …`) become features without any LLM.
+
+Settings live in `~/Library/Application Support/Tokentrail/settings.json`
+(macOS) or `$XDG_CONFIG_HOME/tokentrail/settings.json` (Linux). You can also
+edit them from the dashboard at `http://127.0.0.1:<port>/settings`.
+
+Environment variables (`OPENROUTER_API_KEY`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`,
+`TOKENTRAIL_LLM_BACKEND`) override `settings.json`.
+
 ## Dashboard
 
 ```

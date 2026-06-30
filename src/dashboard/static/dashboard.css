@@ -456,3 +456,8 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
     45deg, #6B7280 0 3px, rgba(255,255,255,0.45) 3px 5px
   );
 }
+
+/* Hover-highlight: dim the whole canvas when a band/legend row is active */
+canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
+.trend-legend-row.active { background: rgba(139,111,71,0.18); }
+.trend-legend-row.inactive { opacity: 0.45; }

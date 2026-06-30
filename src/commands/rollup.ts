@@ -79,7 +79,6 @@ export async function runRollup(): Promise<RollupSummary> {
     inTokens: number;
     outTokens: number;
     cost: number;
-    sessions: number;
   };
 
   const buckets = new Map<string, Bucket>();
@@ -120,7 +119,6 @@ export async function runRollup(): Promise<RollupSummary> {
         inTokens: 0,
         outTokens: 0,
         cost: 0,
-        sessions: 0,
       };
       buckets.set(id, b);
     }
@@ -134,10 +132,6 @@ export async function runRollup(): Promise<RollupSummary> {
     b.inTokens += r.in_tokens ?? 0;
     b.outTokens += r.out_tokens ?? 0;
     b.cost += r.cost ?? 0;
-    // Approximation: sessions can be shared across repo/branch splits within
-    // a day. We sum here; close enough for a rollup-level "sessions touched"
-    // signal. If high precision needed, swap to a second query.
-    b.sessions += r.sessions ?? 0;
   }
 
   const upsert = db.prepare(`
@@ -210,7 +204,7 @@ export async function runRollup(): Promise<RollupSummary> {
         total_input_tokens: b.inTokens,
         total_output_tokens: b.outTokens,
         total_cost_usd: round2(b.cost),
-        sessions_count: b.sessions,
+        sessions_count: b.sessionIds.size,
         commit_summary: commitSummary,
         session_ids: [...b.sessionIds].sort().join(','),
       });

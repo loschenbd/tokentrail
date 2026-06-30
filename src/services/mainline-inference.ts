@@ -121,8 +121,11 @@ export async function inferMainlineFeatures(
               max_tokens: 200,
             });
             const parsed = JSON.parse(resp.choices[0]?.message?.content ?? '') as { topic_slug?: string };
-            const key = slugify(parsed.topic_slug ?? '');
-            if (key) cls = { key, name: humanizeFromSlug(key), source: 'session-title-llm' };
+            const raw = (parsed.topic_slug ?? '').trim();
+            if (raw) {
+              const key = slugify(raw);
+              cls = { key, name: humanizeFromSlug(key), source: 'session-title-llm' };
+            }
           } catch (e) {
             console.log(`[infer-mainline] LLM call failed (no-commits) for ${s.session_id}: ${(e as Error).message}`);
           }
@@ -179,8 +182,9 @@ export async function inferMainlineFeatures(
             const parsed = JSON.parse(content) as { labels?: Array<{ commit_sha: string; topic_slug: string }> };
             if (Array.isArray(parsed.labels)) {
               for (const lbl of parsed.labels) {
-                const key = slugify(lbl.topic_slug ?? '');
-                if (!key) continue;
+                const raw = (lbl.topic_slug ?? '').trim();
+                if (!raw) continue;
+                const key = slugify(raw);
                 classBySha.set(lbl.commit_sha, {
                   key,
                   name: humanizeFromSlug(key),

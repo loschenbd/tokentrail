@@ -9,14 +9,14 @@ export type LLMClient = {
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
-export function getLLMClient(): LLMClient | null {
+export function getLLMClient(override?: { backend?: LLMBackend; model?: string }): LLMClient | null {
   const settings = readSettings();
-  const backend = resolveBackend(settings.llm.backend, settings);
+  const backend = resolveBackend(settings.llm.backend, settings, override?.backend);
 
   if (backend === 'openrouter') {
     const apiKey = process.env.OPENROUTER_API_KEY ?? settings.llm.openrouter.apiKey;
     if (!apiKey) return null;
-    const model = process.env.OPENROUTER_MODEL ?? settings.llm.openrouter.model;
+    const model = override?.model ?? process.env.OPENROUTER_MODEL ?? settings.llm.openrouter.model;
     return {
       backend: 'openrouter',
       model,
@@ -26,7 +26,7 @@ export function getLLMClient(): LLMClient | null {
 
   if (backend === 'ollama') {
     const baseURL = process.env.OLLAMA_BASE_URL ?? settings.llm.ollama.baseUrl;
-    const model = process.env.OLLAMA_MODEL ?? settings.llm.ollama.model;
+    const model = override?.model ?? process.env.OLLAMA_MODEL ?? settings.llm.ollama.model;
     return {
       backend: 'ollama',
       model,
@@ -39,9 +39,10 @@ export function getLLMClient(): LLMClient | null {
   return null;
 }
 
-function resolveBackend(setting: LLMBackend, settings: Settings): 'openrouter' | 'ollama' | 'none' {
+function resolveBackend(setting: LLMBackend, settings: Settings, override?: LLMBackend): 'openrouter' | 'ollama' | 'none' {
   const envOverride = process.env.TOKENTRAIL_LLM_BACKEND as LLMBackend | undefined;
-  const choice = envOverride ?? setting;
+  // Explicit override (e.g. from the settings test endpoint) beats env, which beats persisted setting.
+  const choice = override ?? envOverride ?? setting;
   if (choice === 'openrouter' || choice === 'ollama') return choice;
   if (choice === 'none') return 'none';
   // auto: no network probe — pick openrouter if key set, else none.

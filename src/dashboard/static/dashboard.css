@@ -461,3 +461,13 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .trend-legend-row.active { background: rgba(139,111,71,0.18); }
 .trend-legend-row.inactive { opacity: 0.45; }
+
+.chart-hint {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(139,111,71,0.08);
+  color: #6b563d;
+  font-size: 13px;
+}
+.chart-hint code { background: rgba(139,111,71,0.16); padding: 1px 5px; border-radius: 3px; }

@@ -6,6 +6,10 @@ import { colorFor, STRIPED_SENTINEL } from '../lib/feature-colors.js';
 
 export function renderOverview(vm: OverviewVM): string {
   if (isEmpty(vm)) return renderEmptyState();
+  const onlyUncategorized =
+    vm.features.length === 1 &&
+    vm.features[0]!.key === 'uncategorized-mainline' &&
+    vm.totalUsd > 0;
   return `
 <div class="layout">
   <section class="main-col">
@@ -18,6 +22,7 @@ export function renderOverview(vm: OverviewVM): string {
         </ul>
       </div>
       <script type="application/json" id="trend-data">${jsonForScriptTag({ days: vm.days, features: vm.features })}</script>
+      ${onlyUncategorized ? '<div class="chart-hint">Run <code>tokentrail infer-mainline</code> to classify these.</div>' : ''}
     </div>
 
     <div class="card">

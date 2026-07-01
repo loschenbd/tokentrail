@@ -97,8 +97,7 @@ function renderTopProjects(items: OverviewVM['topProjects']): string {
           <span class="swatch" style="background:${color}"></span>
           <div class="name-col"><a href="/project/${encodeURIComponent(p.key)}">${escapeHtml(p.name)}</a> <span class="muted">· ${p.featureCount} features</span></div>
           <div class="amt-col">$${p.totalUsd.toFixed(0)} · ${p.pct.toFixed(0)}%</div>
-          <div class="main-bar" style="--pct:${p.pct}"></div>
-          <div class="subbar" data-project-key="${escapeHtml(p.key)}"></div>
+          <div class="subbar" data-project-key="${escapeHtml(p.key)}" style="--pct:${p.pct}"></div>
         </div>`;
     })
     .join('');

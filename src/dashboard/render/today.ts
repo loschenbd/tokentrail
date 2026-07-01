@@ -8,7 +8,7 @@ export function renderToday(vm: TodayVM): string {
   <section class="main-col">
     <div class="card">
       <div class="label">Today's burn paths</div>
-      ${renderTopProjects(vm.topProjects, vm.todayUsd)}
+      ${renderTopProjects(vm.topProjects)}
     </div>
   </section>
 
@@ -52,26 +52,19 @@ function renderEmptyState(): string {
   `;
 }
 
-function renderTopProjects(items: TodayVM['topProjects'], totalUsd: number): string {
+function renderTopProjects(items: TodayVM['topProjects']): string {
   if (items.length === 0) return '<div class="muted">No project activity today.</div>';
-  const denom = totalUsd > 0 ? totalUsd : 1;
   return items
     .map((p, i) => {
-      const share = (p.totalUsd / denom) * 100;
-      const pct = Math.max(1, Math.round(share));
-      const href = p.features.length === 1
-        ? `/feature/${encodeURIComponent(p.features[0]!.featureKey)}`
-        : `/project/${encodeURIComponent(p.projectKey)}`;
-      const featuresLabel = p.features.length === 1
-        ? ''
-        : `<span class="muted">· ${p.features.length} features</span>`;
+      const barPct = Math.max(1, Math.round(p.pct));
+      const featuresLabel = p.featureCount > 1 ? `<span class="muted">· ${p.featureCount} features</span>` : '';
       return `
-        <a class="project-row" href="${href}">
+        <a class="project-row" href="/project/${encodeURIComponent(p.key)}">
           <span class="mile">${i + 1}</span>
-          <span class="name">${escapeHtml(p.projectName)} ${featuresLabel}</span>
-          <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
+          <span class="name">${escapeHtml(p.name)} ${featuresLabel}</span>
+          <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${p.pct.toFixed(0)}%</span></span>
         </a>
-        <div class="bar"><span style="width:${pct}%"></span></div>
+        <div class="bar"><span style="width:${barPct}%"></span></div>
       `;
     })
     .join('');

@@ -3,16 +3,33 @@
     const node = document.getElementById('trend-chart');
     const dataNode = document.getElementById('trend-data');
     if (!node || !dataNode || typeof uPlot === 'undefined') return;
-    let series;
-    try { series = JSON.parse(dataNode.textContent || '[]'); } catch (e) { return; }
-    if (!Array.isArray(series) || series.length === 0) {
+    let payload;
+    try { payload = JSON.parse(dataNode.textContent || 'null'); } catch (e) { return; }
+    if (!payload || !Array.isArray(payload.days) || payload.days.length === 0) {
       node.innerHTML = '<div class="muted" style="padding:24px;text-align:center">No data in window.</div>';
       return;
     }
-    const xs = series.map((d) => new Date(d.date + 'T00:00:00').getTime() / 1000);
-    const ys = series.map((d) => d.total);
-    const commitsArr = series.map((d) => d.commits || 0);
-    const prsArr = series.map((d) => d.prs || 0);
+    const days = payload.days;
+    const features = payload.features || [];
+    if (features.length === 0) {
+      node.innerHTML = '<div class="muted" style="padding:24px;text-align:center">No data in window.</div>';
+      return;
+    }
+
+    // Stack order: bottom first (lowest stackPosition).
+    const stackOrder = features.slice().sort((a, b) => a.stackPosition - b.stackPosition);
+    const xs = days.map((d) => new Date(d.date + 'T00:00:00').getTime() / 1000);
+
+    // Per-series cumulative ys (each series carries the running sum up to its band, inclusive).
+    const seriesYs = stackOrder.map((feat, idx) => {
+      return days.map((d) => {
+        let sum = 0;
+        for (let i = 0; i <= idx; i++) {
+          sum += d.bands[stackOrder[i].key] || 0;
+        }
+        return sum;
+      });
+    });
 
     const tooltip = document.createElement('div');
     tooltip.className = 'chart-tooltip';
@@ -21,76 +38,206 @@
     node.appendChild(tooltip);
 
     function fmtDate(unixSec) {
-      const d = new Date(unixSec * 1000);
-      return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+      return new Date(unixSec * 1000).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
     }
     function fmtUsd(n) {
       return '$' + (typeof n === 'number' ? n.toFixed(2) : n);
+    }
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Striped fill: a tiny canvas pattern, created lazily so it's bound to the
+    // chart's own canvas context (uPlot will call the fill function per draw).
+    function makeStripePattern(ctx) {
+      const p = document.createElement('canvas');
+      p.width = 8; p.height = 8;
+      const c = p.getContext('2d');
+      c.fillStyle = '#6B7280';
+      c.fillRect(0, 0, 8, 8);
+      c.strokeStyle = 'rgba(255,255,255,0.35)';
+      c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(-2, 10); c.lineTo(10, -2); c.stroke();
+      c.beginPath(); c.moveTo(0, 14); c.lineTo(14, 0); c.stroke();
+      return ctx.createPattern(p, 'repeat');
+    }
+    // For striped series, return a fill function that builds the pattern lazily.
+    function fillFor(color) {
+      if (color === '__striped__') {
+        return (u) => {
+          const ctx = u.ctx;
+          if (!ctx._stripePattern) ctx._stripePattern = makeStripePattern(ctx);
+          return ctx._stripePattern;
+        };
+      }
+      // Slight transparency so band borders read; opaque inner color preserves identity.
+      return hexToRgba(color, 0.92);
+    }
+    function hexToRgba(hex, alpha) {
+      const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      if (!m) return hex;
+      return `rgba(${parseInt(m[1],16)},${parseInt(m[2],16)},${parseInt(m[3],16)},${alpha})`;
+    }
+
+    // Helper: determine which band (if any) the y-value falls into at a given x-index.
+    // Returns the stackOrder feature object or null.
+    function hitBand(yVal, idx) {
+      for (let i = 0; i < stackOrder.length; i++) {
+        const bandTop = seriesYs[i][idx];
+        const bandBot = i === 0 ? 0 : seriesYs[i - 1][idx];
+        if (yVal >= bandBot && yVal <= bandTop) {
+          return stackOrder[i];
+        }
+      }
+      return null;
+    }
+
+    // uPlot series + bands wiring.
+    // series[0] is the x-axis pseudo-series. Real series start at 1.
+    const series = [{}].concat(stackOrder.map((feat) => ({
+      label: feat.name,
+      stroke: feat.color === '__striped__' ? '#4B5563' : feat.color,
+      fill: fillFor(feat.color),
+      width: 1,
+      points: { show: false },
+    })));
+    // Bands: each band fills between series idx-1 and idx (idx = 2..N for stacked).
+    // Band: { series: [topIdx, bottomIdx], fill }
+    const bands = [];
+    for (let i = 1; i < stackOrder.length; i++) {
+      bands.push({ series: [i + 1, i] });
+    }
+
+    const data = [xs].concat(seriesYs);
+
+    // Declare setActiveKey before opts so it can be safely called from hooks.
+    let chartCanvas;
+    // Whole-canvas dim instead of per-series alpha — keeps the striped fill
+    // for uncategorized-mainline dimmable. Upgrade path: store original
+    // series fills, swap to alpha-reduced fills + u.redraw() per active key.
+    function setActiveKey(key) {
+      if (!chartCanvas) return;
+      chartCanvas.classList.toggle('chart-dimmed', !!key);
+      if (legend) {
+        legend.querySelectorAll('.trend-legend-row').forEach((li) => {
+          li.classList.toggle('active', li.getAttribute('data-feature-key') === key);
+          li.classList.toggle('inactive', !!key && li.getAttribute('data-feature-key') !== key);
+        });
+      }
     }
 
     const opts = {
       width: node.clientWidth,
       height: 280,
-      legend: { show: false },
-      cursor: {
-        drag: { x: false, y: false },
-        points: { size: 7 },
-      },
+      legend: { show: false },     // we render our own
+      cursor: { drag: { x: false, y: false }, points: { size: 5 } },
       scales: { x: { time: true } },
-      series: [
-        {},
-        {
-          label: 'Daily $',
-          stroke: '#8b6f47',
-          fill: 'rgba(139,111,71,0.2)',
-          width: 2,
-          points: { show: true, size: 4 },
-        },
-      ],
+      series: series,
+      bands: bands,
       axes: [
         { stroke: '#6b563d', grid: { stroke: 'rgba(139,111,71,0.15)' } },
-        { stroke: '#6b563d', grid: { stroke: 'rgba(139,111,71,0.15)' }, values: (_self, ticks) => ticks.map((t) => '$' + Math.round(t)) },
+        { stroke: '#6b563d', grid: { stroke: 'rgba(139,111,71,0.15)' }, values: (_s, ticks) => ticks.map((t) => '$' + Math.round(t)) },
       ],
       hooks: {
         setCursor: [
           (self) => {
-            const { idx } = self.cursor;
-            if (idx == null || idx < 0 || idx >= xs.length) {
+            const idx = self.cursor.idx;
+            if (idx == null || idx < 0 || idx >= days.length) {
               tooltip.style.display = 'none';
               return;
             }
-            const x = xs[idx];
-            const y = ys[idx];
-            const commits = commitsArr[idx] || 0;
-            const prs = prsArr[idx] || 0;
-            tooltip.innerHTML =
-              '<div class="chart-tooltip-date">' + fmtDate(x) + '</div>' +
-              '<div class="chart-tooltip-value">' + fmtUsd(y) + '</div>' +
-              '<div class="chart-tooltip-meta">' +
-                commits + ' ' + (commits === 1 ? 'commit' : 'commits') +
-                ' · ' + prs + ' ' + (prs === 1 ? 'PR' : 'PRs') +
+            const d = days[idx];
+            // Per-day breakdown sorted by $ desc, non-zero only.
+            const rows = stackOrder
+              .map((f) => ({ key: f.key, name: f.name, color: f.color, usd: d.bands[f.key] || 0 }))
+              .filter((r) => r.usd > 0)
+              .sort((a, b) => b.usd - a.usd);
+            const total = d.total || 0;
+            const denom = total > 0 ? total : 1;
+            let body = '<div class="chart-tooltip-date">' + fmtDate(xs[idx]) + '</div>' +
+              '<div class="chart-tooltip-value">' + fmtUsd(total) + '</div>';
+            if (total === 0) {
+              body += '<div class="chart-tooltip-meta">no activity</div>';
+            } else {
+              body += '<div class="chart-tooltip-rows">';
+              for (const r of rows) {
+                const pct = Math.round((r.usd / denom) * 100);
+                const swatch = r.color === '__striped__'
+                  ? '<span class="tooltip-swatch swatch--striped"></span>'
+                  : '<span class="tooltip-swatch" style="background:' + esc(r.color) + '"></span>';
+                body += '<div class="chart-tooltip-row">' + swatch +
+                  '<span class="name">' + esc(r.name) + '</span>' +
+                  '<span class="amt">' + fmtUsd(r.usd) + ' <span class="muted">(' + pct + '%)</span></span></div>';
+              }
+              body += '</div>';
+            }
+            body += '<div class="chart-tooltip-meta">' +
+              (d.commits || 0) + ' ' + ((d.commits || 0) === 1 ? 'commit' : 'commits') +
+              ' · ' + (d.prs || 0) + ' ' + ((d.prs || 0) === 1 ? 'PR' : 'PRs') +
               '</div>';
+            tooltip.innerHTML = body;
             tooltip.style.display = 'block';
-            const left = self.valToPos(x, 'x');
-            const top = self.valToPos(y, 'y');
-            // Clamp inside the chart so the tooltip never gets clipped.
+
+            const left = self.valToPos(xs[idx], 'x');
+            const top = total === 0
+              ? (self.cursor.top != null ? self.cursor.top : 0)
+              : self.valToPos(seriesYs[seriesYs.length - 1][idx], 'y');
             const rect = node.getBoundingClientRect();
-            const tw = tooltip.offsetWidth;
-            const th = tooltip.offsetHeight;
-            let px = left + 12;
-            let py = top - th - 8;
+            const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
+            let px = left + 12, py = top - th - 8;
             if (px + tw > rect.width) px = left - tw - 12;
             if (py < 0) py = top + 12;
             tooltip.style.left = px + 'px';
             tooltip.style.top = py + 'px';
+
+            // Determine which band the cursor is over and highlight it.
+            const yVal = self.posToVal(self.cursor.top, 'y');
+            const band = hitBand(yVal, idx);
+            setActiveKey(band ? band.key : null);
           },
         ],
       },
     };
-    // eslint-disable-next-line no-undef, no-new
-    new uPlot(opts, [xs, ys], node);
+    // eslint-disable-next-line no-undef
+    const u = new uPlot(opts, data, node);
+    node.__uplot = u;
 
-    node.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+    const legend = document.getElementById('trend-legend');
+    chartCanvas = node.querySelector('canvas');
+
+    if (legend) {
+      legend.querySelectorAll('.trend-legend-row').forEach((li) => {
+        const key = li.getAttribute('data-feature-key');
+        const clickable = li.getAttribute('data-clickable') === '1';
+        li.addEventListener('mouseenter', () => setActiveKey(key));
+        li.addEventListener('mouseleave', () => setActiveKey(null));
+        if (clickable && key) {
+          li.addEventListener('click', () => {
+            window.location.href = '/feature/' + encodeURIComponent(key);
+          });
+        }
+      });
+    }
+
+    // Chart click: derive the active band from cursor position and navigate.
+    node.addEventListener('click', () => {
+      const cu = node.__uplot;
+      if (!cu) return;
+      const clickIdx = cu.cursor.idx;
+      if (clickIdx == null) return;
+      const yVal = cu.posToVal(cu.cursor.top, 'y');
+      const active = hitBand(yVal, clickIdx);
+      if (active && active.clickable !== false && active.key !== '__other__' && active.key !== 'uncategorized-mainline') {
+        window.location.href = '/feature/' + encodeURIComponent(active.key);
+      }
+    });
+
+    node.addEventListener('mouseleave', () => {
+      tooltip.style.display = 'none';
+      if (!legend || !legend.matches(':hover')) {
+        setActiveKey(null);
+      }
+    });
   }
 
   function renderTrailElevation() {

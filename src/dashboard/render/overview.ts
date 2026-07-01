@@ -2,16 +2,27 @@ import type { OverviewVM } from '../data/overview.js';
 import { escapeHtml } from './shell.js';
 import { claudeProjectsDir } from '../../services/jsonl-reader.js';
 import { renderTrailMap } from './trail-map.js';
+import { colorFor, STRIPED_SENTINEL } from '../lib/feature-colors.js';
 
 export function renderOverview(vm: OverviewVM): string {
   if (isEmpty(vm)) return renderEmptyState();
+  const onlyUncategorized =
+    vm.features.length === 1 &&
+    vm.features[0]!.key === 'uncategorized-mainline' &&
+    vm.totalUsd > 0;
   return `
 <div class="layout">
   <section class="main-col">
     <div class="card chart-card">
       <div class="label">Trend · last ${vm.windowDays} days</div>
-      <div id="trend-chart" style="width:100%;height:280px"></div>
-      <script type="application/json" id="trend-data">${jsonForScriptTag(vm.dailySeries)}</script>
+      <div class="trend-layout">
+        <div id="trend-chart" style="width:100%;height:280px"></div>
+        <ul id="trend-legend" class="trend-legend">
+          ${renderTrendLegend(vm.features)}
+        </ul>
+      </div>
+      <script type="application/json" id="trend-data">${jsonForScriptTag({ days: vm.days, features: vm.features })}</script>
+      ${onlyUncategorized ? '<div class="chart-hint">Run <code>tokentrail infer-mainline</code> to classify these.</div>' : ''}
     </div>
 
     <div class="card">
@@ -93,9 +104,16 @@ function renderTopProjects(items: OverviewVM['topProjects'], totalUsd: number): 
       const featuresLabel = p.features.length === 1
         ? ''
         : `<span class="muted">· ${p.features.length} features</span>`;
+      // Dominant feature swatch (first entry, already sorted by totalUsd desc)
+      const dominantKey = p.features[0]?.featureKey ?? '';
+      const dominantColor = colorFor(dominantKey);
+      const projectSwatch = dominantColor === STRIPED_SENTINEL
+        ? '<span class="swatch swatch--striped"></span>'
+        : `<span class="swatch" style="background:${dominantColor}"></span>`;
       return `
         <a class="project-row" href="${href}">
           <span class="mile">${i + 1}</span>
+          ${projectSwatch}
           <span class="name">${escapeHtml(p.projectName)} ${featuresLabel}</span>
           <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
         </a>
@@ -133,4 +151,28 @@ function renderCommits(items: OverviewVM['recentCommits']): string {
 // which JSON.parse accepts as a normal character.
 function jsonForScriptTag(data: unknown): string {
   return JSON.stringify(data).replace(/</g, '\\u003c');
+}
+
+function renderTrendLegend(features: OverviewVM['features']): string {
+  // Legend order: non-clickable buckets (highest stackPosition first), then
+  // real/clickable features sorted by totalUsd descending (largest spend first).
+  const ordered = [...features].sort((a, b) => {
+    const aReal = a.clickable ? 1 : 0;
+    const bReal = b.clickable ? 1 : 0;
+    if (aReal !== bReal) return aReal - bReal; // non-clickable before clickable
+    if (!a.clickable) return b.stackPosition - a.stackPosition; // non-clickable: highest pos first
+    return b.totalUsd - a.totalUsd; // clickable: largest spend first
+  });
+  return ordered
+    .map((f) => {
+      const swatchClass = f.color === '__striped__' ? 'swatch swatch--striped' : 'swatch';
+      const swatchStyle = f.color === '__striped__' ? '' : ` style="background:${f.color}"`;
+      const clickable = f.clickable ? '1' : '0';
+      return `<li class="trend-legend-row" data-feature-key="${escapeHtml(f.key)}" data-feature-color="${escapeHtml(f.color)}" data-clickable="${clickable}">
+        <span class="${swatchClass}"${swatchStyle}></span>
+        <span class="name">${escapeHtml(f.name)}</span>
+        <span class="amt">$${f.totalUsd.toFixed(2)}</span>
+      </li>`;
+    })
+    .join('');
 }

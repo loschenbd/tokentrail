@@ -1,12 +1,17 @@
 import type { FeatureDetailVM } from '../data/feature.js';
 import { escapeHtml } from './shell.js';
+import { colorFor, STRIPED_SENTINEL } from '../lib/feature-colors.js';
 
 export function renderFeature(vm: FeatureDetailVM): string {
+  const color = colorFor(vm.featureKey);
+  const swatch = color === STRIPED_SENTINEL
+    ? '<span class="swatch swatch--striped" style="vertical-align:middle;margin-right:8px"></span>'
+    : `<span class="swatch" style="background:${color};vertical-align:middle;margin-right:8px"></span>`;
   return `
 <div class="single-col">
   <div class="card">
     <div class="label">${escapeHtml(vm.featureKey)} · ${vm.sessionCount} sessions · ${vm.branches.length === 0 ? 'no branches' : vm.branches.map((b) => escapeHtml(b)).join(', ')}</div>
-    <div class="hero">${escapeHtml(vm.featureName)}</div>
+    <div class="hero">${swatch}${escapeHtml(vm.featureName)}</div>
     <div class="kicker">$${vm.totalUsd.toFixed(0)}</div>
     <div class="delta ${vm.deltaPct >= 0 ? 'up' : 'down'}">${vm.deltaPct >= 0 ? '▲' : '▼'} ${Math.abs(vm.deltaPct)}% vs prior</div>
   </div>

@@ -333,6 +333,9 @@ function humanizeFromSlug(slug: string): string {
 // empty. Asks the LLM for a single topic slug for the whole session — a
 // much smaller prompt that succeeds where the batch didn't. Cached per
 // session so we only pay once even if multiple batches fall through.
+// If BOTH the LLM call fails AND the session title itself is empty we
+// finally give up and return uncategorized-mainline; otherwise a
+// slugified title is always a better label than "uncategorized."
 async function getSessionTitleSlug(
   llm: NonNullable<ReturnType<typeof defaultGetLLMClient>>,
   title: string,
@@ -356,5 +359,15 @@ async function getSessionTitleSlug(
       return { key, name: humanizeFromSlug(key) };
     }
   } catch { /* fall through */ }
+  // Deterministic last resort: slug the raw session title. Not as
+  // topical as an LLM pick, but guarantees every session with a title
+  // gets a real label instead of falling into the uncategorized bucket.
+  const raw = (title ?? '').trim();
+  if (raw) {
+    const key = slugify(raw);
+    if (key && key !== 'untitled') {
+      return { key, name: humanizeFromSlug(key) };
+    }
+  }
   return { key: 'uncategorized-mainline', name: 'Uncategorized mainline' };
 }

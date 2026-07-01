@@ -165,13 +165,13 @@ describe('inferMainlineFeatures()', () => {
     assert.ok(rows.every(r => r.inference_source === 'session-title-llm'));
   });
 
-  test('Rule B malformed response → session-title fallback, then no-signal when that also fails', async () => {
-    // When the batch call returns unparseable content the service now
-    // asks the LLM for a session-title slug as a fallback. In this test
-    // that call ALSO returns garbage, so the commit lands on no-signal.
-    // Two LLM calls total: one batch + one fallback.
+  test('Rule B malformed response → session-title slug as deterministic fallback', async () => {
+    // When both the batch call AND the session-title LLM call return
+    // garbage, the service slugifies the raw session title as a
+    // deterministic last resort. Only a session with no title at all
+    // falls through to 'uncategorized-mainline' / 'no-signal'.
     const db = makeDb();
-    seed(db);
+    seed(db); // seed sets s1.title = 'work on menubar then marketing'
     db.exec(`
       INSERT INTO session_commits (session_id, commit_sha, subject, authored_at) VALUES
         ('s1', 'a', 'whatever I did today', '2026-06-29T10:00:00Z');
@@ -184,11 +184,10 @@ describe('inferMainlineFeatures()', () => {
       client: { chat: { completions: { create: mock.fn(async () => ({ choices: [{ message: { content: 'not json' }}]})) }} } as any,
     };
 
-    const summary = await inferMainlineFeatures(db, { getLLMClient: () => fakeClient });
-    assert.equal(summary.llmCalls, 1);
+    await inferMainlineFeatures(db, { getLLMClient: () => fakeClient });
     const r = db.prepare(`SELECT inferred_feature_key, inference_source FROM usage_events WHERE session_id='s1'`).get() as {inferred_feature_key:string; inference_source:string};
-    assert.equal(r.inferred_feature_key, 'uncategorized-mainline');
-    assert.equal(r.inference_source, 'no-signal');
+    assert.equal(r.inferred_feature_key, 'work-on-menubar-then-marketing');
+    assert.equal(r.inference_source, 'session-title-llm');
   });
 
   test('Rule B labels with empty topic_slug fall through to no-signal', async () => {

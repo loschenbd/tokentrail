@@ -798,7 +798,8 @@
         const data = await r.json();
         if (!data.ok) throw new Error(data.error || 'infer-mainline failed');
         const s = data.summary || {};
-        status.textContent = `Relabeled ${s.sessionsRelabeled || 0} sessions (${s.eventsRelabeled || 0} events) via ${s.llmCalls || 0} LLM calls. Reloading…`;
+        const retried = data.retriedSessions || 0;
+        status.textContent = `Retried ${retried}, relabeled ${s.sessionsRelabeled || 0} sessions (${s.eventsRelabeled || 0} events) via ${s.llmCalls || 0} LLM calls. Reloading…`;
         setTimeout(() => location.reload(), 800);
       } catch (err) {
         btn.disabled = false;

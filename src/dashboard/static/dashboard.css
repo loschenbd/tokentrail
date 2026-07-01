@@ -116,15 +116,24 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 .project-row {
   display: grid;
   grid-template-columns: 24px 12px 1fr auto;
-  gap: var(--space-s);
+  grid-template-rows: auto auto auto;
+  gap: 4px 8px;
+  align-items: center;
   padding: 6px 0;
   text-decoration: none;
   color: var(--color-ink);
   font-family: var(--font-serif);
   font-weight: 600;
-  align-items: baseline;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
 }
 .project-row:hover { background: rgba(255,255,255,0.4); }
+.project-row .rank { grid-column: 1; grid-row: 1; }
+.project-row .swatch { grid-column: 2; grid-row: 1; }
+.project-row .name-col { grid-column: 3; grid-row: 1; }
+.project-row .amt-col { grid-column: 4; grid-row: 1; text-align: right; }
+.project-row .main-bar { grid-column: 1 / -1; grid-row: 2; height: 4px; background: rgba(0,0,0,0.06); position: relative; border-radius: 2px; overflow: hidden; }
+.project-row .main-bar::before { content: ''; display: block; height: 100%; width: calc(var(--pct) * 1%); background: rgba(139,111,71,0.5); }
+.project-row .subbar { grid-column: 1 / -1; grid-row: 3; }
 .feature-row .mile,
 .project-row .mile {
   color: var(--color-ink-subtle);
@@ -176,7 +185,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 
 .chart-tooltip {
   position: absolute;
-  pointer-events: none;
+  pointer-events: auto;
   background: var(--color-parchment-top);
   border: 1px dashed var(--color-rule);
   border-radius: 4px;
@@ -192,6 +201,24 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 .chart-tooltip-date { color: var(--color-ink-muted); font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
 .chart-tooltip-value { font-weight: 600; font-size: var(--size-body); }
 .chart-tooltip-meta { color: var(--color-ink-muted); font-size: 11px; margin-top: 2px; font-family: var(--font-sans); }
+.chart-tooltip-link {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  gap: 6px;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  padding: 2px 0;
+}
+.chart-tooltip-link:hover { background: rgba(139,111,71,0.08); }
+.chart-tooltip-subhead {
+  font-size: 11px;
+  color: #6b563d;
+  margin-top: 6px;
+  border-top: 1px solid rgba(0,0,0,0.08);
+  padding-top: 6px;
+}
+.chart-tooltip-more { font-size: 11px; color: #6b563d; margin-top: 2px; }
 
 .single-col { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-l); }
 .session-row {
@@ -429,7 +456,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   background: repeating-linear-gradient(
     45deg,
     #6B7280 0 4px,
-    rgba(255,255,255,0.45) 4px 6px
+    rgba(255,255,255,0.35) 4px 6px
   );
 }
 .chart-tooltip-rows {
@@ -453,7 +480,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 }
 .tooltip-swatch.swatch--striped {
   background: repeating-linear-gradient(
-    45deg, #6B7280 0 3px, rgba(255,255,255,0.45) 3px 5px
+    45deg, #6B7280 0 3px, rgba(255,255,255,0.35) 3px 5px
   );
 }
 
@@ -472,7 +499,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 }
 .chart-hint code { background: rgba(139,111,71,0.16); padding: 1px 5px; border-radius: 3px; }
 
-/* Burn-paths inline feature sub-bars (Task 5; polish in Task 7) */
+/* Burn-paths inline feature sub-bars */
 .subbar {
   display: flex;
   height: 8px;

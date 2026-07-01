@@ -732,13 +732,15 @@
     `;
 
     const btn = card.querySelector('.unatt-cta');
+    const original = btn.innerHTML;
+    let restoreTimer = null;
     btn.addEventListener('click', async (e) => {
       const text = e.currentTarget.getAttribute('data-clipboard') || '';
       try {
         await navigator.clipboard.writeText(text);
-        const original = btn.innerHTML;
-        btn.textContent = 'Copied ✓';
-        setTimeout(() => { btn.innerHTML = original; }, 1500);
+        e.currentTarget.textContent = 'Copied ✓';
+        clearTimeout(restoreTimer);
+        restoreTimer = setTimeout(() => { e.currentTarget.innerHTML = original; }, 1500);
       } catch (err) {
         // Fallback: no-op; label doesn't flip. Not worth a toast for a copy failure on localhost.
       }

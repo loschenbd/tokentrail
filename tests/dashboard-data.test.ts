@@ -285,6 +285,23 @@ describe('buildOverview', () => {
     const pct = vm.unattributed!.pctOfTrail;
     assert.ok(pct > 70 && pct < 90, `expected pctOfTrail in [70,90], got ${pct}`);
   });
+
+  test('days[]: sum(bands) + unattributedTotal === total for legacy project_key=NULL data', () => {
+    const db = openInMemoryDb();
+    // Legacy row: uncategorized-mainline with no project_key.
+    seedRollups(db, [
+      { date: daysAgo(1), featureKey: 'uncategorized-mainline', usd: 40 },
+      // Plus a project-tagged row to make sure bands still work alongside legacy data.
+      { date: daysAgo(1), projectKey: 'archi', featureKey: 'rag', usd: 60 },
+    ]);
+    const vm = buildOverview({ db, days: 30 });
+    const row = vm.days.find((d) => d.date === daysAgo(1))!;
+    assert.equal(row.total, 100);
+    const bandSum = Object.values(row.bands).reduce((a, b) => a + b, 0);
+    assert.equal(bandSum + row.unattributedTotal, row.total);
+    assert.equal(row.unattributedTotal, 40);
+    assert.equal(bandSum, 60);
+  });
 });
 
 describe('buildFeatureDetail', () => {

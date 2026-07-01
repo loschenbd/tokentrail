@@ -17,24 +17,15 @@
       return;
     }
 
-    // Client-side twins of src/dashboard/lib/feature-colors.ts. Features are
-    // rendered as within-hue shades of their parent project's colour so the
-    // tooltip mix matches the burn-paths sub-bar colouring.
-    const PALETTE_INLINE = ['#0072B2','#E69F00','#009E73','#CC79A7','#56B4E9','#D55E00','#F0E442','#000000'];
+    // Client-side twins of src/dashboard/lib/feature-colors.ts. Feature dots in
+    // the tooltip are within-hue shades of the SERVER-RESOLVED project color
+    // (payload.projectColors) so tooltip colors match the burn-paths sub-bar.
+    const projectColors = (payload && payload.projectColors) || {};
     function hashFeat(k) {
       let h = 0;
       for (let i = 0; i < k.length; i++) h = ((h << 5) - h + k.charCodeAt(i)) | 0;
       h = Math.imul(h ^ (h >>> 15), 0x9E3779B1);
       return Math.abs(h >>> 0);
-    }
-    function hashProj(k) {
-      let h = 5381;
-      for (let i = 0; i < k.length; i++) h = ((h << 5) - h + k.charCodeAt(i)) | 0;
-      h = Math.imul(h ^ (h >>> 15), 0x9E3779B1);
-      return Math.abs((h ^ 0xC0FFEE) >>> 0);
-    }
-    function colorForProj(k) {
-      return PALETTE_INLINE[hashProj(k) % PALETTE_INLINE.length];
     }
     function hexToHsl(hex) {
       const h = hex.replace('#', '');
@@ -70,7 +61,7 @@
       return `#${to(r)}${to(g)}${to(b)}`;
     }
     function colorForFeatureInProject(projectKey, featureKey) {
-      const base = colorForProj(projectKey);
+      const base = projectColors[projectKey] || '#9CA3AF';
       const [h, s, l] = hexToHsl(base);
       const shifts = [-18, -9, 0, 9, 18];
       const shift = shifts[hashFeat(featureKey) % shifts.length];
@@ -763,7 +754,14 @@
     let payload;
     try { payload = JSON.parse(dataNode.textContent || 'null'); } catch (e) { return; }
     const u = payload && payload.unattributed;
-    if (!u) return;
+    if (!u) {
+      card.innerHTML = `
+        <div class="label">Unattributed</div>
+        <div class="unatt-hero-empty">$0 <span class="muted">· all sessions attributed</span></div>
+        <div class="muted unatt-empty-note">Every session in this window is tied to a project. Nothing to reconcile.</div>
+      `;
+      return;
+    }
 
     const spark = drawSparkline(u.sparkline);
     const projRows = u.topProjects.map((p) => {

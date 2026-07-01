@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   colorFor,
   colorForProject,
+  resolveProjectColors,
   PALETTE,
   OTHER_KEY,
   OTHER_COLOR,
@@ -54,18 +55,25 @@ test('colorForProject is deterministic', () => {
   assert.equal(a, b);
 });
 
-test('colorForProject returns a value from PALETTE', () => {
+test('colorForProject returns a valid hex color', () => {
   const c = colorForProject('tokentrail');
-  assert.ok(PALETTE.includes(c), `expected ${c} to be in PALETTE`);
+  assert.match(c, /^#[0-9a-f]{6}$/i);
 });
 
-test('colorForProject and colorFor have independent keyspaces', () => {
-  // Not strictly guaranteed by contract (they COULD collide for a specific
-  // slug), but for a broad sample the two mappings should differ often.
-  const keys = ['a','b','c','d','e','f','archi','tokentrail','malslp'];
-  const featurePicks = keys.map(colorFor);
-  const projectPicks = keys.map(colorForProject);
-  // At least one slug picks a different colour under the two functions.
-  const diffs = keys.filter((_, i) => featurePicks[i] !== projectPicks[i]);
-  assert.ok(diffs.length > 0, 'expected at least one key to differ');
+test('colorForProject returns OTHER_COLOR for the __other__ sentinel', () => {
+  assert.equal(colorForProject(OTHER_KEY), OTHER_COLOR);
+});
+
+test('resolveProjectColors returns a unique color per key', () => {
+  const keys = ['archi', 'tokentrail', 'malslp', 'benjaminloschen', 'mudandsilicon',
+                'imessage-history', 'gemify-universal', 'pm-os', 'projects', 'job-search',
+                'ben-skylar', 'blogs'];
+  const map = resolveProjectColors(keys);
+  const picks = new Set(Object.values(map));
+  assert.equal(picks.size, keys.length, `expected ${keys.length} unique colors, got ${picks.size}`);
+});
+
+test('resolveProjectColors preserves OTHER_COLOR for the sentinel', () => {
+  const map = resolveProjectColors([OTHER_KEY, 'archi']);
+  assert.equal(map[OTHER_KEY], OTHER_COLOR);
 });

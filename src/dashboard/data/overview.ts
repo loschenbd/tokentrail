@@ -2,7 +2,8 @@ import type DatabaseType from 'better-sqlite3';
 import {
   colorFor,
   colorForProject,
-  colorForFeatureInProject,
+  resolveProjectColors,
+  shadeForFeature,
   OTHER_KEY,
   OTHER_NAME,
   OTHER_COLOR,
@@ -21,11 +22,16 @@ export type OverviewVM = {
   topProjects: Array<{
     key: string;
     name: string;
+    color: string;
     totalUsd: number;
     pct: number;
     featureCount: number;
     sessionCount: number;
   }>;
+
+  // Collision-free color map used by both trend chart and burn paths so
+  // sibling projects on the same view never share a hue.
+  projectColors: Record<string, string>;
 
   // NEW: project-first trend chart bands.
   projects: Array<{
@@ -181,13 +187,20 @@ export function buildOverview(
     p.featureCount += 1;
     p.sessionCount += r.sessionsCount;
   }
-  const topProjects: OverviewVM['topProjects'] = [...projectMap.values()]
+  const topProjectsRaw = [...projectMap.values()]
     .sort((a, b) => b.totalUsd - a.totalUsd)
-    .slice(0, 12)
-    .map((p) => ({
-      ...p,
-      pct: total > 0 ? Math.round((p.totalUsd / total) * 100) : 0,
-    }));
+    .slice(0, 12);
+
+  // Rank-based collision-free color map, keyed by projectKey. Both the trend
+  // chart bands and the burn-paths swatches read from this so a project's
+  // color is identical everywhere on the page.
+  const projectColors = resolveProjectColors(topProjectsRaw.map((p) => p.key));
+
+  const topProjects: OverviewVM['topProjects'] = topProjectsRaw.map((p) => ({
+    ...p,
+    pct: total > 0 ? Math.round((p.totalUsd / total) * 100) : 0,
+    color: projectColors[p.key]!,
+  }));
 
   // --- anomalies, recentCommits (unchanged) ---
   const anomalies = db
@@ -253,7 +266,7 @@ export function buildOverview(
   const projects: OverviewVM['projects'] = top6.map((r, i) => ({
     key: r.projKey,
     name: r.projName,
-    color: colorForProject(r.projKey),
+    color: projectColors[r.projKey] ?? colorForProject(r.projKey),
     totalUsd: r.total,
     clickable: true,
     stackPosition: i,   // 0 = bottom (largest)
@@ -381,7 +394,7 @@ export function buildOverview(
       featMap.set(effectiveFeatKey, {
         name: effectiveFeatKey === '__unattributed__' ? 'Unattributed' : (r.featureName || r.featureKey),
         totalUsd: r.totalUsd,
-        color: effectiveFeatKey === '__unattributed__' ? STRIPED_SENTINEL : colorForFeatureInProject(projectKey, r.featureKey),
+        color: effectiveFeatKey === '__unattributed__' ? STRIPED_SENTINEL : shadeForFeature(projectColors[projectKey] ?? colorForProject(projectKey), r.featureKey),
       });
     } else {
       existing.totalUsd = round2(existing.totalUsd + r.totalUsd);
@@ -432,6 +445,7 @@ export function buildOverview(
     weekSessions: weekRow.sessions,
     topFeatures,
     topProjects,
+    projectColors,
     projects,
     days: dayRows,
     projectFeatureMix,

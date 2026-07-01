@@ -554,3 +554,6 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   border-radius: 4px; cursor: pointer; font-family: var(--font-sans); font-size: 12px;
 }
 .unatt-cta:hover { background: rgba(139,111,71,0.08); }
+.unatt-hero-empty { font-family: var(--font-serif); font-size: 20px; font-weight: 600; margin-top: 4px; color: #4b7a4b; }
+.unatt-hero-empty .muted { font-family: var(--font-sans); font-size: 12px; font-weight: 400; color: #6b563d; }
+.unatt-empty-note { font-size: 12px; margin-top: 4px; }

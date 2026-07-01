@@ -39,23 +39,48 @@ export function colorFor(featureKey: string): string {
   return PALETTE[hash(featureKey) % PALETTE.length]!;
 }
 
+// Single-project picker (used when caller doesn't have the sibling set).
+// Prefer resolveProjectColors when you have the full visible list — it
+// guarantees no collisions across siblings.
 export function colorForProject(projectKey: string): string {
-  return PALETTE[hashProject(projectKey) % PALETTE.length]!;
+  if (projectKey === OTHER_KEY) return OTHER_COLOR;
+  const hue = hashProject(projectKey) % 360;
+  return hslToHex(hue, 62, 46);
 }
 
-// Feature colors are within-hue shades of the parent project color, so a
-// sub-bar segment visually belongs to its row's project swatch. Same
-// (projectKey, featureKey) always yields the same shade.
-export function colorForFeatureInProject(projectKey: string, featureKey: string): string {
-  const base = colorForProject(projectKey);
+// Given the full set of projects visible on a view, return {key: hex} with
+// no two projects sharing a similar hue. First pass hashes each key to a
+// hue; subsequent collisions (within MIN_SEP degrees) get rotated forward
+// until they fit. Order of projectKeys is meaningful: earlier keys keep
+// their hash-picked hue when a collision occurs.
+export function resolveProjectColors(projectKeys: readonly string[]): Record<string, string> {
+  const MIN_SEP = 22;
+  const out: Record<string, string> = {};
+  const used: number[] = [];
+  for (const key of projectKeys) {
+    if (key === OTHER_KEY) {
+      out[key] = OTHER_COLOR;
+      continue;
+    }
+    let h = hashProject(key) % 360;
+    let guard = 360;
+    while (guard-- > 0 && used.some((u) => {
+      const d = Math.abs(u - h);
+      return Math.min(d, 360 - d) < MIN_SEP;
+    })) {
+      h = (h + 17) % 360;
+    }
+    used.push(h);
+    out[key] = hslToHex(h, 62, 46);
+  }
+  return out;
+}
+
+export function shadeForFeature(baseHex: string, featureKey: string): string {
+  const [h, s, l] = hexToHsl(baseHex);
   const shifts = [-18, -9, 0, 9, 18];
   const shift = shifts[hash(featureKey) % shifts.length]!;
-  return shiftLightness(base, shift);
-}
-
-function shiftLightness(hex: string, delta: number): string {
-  const [h, s, l] = hexToHsl(hex);
-  const nl = Math.max(22, Math.min(78, l + delta));
+  const nl = Math.max(22, Math.min(78, l + shift));
   return hslToHex(h, s, nl);
 }
 

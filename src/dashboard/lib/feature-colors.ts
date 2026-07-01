@@ -21,8 +21,24 @@ function hash(s: string): number {
   return Math.abs(h >>> 0);
 }
 
+function hashProject(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+  // Same finalizer as colorFor to preserve distribution quality.
+  h = Math.imul(h ^ (h >>> 15), 0x9E3779B1);
+  // XOR with a non-zero constant so a same-slug project and feature don't
+  // necessarily land on the same colour. Independent keyspace, per spec.
+  return Math.abs((h ^ 0xC0FFEE) >>> 0);
+}
+
 export function colorFor(featureKey: string): string {
   if (featureKey === OTHER_KEY) return OTHER_COLOR;
   if (featureKey === UNCATEGORIZED_KEY) return STRIPED_SENTINEL;
   return PALETTE[hash(featureKey) % PALETTE.length]!;
+}
+
+export function colorForProject(projectKey: string): string {
+  return PALETTE[hashProject(projectKey) % PALETTE.length]!;
 }

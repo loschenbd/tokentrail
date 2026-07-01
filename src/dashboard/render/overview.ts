@@ -6,9 +6,10 @@ import { colorFor, STRIPED_SENTINEL } from '../lib/feature-colors.js';
 
 export function renderOverview(vm: OverviewVM): string {
   if (isEmpty(vm)) return renderEmptyState();
+  const features = vm.features ?? [];
   const onlyUncategorized =
-    vm.features.length === 1 &&
-    vm.features[0]!.key === 'uncategorized-mainline' &&
+    features.length === 1 &&
+    features[0]!.key === 'uncategorized-mainline' &&
     vm.totalUsd > 0;
   return `
 <div class="layout">
@@ -18,10 +19,10 @@ export function renderOverview(vm: OverviewVM): string {
       <div class="trend-layout">
         <div id="trend-chart" style="width:100%;height:280px"></div>
         <ul id="trend-legend" class="trend-legend">
-          ${renderTrendLegend(vm.features)}
+          ${renderTrendLegend(features)}
         </ul>
       </div>
-      <script type="application/json" id="trend-data">${jsonForScriptTag({ days: vm.days, features: vm.features })}</script>
+      <script type="application/json" id="trend-data">${jsonForScriptTag({ days: vm.days, features })}</script>
       ${onlyUncategorized ? '<div class="chart-hint">Run <code>tokentrail infer-mainline</code> to classify these.</div>' : ''}
     </div>
 
@@ -153,7 +154,7 @@ function jsonForScriptTag(data: unknown): string {
   return JSON.stringify(data).replace(/</g, '\\u003c');
 }
 
-function renderTrendLegend(features: OverviewVM['features']): string {
+function renderTrendLegend(features: NonNullable<OverviewVM['features']>): string {
   // Legend order: non-clickable buckets (highest stackPosition first), then
   // real/clickable features sorted by totalUsd descending (largest spend first).
   const ordered = [...features].sort((a, b) => {

@@ -41,7 +41,7 @@ export type TodayResponse = {
 };
 
 export function buildToday(db: DatabaseType.Database): TodayResponse {
-  const overview = buildOverview(db, { days: 1 });
+  const overview = buildOverview({ db, days: 1 });
 
   const anomalyCount = (db
     .prepare(`SELECT COUNT(*) AS n FROM anomalies WHERE dismissed_at IS NULL`)

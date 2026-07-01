@@ -51,6 +51,7 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
   `CREATE TABLE IF NOT EXISTS feature_rollups (
     id                    TEXT PRIMARY KEY,
     date                  TEXT NOT NULL,
+    project_key           TEXT,
     feature_key           TEXT NOT NULL,
     feature_name          TEXT NOT NULL,
     repo                  TEXT,
@@ -62,9 +63,13 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     notion_page_id        TEXT,
     synced_to_notion_at   TEXT,
     created_at            TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(date, feature_key)
+    updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
+
+  // Expression-based unique index so COALESCE(project_key, '') treats NULL project
+  // as '' and dedupes correctly. ON CONFLICT clauses must use the same expression.
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_feature_rollups_unique
+    ON feature_rollups (date, COALESCE(project_key, ''), feature_key)`,
 
   `CREATE INDEX IF NOT EXISTS idx_feature_rollups_date
     ON feature_rollups (date)`,

@@ -159,4 +159,49 @@ describe('buildProjectDetail', () => {
     const vm = buildProjectDetail(db, { projectKey: 'repo:loschenbd/archi', days: 30 });
     assert.equal(vm, null);
   });
+
+  test('each feature carries lastActive and a zero-filled daily series', () => {
+    const db = makeDb();
+    const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;
+    insertRollup(db, { date: day(1), featureKey: 'archi-a', featureName: 'A', repo: 'loschenbd/archi', cost: 25, sessionIds: 'sess-1', sessions: 1 });
+    insertRollup(db, { date: day(3), featureKey: 'archi-a', featureName: 'A', repo: 'loschenbd/archi', cost: 75, sessionIds: 'sess-2', sessions: 1 });
+    const vm = buildProjectDetail(db, { projectKey: 'repo:loschenbd/archi', days: 7 })!;
+    const feat = vm.features.find((f) => f.featureKey === 'archi-a')!;
+    assert.equal(feat.lastActive, day(1));
+    assert.equal(feat.daily.length, 7);
+    // daily is oldest→newest; day(1) is the second-to-last entry.
+    const byDate = Object.fromEntries(feat.daily.map((d) => [d.date, d.totalUsd]));
+    assert.equal(byDate[day(1)], 25);
+    assert.equal(byDate[day(3)], 75);
+    assert.equal(byDate[day(0)], 0);
+  });
+
+  test('anomalies expose a session cause when the anomaly is tied to a session', () => {
+    const db = makeDb();
+    const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;
+    insertRollup(db, { date: day(1), featureKey: 'archi-a', featureName: 'A', repo: 'loschenbd/archi', cost: 100, sessionIds: 'sess-a', sessions: 1 });
+    db.prepare(`INSERT INTO sessions (session_id, title) VALUES (?, ?)`).run('sess-a', 'Rework the pulses');
+    db.prepare(`INSERT INTO anomalies (kind, date, feature_key, session_id, amount, baseline, multiplier, reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run('spike_day', day(1), 'archi-a', 'sess-a', 100, 10, 10, '100 — 10× the prior week\'s typical day');
+    const vm = buildProjectDetail(db, { projectKey: 'repo:loschenbd/archi', days: 7 })!;
+    const anom = vm.anomalies[0]!;
+    assert.equal(anom.cause?.kind, 'session');
+    assert.equal(anom.cause?.ref, 'sess-a');
+    assert.equal(anom.cause?.label, 'Rework the pulses');
+  });
+
+  test('anomalies with no session but a feature key get a feature cause', () => {
+    const db = makeDb();
+    const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;
+    insertRollup(db, { date: day(1), featureKey: 'archi-a', featureName: 'Feature A pretty', repo: 'loschenbd/archi', cost: 100, sessionIds: 'sess-a', sessions: 1 });
+    db.prepare(`INSERT INTO anomalies (kind, date, feature_key, session_id, amount, baseline, multiplier, reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run('first_activity', day(1), 'archi-a', null, 100, 0, 100, 'first activity in 6 days');
+    const vm = buildProjectDetail(db, { projectKey: 'repo:loschenbd/archi', days: 7 })!;
+    const anom = vm.anomalies[0]!;
+    assert.equal(anom.cause?.kind, 'feature');
+    assert.equal(anom.cause?.ref, 'archi-a');
+    assert.equal(anom.cause?.label, 'Feature A pretty');
+  });
 });

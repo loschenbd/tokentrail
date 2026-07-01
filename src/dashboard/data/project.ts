@@ -40,6 +40,8 @@ export type ProjectDetailVM = {
     featureName: string;
     totalUsd: number;
     sessionCount: number;
+    lastActive: string;
+    daily: Array<{ date: string; totalUsd: number }>;
   }>;
   sessions: Array<{
     sessionId: string;
@@ -56,6 +58,7 @@ export type ProjectDetailVM = {
     sessionId: string | null;
     amount: number;
     reason: string;
+    cause: { kind: 'session' | 'feature'; ref: string; label: string } | null;
   }>;
   branchGraph: BranchGraphVM | null;
 };
@@ -143,6 +146,18 @@ export function buildProjectDetail(
     ? (filter.repo!.split('/').pop() ?? filter.repo!)
     : (features[0]?.featureName ?? filter.featureKey!);
 
+  // Per-feature lastActive + zero-filled daily series in-window.
+  const featureDailyByKey = new Map<string, Map<string, number>>();
+  const featureLastActive = new Map<string, string>();
+  for (const r of db
+    .prepare(`SELECT feature_key AS k, date AS d, SUM(total_cost_usd) AS s FROM feature_rollups WHERE ${filterSql} AND date >= ${startExpr} GROUP BY feature_key, date`)
+    .all(filterParams) as Array<{ k: string; d: string; s: number }>) {
+    if (!featureDailyByKey.has(r.k)) featureDailyByKey.set(r.k, new Map());
+    featureDailyByKey.get(r.k)!.set(r.d, r.s);
+    const prev = featureLastActive.get(r.k);
+    if (!prev || r.d > prev) featureLastActive.set(r.k, r.d);
+  }
+
   const sessionIds = uniqueSessionIds(head.sessionIdsCsv);
 
   const dailyRows = db
@@ -176,6 +191,17 @@ export function buildProjectDetail(
     });
   }
 
+  const dailyDates = dailySeries.map((d) => d.date);
+  const featuresWithSparkline = features.map((f) => {
+    const perDate = featureDailyByKey.get(f.featureKey) ?? new Map<string, number>();
+    return {
+      ...f,
+      totalUsd: round2(f.totalUsd),
+      lastActive: featureLastActive.get(f.featureKey) ?? dailyDates[dailyDates.length - 1] ?? '',
+      daily: dailyDates.map((d) => ({ date: d, totalUsd: round2(perDate.get(d) ?? 0) })),
+    };
+  });
+
   const recentCommits = sessionIds.length === 0
     ? []
     : db
@@ -188,7 +214,7 @@ export function buildProjectDetail(
       .all(JSON.stringify(sessionIds)) as ProjectDetailVM['recentCommits'];
 
   const featureKeys = features.map((f) => f.featureKey);
-  const anomalies = featureKeys.length === 0
+  const anomaliesRaw = featureKeys.length === 0
     ? []
     : db
       .prepare(`
@@ -201,7 +227,40 @@ export function buildProjectDetail(
         ORDER BY multiplier DESC, date DESC
         LIMIT 5
       `)
-      .all(JSON.stringify(featureKeys)) as ProjectDetailVM['anomalies'];
+      .all(JSON.stringify(featureKeys)) as Array<{
+        id: number;
+        kind: string;
+        date: string;
+        featureKey: string | null;
+        sessionId: string | null;
+        amount: number;
+        reason: string;
+      }>;
+
+  // Cause line: prefer the session (title looked up in `sessions`) if the
+  // anomaly references one; otherwise fall back to the anomaly's feature
+  // (using the human name from our per-feature list).
+  const featureNameByKey = new Map(featuresWithSparkline.map((f) => [f.featureKey, f.featureName || f.featureKey]));
+  const anomalySessionIds = anomaliesRaw
+    .map((a) => a.sessionId)
+    .filter((s): s is string => !!s);
+  const sessionTitleByRef = new Map<string, string>();
+  if (anomalySessionIds.length > 0) {
+    for (const r of db
+      .prepare(`SELECT session_id AS sid, title FROM sessions WHERE session_id IN (SELECT value FROM json_each(?))`)
+      .all(JSON.stringify(anomalySessionIds)) as Array<{ sid: string; title: string | null }>) {
+      sessionTitleByRef.set(r.sid, r.title ?? r.sid);
+    }
+  }
+  const anomalies: ProjectDetailVM['anomalies'] = anomaliesRaw.map((a) => {
+    let cause: { kind: 'session' | 'feature'; ref: string; label: string } | null = null;
+    if (a.sessionId) {
+      cause = { kind: 'session', ref: a.sessionId, label: sessionTitleByRef.get(a.sessionId) ?? a.sessionId };
+    } else if (a.featureKey) {
+      cause = { kind: 'feature', ref: a.featureKey, label: featureNameByKey.get(a.featureKey) ?? a.featureKey };
+    }
+    return { ...a, cause };
+  });
 
   const branchGraph = buildBranchGraph(db, { projectKey: opts.projectKey, days });
 
@@ -305,7 +364,7 @@ export function buildProjectDetail(
     sessionCount: distinctSessionCount,
     featureCount: features.length,
     dailySeries,
-    features: features.map((f) => ({ ...f, totalUsd: round2(f.totalUsd) })),
+    features: featuresWithSparkline,
     sessions,
     recentCommits,
     anomalies,

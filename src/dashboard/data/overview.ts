@@ -2,6 +2,7 @@ import type DatabaseType from 'better-sqlite3';
 import {
   colorFor,
   colorForProject,
+  colorForFeatureInProject,
   OTHER_KEY,
   OTHER_NAME,
   OTHER_COLOR,
@@ -380,7 +381,7 @@ export function buildOverview(
       featMap.set(effectiveFeatKey, {
         name: effectiveFeatKey === '__unattributed__' ? 'Unattributed' : (r.featureName || r.featureKey),
         totalUsd: r.totalUsd,
-        color: effectiveFeatKey === '__unattributed__' ? STRIPED_SENTINEL : colorFor(r.featureKey),
+        color: effectiveFeatKey === '__unattributed__' ? STRIPED_SENTINEL : colorForFeatureInProject(projectKey, r.featureKey),
       });
     } else {
       existing.totalUsd = round2(existing.totalUsd + r.totalUsd);

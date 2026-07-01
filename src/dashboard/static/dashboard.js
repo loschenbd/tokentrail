@@ -17,14 +17,65 @@
       return;
     }
 
-    // Client-side colour picker for features shown in tooltip bottom block.
-    // Mirrors src/dashboard/lib/feature-colors.ts — kept inline for synchronous rendering.
+    // Client-side twins of src/dashboard/lib/feature-colors.ts. Features are
+    // rendered as within-hue shades of their parent project's colour so the
+    // tooltip mix matches the burn-paths sub-bar colouring.
     const PALETTE_INLINE = ['#0072B2','#E69F00','#009E73','#CC79A7','#56B4E9','#D55E00','#F0E442','#000000'];
-    function colorForFeature(k) {
+    function hashFeat(k) {
+      let h = 0;
+      for (let i = 0; i < k.length; i++) h = ((h << 5) - h + k.charCodeAt(i)) | 0;
+      h = Math.imul(h ^ (h >>> 15), 0x9E3779B1);
+      return Math.abs(h >>> 0);
+    }
+    function hashProj(k) {
       let h = 5381;
       for (let i = 0; i < k.length; i++) h = ((h << 5) - h + k.charCodeAt(i)) | 0;
       h = Math.imul(h ^ (h >>> 15), 0x9E3779B1);
-      return PALETTE_INLINE[Math.abs(h >>> 0) % PALETTE_INLINE.length];
+      return Math.abs((h ^ 0xC0FFEE) >>> 0);
+    }
+    function colorForProj(k) {
+      return PALETTE_INLINE[hashProj(k) % PALETTE_INLINE.length];
+    }
+    function hexToHsl(hex) {
+      const h = hex.replace('#', '');
+      const r = parseInt(h.slice(0, 2), 16) / 255;
+      const g = parseInt(h.slice(2, 4), 16) / 255;
+      const b = parseInt(h.slice(4, 6), 16) / 255;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      const l = (mx + mn) / 2;
+      let s = 0, hh = 0;
+      if (mx !== mn) {
+        const d = mx - mn;
+        s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+        if (mx === r) hh = (g - b) / d + (g < b ? 6 : 0);
+        else if (mx === g) hh = (b - r) / d + 2;
+        else hh = (r - g) / d + 4;
+        hh *= 60;
+      }
+      return [hh, s * 100, l * 100];
+    }
+    function hslToHex(h, s, l) {
+      const S = s / 100, L = l / 100;
+      const c = (1 - Math.abs(2 * L - 1)) * S;
+      const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+      const m = L - c / 2;
+      let r = 0, g = 0, b = 0;
+      if (h < 60) { r = c; g = x; }
+      else if (h < 120) { r = x; g = c; }
+      else if (h < 180) { g = c; b = x; }
+      else if (h < 240) { g = x; b = c; }
+      else if (h < 300) { r = x; b = c; }
+      else { r = c; b = x; }
+      const to = (v) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+      return `#${to(r)}${to(g)}${to(b)}`;
+    }
+    function colorForFeatureInProject(projectKey, featureKey) {
+      const base = colorForProj(projectKey);
+      const [h, s, l] = hexToHsl(base);
+      const shifts = [-18, -9, 0, 9, 18];
+      const shift = shifts[hashFeat(featureKey) % shifts.length];
+      const nl = Math.max(22, Math.min(78, l + shift));
+      return hslToHex(h, s, nl);
     }
 
     // Stack order: bottom first (lowest stackPosition = largest project = bottom of stack).
@@ -101,7 +152,7 @@
             if (key === '__unattributed__') {
               return `<div class="chart-tooltip-row chart-tooltip-row--unatt"><span class="swatch swatch--striped"></span>unattributed<span class="amt">${fmtUsd(usd)}</span></div>`;
             }
-            return `<a class="chart-tooltip-row chart-tooltip-link" href="/feature/${encodeURIComponent(key)}"><span class="swatch" style="background:${esc(colorForFeature(key))}"></span>${esc(key)}<span class="amt">${fmtUsd(usd)}</span></a>`;
+            return `<a class="chart-tooltip-row chart-tooltip-link" href="/feature/${encodeURIComponent(key)}"><span class="swatch" style="background:${esc(colorForFeatureInProject(activeProjectKey, key))}"></span>${esc(key)}<span class="amt">${fmtUsd(usd)}</span></a>`;
           }).join('');
           const label = active ? `${active.name}'s features` : `${activeProjectKey}'s features`;
           bottom = `<div class="chart-tooltip-subhead">${esc(label)}</div>${rows}${more > 0 ? `<div class="chart-tooltip-more">+ ${more} more</div>` : ''}`;

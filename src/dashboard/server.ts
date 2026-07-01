@@ -194,6 +194,18 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return { ok: true };
   });
 
+  app.post('/api/infer-mainline', async (_req, reply) => {
+    const { inferMainlineFeatures } = await import('../services/mainline-inference.js');
+    const { getDb } = await import('../db/db.js');
+    try {
+      const summary = await inferMainlineFeatures(getDb());
+      return { ok: true, summary };
+    } catch (e) {
+      reply.code(500);
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
   app.get('/api/ollama/models', async (req) => {
     const q = req.query as { baseUrl?: string };
     const baseUrl = q.baseUrl || readSettings().llm.ollama.baseUrl;

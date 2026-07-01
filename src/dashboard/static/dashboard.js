@@ -781,21 +781,29 @@
       <div class="unatt-hero">${fmtUsd(u.totalUsd)} <span class="muted">· ${u.pctOfTrail.toFixed(0)}% of trail</span></div>
       <div class="unatt-sparkline">${spark}</div>
       <div class="unatt-projects">${projRows}</div>
-      <button class="unatt-cta" type="button" data-clipboard="tokentrail infer-mainline">Run <code>tokentrail infer-mainline</code> →</button>
+      <button class="unatt-cta" type="button">Run <code>tokentrail infer-mainline</code> →</button>
+      <div class="unatt-cta-status" role="status" aria-live="polite" hidden></div>
     `;
 
     const btn = card.querySelector('.unatt-cta');
+    const status = card.querySelector('.unatt-cta-status');
     const original = btn.innerHTML;
-    let restoreTimer = null;
-    btn.addEventListener('click', async (e) => {
-      const text = e.currentTarget.getAttribute('data-clipboard') || '';
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Running…';
+      status.hidden = false;
+      status.textContent = 'Inferring mainline features. This can take a minute on a cold LLM.';
       try {
-        await navigator.clipboard.writeText(text);
-        e.currentTarget.textContent = 'Copied ✓';
-        clearTimeout(restoreTimer);
-        restoreTimer = setTimeout(() => { e.currentTarget.innerHTML = original; }, 1500);
+        const r = await fetch('/api/infer-mainline', { method: 'POST' });
+        const data = await r.json();
+        if (!data.ok) throw new Error(data.error || 'infer-mainline failed');
+        const s = data.summary || {};
+        status.textContent = `Relabeled ${s.sessionsRelabeled || 0} sessions (${s.eventsRelabeled || 0} events) via ${s.llmCalls || 0} LLM calls. Reloading…`;
+        setTimeout(() => location.reload(), 800);
       } catch (err) {
-        // Fallback: no-op; label doesn't flip. Not worth a toast for a copy failure on localhost.
+        btn.disabled = false;
+        btn.innerHTML = original;
+        status.textContent = 'Error: ' + (err && err.message ? err.message : String(err));
       }
     });
   }

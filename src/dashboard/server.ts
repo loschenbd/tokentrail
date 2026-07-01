@@ -194,18 +194,24 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return { ok: true };
   });
 
-  app.post('/api/infer-mainline', async (_req, reply) => {
+  app.get('/api/infer-mainline/stream', async (_req, reply) => {
     const { inferMainlineFeatures } = await import('../services/mainline-inference.js');
     const { runRollup } = await import('../commands/rollup.js');
+    const { getLLMClient } = await import('../lib/llm.js');
     const { getDb } = await import('../db/db.js');
+
+    reply.raw.setHeader('Content-Type', 'text/event-stream');
+    reply.raw.setHeader('Cache-Control', 'no-cache');
+    reply.raw.setHeader('Connection', 'keep-alive');
+    reply.raw.setHeader('X-Accel-Buffering', 'no');
+    reply.raw.flushHeaders?.();
+
+    const send = (event: string, data: unknown) => {
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
     try {
       const db = getDb();
-      // The service short-circuits per session by commit_set_hash, which
-      // makes repeat clicks a no-op even when the LLM merely GAVE UP the
-      // first time (fell through to Rule C, tagged everything
-      // 'uncategorized-mainline'). Clear those specific runs so the LLM
-      // gets another swing. Sessions that already earned a real slug stay
-      // idempotent.
       const stuckCleared = db
         .prepare(
           `DELETE FROM mainline_inference_runs
@@ -215,15 +221,19 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
            )`
         )
         .run().changes;
-      const summary = await inferMainlineFeatures(db);
-      // Re-aggregate feature_rollups from usage_events. Without this the
-      // dashboard keeps showing the old uncategorized-mainline rollup rows
-      // even though the underlying events now carry real slugs.
+      send('start', { retriedSessions: stuckCleared });
+
+      const summary = await inferMainlineFeatures(db, {
+        getLLMClient,
+        onProgress: (p) => send('progress', p),
+      });
+      send('rollup', {});
       await runRollup();
-      return { ok: true, summary, retriedSessions: stuckCleared };
+      send('done', { summary, retriedSessions: stuckCleared });
     } catch (e) {
-      reply.code(500);
-      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      send('error', { message: e instanceof Error ? e.message : String(e) });
+    } finally {
+      reply.raw.end();
     }
   });
 

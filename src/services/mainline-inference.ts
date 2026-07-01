@@ -5,8 +5,16 @@ import { slugify } from '../lib/attribution.js';
 import { classifyCommit } from './mainline-inference-rules.js';
 import { sliceEventsByCommits } from './mainline-inference-slicing.js';
 
+export type MainlineInferenceProgress = {
+  current: number;
+  total: number;
+  title: string | null;
+  action: 'skip' | 'llm' | 'rules-only';
+};
+
 export type MainlineInferenceDeps = {
   getLLMClient: typeof defaultGetLLMClient;
+  onProgress?: (p: MainlineInferenceProgress) => void;
 };
 
 export type MainlineInferenceSummary = {
@@ -87,17 +95,31 @@ export async function inferMainlineFeatures(
   // Acquire the LLM client once and reuse across all sessions.
   const llm = deps.getLLMClient();
 
-  for (const s of sessions) {
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i]!;
     try {
       const commits = getCommits.all(s.session_id) as CommitRow[];
       const hash = hashCommitSet(commits.map((c) => c.sha));
       const prev = getRun.get(s.session_id) as { commit_set_hash: string } | undefined;
 
       // Short-circuit: commit set unchanged since last run — skip entirely.
-      if (prev && prev.commit_set_hash === hash) continue;
+      if (prev && prev.commit_set_hash === hash) {
+        deps.onProgress?.({ current: i + 1, total: sessions.length, title: s.title, action: 'skip' });
+        continue;
+      }
 
       const events = getEvents.all(s.session_id) as EventRow[];
-      if (events.length === 0) continue;
+      if (events.length === 0) {
+        deps.onProgress?.({ current: i + 1, total: sessions.length, title: s.title, action: 'skip' });
+        continue;
+      }
+
+      deps.onProgress?.({
+        current: i + 1,
+        total: sessions.length,
+        title: s.title,
+        action: llm ? 'llm' : 'rules-only',
+      });
 
       let labeled = 0;
 

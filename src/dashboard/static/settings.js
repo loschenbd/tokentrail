@@ -29,11 +29,63 @@ form.addEventListener('submit', async (e) => {
   else alert('Save failed: ' + r.status);
 });
 
+// Populate the Ollama model dropdown from the local install. Falls back to a
+// free-text input when Ollama is unreachable or has no models pulled.
+async function refreshOllamaModels() {
+  const field = form.querySelector('[name="ollama.model"]');
+  if (!field) return;
+  const baseUrl = form.querySelector('input[name="ollama.baseUrl"]').value;
+  let data;
+  try {
+    const r = await fetch('/api/ollama/models?baseUrl=' + encodeURIComponent(baseUrl));
+    data = await r.json();
+  } catch { data = { ok: false }; }
+
+  const current = field.value;
+
+  if (!data.ok || !Array.isArray(data.models) || data.models.length === 0) {
+    if (field.tagName === 'SELECT') {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.name = 'ollama.model';
+      input.value = current;
+      field.replaceWith(input);
+    }
+    return;
+  }
+
+  let select = field;
+  if (field.tagName !== 'SELECT') {
+    select = document.createElement('select');
+    select.name = 'ollama.model';
+    select.id = 'ollama-model-select';
+    field.replaceWith(select);
+  }
+  select.innerHTML = '';
+  if (current && !data.models.includes(current)) {
+    const opt = document.createElement('option');
+    opt.value = current;
+    opt.textContent = current + ' (not installed)';
+    opt.selected = true;
+    select.appendChild(opt);
+  }
+  for (const m of data.models) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m;
+    if (m === current) opt.selected = true;
+    select.appendChild(opt);
+  }
+}
+
+refreshOllamaModels();
+form.querySelector('input[name="ollama.baseUrl"]').addEventListener('change', refreshOllamaModels);
+
 document.querySelectorAll('button[data-test]').forEach((b) => {
   b.addEventListener('click', async () => {
     const backend = b.getAttribute('data-test');
     const model = backend === 'ollama'
-      ? form.querySelector('input[name="ollama.model"]').value
+      ? form.querySelector('[name="ollama.model"]').value
       : form.querySelector('input[name="openrouter.model"]').value;
     const r = await fetch('/api/settings/test', {
       method: 'POST',

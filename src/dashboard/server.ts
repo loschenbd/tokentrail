@@ -194,6 +194,23 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return { ok: true };
   });
 
+  app.get('/api/ollama/models', async (req) => {
+    const q = req.query as { baseUrl?: string };
+    const baseUrl = q.baseUrl || readSettings().llm.ollama.baseUrl;
+    // Ollama's model list lives at /api/tags on the root host — not on the
+    // OpenAI-compat /v1 subpath. Strip a trailing /v1 if the user configured
+    // the OpenAI-compat base URL (which is what Save writes by default).
+    const tagsUrl = baseUrl.replace(/\/v1\/?$/, '').replace(/\/$/, '') + '/api/tags';
+    try {
+      const r = await fetch(tagsUrl);
+      if (!r.ok) return { ok: false, error: `tags ${r.status}` };
+      const data = (await r.json()) as { models?: Array<{ name: string }> };
+      return { ok: true, models: (data.models ?? []).map((m) => m.name).sort() };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
   app.post('/api/settings/test', async (req) => {
     const { backend, model } = req.body as { backend: string; model?: string };
     const c = getLLMClient({ backend: backend as any, model });

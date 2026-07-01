@@ -31,7 +31,7 @@ export function renderSettings(vm: SettingsViewModel): string {
     <fieldset>
       <legend>Ollama</legend>
       <label>Base URL <input name="ollama.baseUrl" value="${escapeHtml(vm.llm.ollama.baseUrl)}"></label>
-      <label>Model    <input name="ollama.model" value="${escapeHtml(vm.llm.ollama.model)}"></label>
+      <label>Model    <select name="ollama.model" id="ollama-model-select"><option value="${escapeHtml(vm.llm.ollama.model)}" selected>${escapeHtml(vm.llm.ollama.model)}</option></select></label>
       <button type="button" data-test="ollama">Test</button>
     </fieldset>
 

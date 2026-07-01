@@ -131,9 +131,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 .project-row .swatch { grid-column: 2; grid-row: 1; }
 .project-row .name-col { grid-column: 3; grid-row: 1; }
 .project-row .amt-col { grid-column: 4; grid-row: 1; text-align: right; }
-.project-row .main-bar { grid-column: 1 / -1; grid-row: 2; height: 4px; background: rgba(0,0,0,0.06); position: relative; border-radius: 2px; overflow: hidden; }
-.project-row .main-bar::before { content: ''; display: block; height: 100%; width: calc(var(--pct) * 1%); background: rgba(139,111,71,0.5); }
-.project-row .subbar { grid-column: 1 / -1; grid-row: 3; }
+.project-row .subbar { grid-column: 1 / -1; grid-row: 2; }
 .feature-row .mile,
 .project-row .mile {
   color: var(--color-ink-subtle);
@@ -211,10 +209,24 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   padding: 2px 0;
 }
 .chart-tooltip-link:hover { background: rgba(139,111,71,0.08); }
-.chart-tooltip-subhead {
-  font-size: 11px;
+.chart-tooltip-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: #6b563d;
-  margin-top: 6px;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+.chart-tooltip-row--active {
+  background: rgba(139,111,71,0.12);
+  border-radius: 2px;
+}
+.chart-tooltip-subhead {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b563d;
+  margin-top: 8px;
   border-top: 1px solid rgba(0,0,0,0.08);
   padding-top: 6px;
 }
@@ -500,13 +512,20 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .chart-hint code { background: rgba(139,111,71,0.16); padding: 1px 5px; border-radius: 3px; }
 
 /* Burn-paths inline feature sub-bars */
+/*
+ * Sub-bar. Width = project's % of workspace grand total (via --pct);
+ * segments inside sum to 100% of THIS project's spend (feature mix).
+ * One bar, two dimensions: outer length = share of total; inner segmentation = internal mix.
+ */
 .subbar {
   display: flex;
-  height: 8px;
+  height: 10px;
   margin-top: 4px;
   border-radius: 2px;
   overflow: hidden;
   background: rgba(0,0,0,0.05);
+  width: calc(var(--pct, 100) * 1%);
+  min-width: 12px;
 }
 .subbar-segment { height: 100%; }
 .subbar-segment--striped {

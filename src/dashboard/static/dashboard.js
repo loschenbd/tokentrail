@@ -81,9 +81,12 @@
           const proj = stackOrder.find((p) => p.key === key);
           const color = proj ? proj.color : '#9CA3AF';
           const name = proj ? proj.name : key;
-          return `<div class="chart-tooltip-row"><span class="swatch" style="background:${esc(color)}"></span>${esc(name)}<span class="amt">${fmtUsd(usd)}</span></div>`;
+          const activeCls = key === activeProjectKey ? ' chart-tooltip-row--active' : '';
+          return `<div class="chart-tooltip-row${activeCls}"><span class="swatch" style="background:${esc(color)}"></span>${esc(name)}<span class="amt">${fmtUsd(usd)}</span></div>`;
         }).join('');
 
+      // Bottom block skips when the active project has ≤1 feature — that case
+      // would just duplicate the top row's total, adding no information.
       let bottom = '';
       if (activeProjectKey && activeProjectKey !== '__other__') {
         const active = stackOrder.find((p) => p.key === activeProjectKey);
@@ -91,7 +94,7 @@
         const entries = Object.entries(feats)
           .filter(([, usd]) => usd > 0)
           .sort((a, b) => b[1] - a[1]);
-        if (entries.length > 0) {
+        if (entries.length > 1) {
           const shown = entries.slice(0, 3);
           const more = entries.length - shown.length;
           const rows = shown.map(([key, usd]) => {
@@ -100,10 +103,11 @@
             }
             return `<a class="chart-tooltip-row chart-tooltip-link" href="/feature/${encodeURIComponent(key)}"><span class="swatch" style="background:${esc(colorForFeature(key))}"></span>${esc(key)}<span class="amt">${fmtUsd(usd)}</span></a>`;
           }).join('');
-          bottom = `<div class="chart-tooltip-subhead">Inside ${esc(active ? active.name : activeProjectKey)}:</div>${rows}${more > 0 ? `<div class="chart-tooltip-more">+ ${more} more</div>` : ''}`;
+          const label = active ? `${active.name}'s features` : `${activeProjectKey}'s features`;
+          bottom = `<div class="chart-tooltip-subhead">${esc(label)}</div>${rows}${more > 0 ? `<div class="chart-tooltip-more">+ ${more} more</div>` : ''}`;
         }
       }
-      return `<div class="chart-tooltip-header">${esc(fmtDate(xs[idx]))}</div><div class="chart-tooltip-rows">${perProject}</div>${bottom}`;
+      return `<div class="chart-tooltip-header">${esc(fmtDate(xs[idx]))}</div><div class="chart-tooltip-label">Projects</div><div class="chart-tooltip-rows">${perProject}</div>${bottom}`;
     }
 
     // uPlot series + bands wiring.

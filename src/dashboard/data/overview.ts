@@ -210,47 +210,49 @@ export function buildOverview(
     `)
     .all() as OverviewVM['recentCommits'];
 
-  // --- NEW: project-first aggregation ---
+  // --- NEW: project-first aggregation via TS-side bucketProject() ---
   //
-  // Effective project key (effProjKey) derivation:
-  //   • project_key IS NOT NULL              → use project_key
-  //   • project_key IS NULL, featKey != uncat → use feature_key (each feature is its own project)
-  //   • project_key IS NULL, featKey = uncat  → NULL ("unattributed-unknown"):
-  //     counted in unattributedTotal but NOT placed into any named project band.
+  // Query raw rollup columns (no SQL CASE). Apply bucketProject() in TypeScript
+  // so chart bands and topProjects burn-paths share the same key namespace.
+  // UNCATEGORIZED_KEY rows are routed to the unattributed block, never to named bands.
 
-  // Project-level window totals (excludes unattributed-unknown rows).
-  type ProjAggRow = { effProjKey: string; effProjName: string; total: number };
-  const projAggRows = (db
+  type RawProjRow = { featureKey: string; featureName: string; repo: string | null; totalUsd: number };
+  const rawProjRows = db
     .prepare(`
-      SELECT effProjKey,
-             COALESCE(MAX(projKey), MAX(featName)) AS effProjName,
-             ROUND(SUM(usd), 2) AS total
-      FROM (
-        SELECT CASE WHEN project_key IS NOT NULL THEN project_key
-                    WHEN feature_key != '${UNCATEGORIZED_KEY}' THEN feature_key
-               END AS effProjKey,
-               project_key AS projKey,
-               feature_name AS featName,
-               total_cost_usd AS usd
-        FROM feature_rollups
-        WHERE date >= ${startExpr}
-      )
-      WHERE effProjKey IS NOT NULL
-      GROUP BY effProjKey
-      ORDER BY total DESC
+      SELECT feature_key AS featureKey,
+             MAX(feature_name) AS featureName,
+             MAX(repo) AS repo,
+             ROUND(SUM(total_cost_usd), 2) AS totalUsd
+      FROM feature_rollups
+      WHERE date >= ${startExpr}
+      GROUP BY feature_key
     `)
-    .all() as ProjAggRow[]);
+    .all() as RawProjRow[];
+
+  // Group non-UNCATEGORIZED rows by bucketProject output.
+  type ProjAgg = { projKey: string; projName: string; total: number };
+  const projAggByKey = new Map<string, ProjAgg>();
+  for (const r of rawProjRows) {
+    if (r.featureKey === UNCATEGORIZED_KEY) continue;
+    const { projectKey, projectName } = bucketProject(r);
+    const existing = projAggByKey.get(projectKey);
+    if (!existing) {
+      projAggByKey.set(projectKey, { projKey: projectKey, projName: projectName, total: r.totalUsd });
+    } else {
+      existing.total = round2(existing.total + r.totalUsd);
+    }
+  }
+  const projAggRows: ProjAgg[] = [...projAggByKey.values()].sort((a, b) => b.total - a.total);
 
   const top6 = projAggRows.slice(0, 6);
   const tailProj = projAggRows.slice(6);
   const otherProjTotal = round2(tailProj.reduce((s, r) => s + r.total, 0));
-  const top6Set = new Set(top6.map((r) => r.effProjKey));
-  const projAggMap = new Map(projAggRows.map((r) => [r.effProjKey, r]));
+  const top6Set = new Set(top6.map((r) => r.projKey));
 
   const projects: OverviewVM['projects'] = top6.map((r, i) => ({
-    key: r.effProjKey,
-    name: r.effProjName,
-    color: colorForProject(r.effProjKey),
+    key: r.projKey,
+    name: r.projName,
+    color: colorForProject(r.projKey),
     totalUsd: r.total,
     clickable: true,
     stackPosition: i,   // 0 = bottom (largest)
@@ -289,8 +291,8 @@ export function buildOverview(
   for (let i = windowDays - 1; i >= 0; i--) {
     const d = (db.prepare(`SELECT date('now', '-${i} days', 'localtime') AS d`).get() as { d: string }).d;
     const bands: Record<string, number> = {};
-    // Pre-fill 0 for all real projects (brief: every project gets an entry per day).
-    for (const proj of top6) bands[proj.effProjKey] = 0;
+    // Pre-fill 0 for all real projects (every project gets an entry per day).
+    for (const proj of top6) bands[proj.projKey] = 0;
     if (hasOther) bands[OTHER_KEY] = 0;
     const row = {
       date: d,
@@ -305,51 +307,58 @@ export function buildOverview(
     dayIndex.set(d, row);
   }
 
-  // --- Per-day per-project per-feature rows ---
-  type PerDayRow = { date: string; effProjKey: string | null; featKey: string; featName: string; usd: number };
-  const perDayRows = db
+  // --- Per-day per-feature rows (raw; bucketProject applied in TS) ---
+  type PerDayRawRow = { date: string; featureKey: string; featureName: string; repo: string | null; usd: number };
+  const perDayRawRows = db
     .prepare(`
       SELECT date,
-             effProjKey,
-             featKey,
-             MAX(featName) AS featName,
-             ROUND(SUM(usd), 2) AS usd
-      FROM (
-        SELECT date,
-               CASE WHEN project_key IS NOT NULL THEN project_key
-                    WHEN feature_key != '${UNCATEGORIZED_KEY}' THEN feature_key
-               END AS effProjKey,
-               feature_key AS featKey,
-               feature_name AS featName,
-               total_cost_usd AS usd
-        FROM feature_rollups
-        WHERE date >= ${startExpr}
-      )
-      GROUP BY date, effProjKey, featKey
+             feature_key AS featureKey,
+             MAX(feature_name) AS featureName,
+             MAX(repo) AS repo,
+             ROUND(SUM(total_cost_usd), 2) AS usd
+      FROM feature_rollups
+      WHERE date >= ${startExpr}
+      GROUP BY date, feature_key
     `)
-    .all() as PerDayRow[];
+    .all() as PerDayRawRow[];
 
-  for (const r of perDayRows) {
+  // Accumulate per-project unattributed totals across ALL projects (not just top-6).
+  const allProjUnattribMap = new Map<string, number>();
+  // Build project name lookup from all bucketProject calls (for unattributed card).
+  const projNameMap = new Map<string, string>();
+
+  for (const r of perDayRawRows) {
     const dayRow = dayIndex.get(r.date);
     if (!dayRow) continue;
 
-    // Unattributed spend from any feature_key === UNCATEGORIZED_KEY row.
-    if (r.featKey === UNCATEGORIZED_KEY) {
+    if (r.featureKey === UNCATEGORIZED_KEY) {
+      // Unattributed spend: always goes to unattributedTotal, never to bands.
       dayRow.unattributedTotal = round2(dayRow.unattributedTotal + r.usd);
+      // Track per-project unattributed if we can derive a project from repo.
+      if (r.repo && r.repo.trim()) {
+        const { projectKey, projectName } = bucketProject(r);
+        projNameMap.set(projectKey, projectName);
+        allProjUnattribMap.set(projectKey, round2((allProjUnattribMap.get(projectKey) ?? 0) + r.usd));
+        // featureBands records the unattributed drilldown within the project.
+        if (!dayRow.featureBands[projectKey]) dayRow.featureBands[projectKey] = {};
+        const pFBands = dayRow.featureBands[projectKey]!;
+        pFBands['__unattributed__'] = round2((pFBands['__unattributed__'] ?? 0) + r.usd);
+      }
+      continue;
     }
 
-    if (r.effProjKey === null) continue; // unattributed-unknown: skip bands/featureBands
+    const { projectKey, projectName } = bucketProject(r);
+    projNameMap.set(projectKey, projectName);
 
     // Determine band key: top-6 own band; tail projects collapse into __other__.
-    const bandKey = top6Set.has(r.effProjKey) ? r.effProjKey : OTHER_KEY;
+    const bandKey = top6Set.has(projectKey) ? projectKey : OTHER_KEY;
     dayRow.bands[bandKey] = round2((dayRow.bands[bandKey] ?? 0) + r.usd);
 
     // featureBands only for top-6 real projects (skip Other).
-    if (top6Set.has(r.effProjKey)) {
-      const effectiveFeatKey = r.featKey === UNCATEGORIZED_KEY ? '__unattributed__' : r.featKey;
-      if (!dayRow.featureBands[r.effProjKey]) dayRow.featureBands[r.effProjKey] = {};
-      const projFBands = dayRow.featureBands[r.effProjKey]!;
-      projFBands[effectiveFeatKey] = round2((projFBands[effectiveFeatKey] ?? 0) + r.usd);
+    if (top6Set.has(projectKey)) {
+      if (!dayRow.featureBands[projectKey]) dayRow.featureBands[projectKey] = {};
+      const pFBands = dayRow.featureBands[projectKey]!;
+      pFBands[r.featureKey] = round2((pFBands[r.featureKey] ?? 0) + r.usd);
     }
   }
 
@@ -390,25 +399,15 @@ export function buildOverview(
   const totalUnattributedUsd = round2(dayRows.reduce((s, d) => s + d.unattributedTotal, 0));
   let unattributed: OverviewVM['unattributed'] = null;
   if (totalUnattributedUsd > 0) {
-    // Per-project unattributed totals (accumulated from featureBands above).
-    const projUnattribMap = new Map<string, number>();
-    for (const dayRow of dayRows) {
-      for (const [projKey, featMap] of Object.entries(dayRow.featureBands)) {
-        const ua = featMap['__unattributed__'] ?? 0;
-        if (ua > 0) {
-          projUnattribMap.set(projKey, round2((projUnattribMap.get(projKey) ?? 0) + ua));
-        }
-      }
-    }
-
-    const topUnattribProjs = [...projUnattribMap.entries()]
+    // allProjUnattribMap already accumulated across ALL projects during the perDayRawRows loop.
+    const topUnattribProjs = [...allProjUnattribMap.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
       .map(([key, unattribUsd]) => {
-        const projAgg = projAggMap.get(key);
+        const projAgg = projAggByKey.get(key);
         return {
           key,
-          name: projAgg?.effProjName ?? key,
+          name: projAgg?.projName ?? projNameMap.get(key) ?? key,
           color: colorForProject(key),
           unattributedUsd: unattribUsd,
           projectTotalUsd: projAgg?.total ?? unattribUsd,

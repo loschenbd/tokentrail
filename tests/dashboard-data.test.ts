@@ -98,7 +98,7 @@ describe('buildOverview', () => {
     const realProjects = vm.projects.filter((p) => p.clickable);
     assert.deepEqual(
       realProjects.map((p) => p.key),
-      ['menubar', 'ingest', 'rollup', 'enrich', 'dashboard', 'infer-mainline']
+      ['feature:menubar', 'feature:ingest', 'feature:rollup', 'feature:enrich', 'feature:dashboard', 'feature:infer-mainline']
     );
 
     // Other is present, holds the tail.
@@ -109,7 +109,7 @@ describe('buildOverview', () => {
 
     // stackPosition: bottom (0) = biggest real project; top = __other__.
     const byPos = [...vm.projects].sort((a, b) => a.stackPosition - b.stackPosition);
-    assert.equal(byPos[0]!.key, 'menubar');
+    assert.equal(byPos[0]!.key, 'feature:menubar');
     assert.equal(byPos[byPos.length - 1]!.key, '__other__');
   });
 
@@ -142,14 +142,14 @@ describe('buildOverview', () => {
 
     assert.equal(vm.days.length, 30);
     const yesterday = vm.days.find((d) => d.date === daysAgo(1))!;
-    assert.equal(yesterday.bands['menubar'], 2.10);
-    assert.equal(yesterday.bands['ingest'], 1.21);
+    assert.equal(yesterday.bands['feature:menubar'], 2.10);
+    assert.equal(yesterday.bands['feature:ingest'], 1.21);
     assert.equal(yesterday.total, 3.31);
 
     const dayBefore = vm.days.find((d) => d.date === daysAgo(2))!;
-    assert.equal(dayBefore.bands['menubar'], 0.50);
+    assert.equal(dayBefore.bands['feature:menubar'], 0.50);
     // Missing band for ingest on this day → either absent or 0; both acceptable.
-    assert.ok((dayBefore.bands['ingest'] ?? 0) === 0);
+    assert.ok((dayBefore.bands['feature:ingest'] ?? 0) === 0);
 
     // Untouched days: total 0.
     const zeroDay = vm.days.find((d) => d.date === daysAgo(10))!;
@@ -184,19 +184,19 @@ describe('buildOverview', () => {
 
   test('projects[]: top 6 by 30d $ plus Other; correct stack positions', () => {
     const db = openInMemoryDb();
-    // Seven distinct projects, decreasing spend.
+    // Seven distinct features (no repo → each becomes feature:<key>), decreasing spend.
     seedRollups(db, [
-      { date: daysAgo(2), projectKey: 'p1', usd: 700 },
-      { date: daysAgo(2), projectKey: 'p2', usd: 600 },
-      { date: daysAgo(2), projectKey: 'p3', usd: 500 },
-      { date: daysAgo(2), projectKey: 'p4', usd: 400 },
-      { date: daysAgo(2), projectKey: 'p5', usd: 300 },
-      { date: daysAgo(2), projectKey: 'p6', usd: 200 },
-      { date: daysAgo(2), projectKey: 'p7', usd: 100 },
+      { date: daysAgo(2), featureKey: 'p1', usd: 700 },
+      { date: daysAgo(2), featureKey: 'p2', usd: 600 },
+      { date: daysAgo(2), featureKey: 'p3', usd: 500 },
+      { date: daysAgo(2), featureKey: 'p4', usd: 400 },
+      { date: daysAgo(2), featureKey: 'p5', usd: 300 },
+      { date: daysAgo(2), featureKey: 'p6', usd: 200 },
+      { date: daysAgo(2), featureKey: 'p7', usd: 100 },
     ]);
     const vm = buildOverview({ db, days: 30 });
     const keys = vm.projects.map((p) => p.key);
-    assert.deepEqual(keys.slice(0, 6), ['p1','p2','p3','p4','p5','p6']);
+    assert.deepEqual(keys.slice(0, 6), ['feature:p1','feature:p2','feature:p3','feature:p4','feature:p5','feature:p6']);
     assert.equal(vm.projects[6]!.key, '__other__');
     // Stack: 0 = bottom (largest), Other = 6 (top).
     assert.equal(vm.projects[0]!.stackPosition, 0);
@@ -208,8 +208,8 @@ describe('buildOverview', () => {
   test('projects[] omits Other when <=6 projects total', () => {
     const db = openInMemoryDb();
     seedRollups(db, [
-      { date: daysAgo(1), projectKey: 'p1', usd: 100 },
-      { date: daysAgo(1), projectKey: 'p2', usd: 80 },
+      { date: daysAgo(1), featureKey: 'p1', usd: 100 },
+      { date: daysAgo(1), featureKey: 'p2', usd: 80 },
     ]);
     const vm = buildOverview({ db, days: 30 });
     assert.equal(vm.projects.length, 2);
@@ -218,30 +218,32 @@ describe('buildOverview', () => {
 
   test('days[].bands keyed by project; sums to day total', () => {
     const db = openInMemoryDb();
+    // Use repos so rag+onboarding group under repo:org/archi via bucketProject.
     seedRollups(db, [
-      { date: daysAgo(1), projectKey: 'archi', featureKey: 'rag', usd: 40 },
-      { date: daysAgo(1), projectKey: 'archi', featureKey: 'onboarding', usd: 10 },
-      { date: daysAgo(1), projectKey: 'tokentrail', featureKey: 'dashboard', usd: 50 },
+      { date: daysAgo(1), repo: 'org/archi', featureKey: 'rag', usd: 40 },
+      { date: daysAgo(1), repo: 'org/archi', featureKey: 'onboarding', usd: 10 },
+      { date: daysAgo(1), repo: 'org/tokentrail', featureKey: 'dashboard', usd: 50 },
     ]);
     const vm = buildOverview({ db, days: 30 });
     const row = vm.days.find((d) => d.date === daysAgo(1))!;
     assert.equal(row.total, 100);
-    assert.equal(row.bands['archi'], 50);
-    assert.equal(row.bands['tokentrail'], 50);
+    assert.equal(row.bands['repo:org/archi'], 50);
+    assert.equal(row.bands['repo:org/tokentrail'], 50);
     const sum = Object.values(row.bands).reduce((a, b) => a + b, 0);
     assert.equal(sum, row.total);
   });
 
   test('days[].featureBands nested per project; unattributed uses __unattributed__ key', () => {
     const db = openInMemoryDb();
+    // Use repo so both rows group under repo:org/archi via bucketProject.
     seedRollups(db, [
-      { date: daysAgo(1), projectKey: 'archi', featureKey: 'rag', usd: 30 },
-      { date: daysAgo(1), projectKey: 'archi', featureKey: 'uncategorized-mainline', usd: 20 },
+      { date: daysAgo(1), repo: 'org/archi', featureKey: 'rag', usd: 30 },
+      { date: daysAgo(1), repo: 'org/archi', featureKey: 'uncategorized-mainline', usd: 20 },
     ]);
     const vm = buildOverview({ db, days: 30 });
     const row = vm.days.find((d) => d.date === daysAgo(1))!;
-    assert.equal(row.featureBands['archi']?.['rag'], 30);
-    assert.equal(row.featureBands['archi']?.['__unattributed__'], 20);
+    assert.equal(row.featureBands['repo:org/archi']?.['rag'], 30);
+    assert.equal(row.featureBands['repo:org/archi']?.['__unattributed__'], 20);
     assert.equal(row.unattributedTotal, 20);
   });
 
@@ -267,7 +269,7 @@ describe('buildOverview', () => {
   test('unattributed: null when zero unattributed in window', () => {
     const db = openInMemoryDb();
     seedRollups(db, [
-      { date: daysAgo(1), projectKey: 'archi', featureKey: 'rag', usd: 100 },
+      { date: daysAgo(1), featureKey: 'rag', usd: 100 },
     ]);
     const vm = buildOverview({ db, days: 30 });
     assert.equal(vm.unattributed, null);
@@ -275,20 +277,43 @@ describe('buildOverview', () => {
 
   test('unattributed: populated payload includes sparkline and top projects', () => {
     const db = openInMemoryDb();
+    // Use repos and distinct dates to avoid UNIQUE(date, feature_key) conflicts.
+    // Each day can only have one uncategorized-mainline row, so per-repo unattributed
+    // spend is split across different days to keep rows distinct.
     seedRollups(db, [
-      { date: daysAgo(1), projectKey: 'archi',      featureKey: 'uncategorized-mainline', usd: 60 },
-      { date: daysAgo(1), projectKey: 'tokentrail', featureKey: 'uncategorized-mainline', usd: 40 },
-      { date: daysAgo(2), projectKey: 'archi',      featureKey: 'uncategorized-mainline', usd: 10 },
-      { date: daysAgo(3), projectKey: 'archi',      featureKey: 'rag',                    usd: 30 }, // for pctOfTrail denominator
+      { date: daysAgo(1), repo: 'org/archi',      featureKey: 'uncategorized-mainline', usd: 60 },
+      { date: daysAgo(2), repo: 'org/tokentrail', featureKey: 'uncategorized-mainline', usd: 40 },
+      { date: daysAgo(3), repo: 'org/archi',      featureKey: 'uncategorized-mainline', usd: 10 },
+      { date: daysAgo(4), repo: 'org/archi',      featureKey: 'rag',                    usd: 30 }, // for pctOfTrail denominator
     ]);
     const vm = buildOverview({ db, days: 30 });
     assert.ok(vm.unattributed);
     assert.equal(vm.unattributed!.totalUsd, 110);
     assert.equal(vm.unattributed!.sparkline.length, 30);
     const top = vm.unattributed!.topProjects.map((p) => p.key);
-    assert.deepEqual(top, ['archi', 'tokentrail']);
+    assert.deepEqual(top, ['repo:org/archi', 'repo:org/tokentrail']);
     const pct = vm.unattributed!.pctOfTrail;
     assert.ok(pct > 70 && pct < 90, `expected pctOfTrail in [70,90], got ${pct}`);
+  });
+
+  test('project-taxonomy alignment: vm.projects and vm.topProjects share the same key namespace', () => {
+    const db = openInMemoryDb();
+    // Simulate real rollup.ts writes: project_key=NULL, real repo, real feature_key.
+    seedRollups(db, [
+      { date: daysAgo(1), repo: 'loschenbd/archi',      featureKey: 'archi:mainline',       usd: 40 },
+      { date: daysAgo(1), repo: 'loschenbd/tokentrail', featureKey: 'tokentrail:dashboard',  usd: 60 },
+    ]);
+    const vm = buildOverview({ db, days: 30 });
+    const chartKeys = new Set(vm.projects.filter((p) => p.clickable).map((p) => p.key));
+    const listKeys  = new Set(vm.topProjects.map((p) => p.key));
+    // Every real chart band must have a matching burn-paths row.
+    for (const key of chartKeys) {
+      assert.ok(listKeys.has(key), `chart key "${key}" not in burn-paths keys: ${[...listKeys].join(', ')}`);
+    }
+    // Both keys should follow the parseProjectKey-acceptable prefixes.
+    for (const key of chartKeys) {
+      assert.match(key, /^(repo:|local:|feature:)/, `chart key "${key}" not routable to /project/`);
+    }
   });
 
   test('days[]: sum(bands) + unattributedTotal === total for legacy project_key=NULL data', () => {

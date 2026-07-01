@@ -329,9 +329,6 @@ export function buildOverview(
     `)
     .all() as PerDayRow[];
 
-  // Window-level feature totals per real project (for projectFeatureMix).
-  const windowFeatureMap = new Map<string, Map<string, { name: string; usd: number }>>();
-
   for (const r of perDayRows) {
     const dayRow = dayIndex.get(r.date);
     if (!dayRow) continue;
@@ -347,37 +344,46 @@ export function buildOverview(
     const bandKey = top6Set.has(r.effProjKey) ? r.effProjKey : OTHER_KEY;
     dayRow.bands[bandKey] = round2((dayRow.bands[bandKey] ?? 0) + r.usd);
 
-    // featureBands + window totals only for top-6 real projects (skip Other).
+    // featureBands only for top-6 real projects (skip Other).
     if (top6Set.has(r.effProjKey)) {
       const effectiveFeatKey = r.featKey === UNCATEGORIZED_KEY ? '__unattributed__' : r.featKey;
       if (!dayRow.featureBands[r.effProjKey]) dayRow.featureBands[r.effProjKey] = {};
       const projFBands = dayRow.featureBands[r.effProjKey]!;
       projFBands[effectiveFeatKey] = round2((projFBands[effectiveFeatKey] ?? 0) + r.usd);
-
-      // Accumulate window totals for projectFeatureMix.
-      if (!windowFeatureMap.has(r.effProjKey)) windowFeatureMap.set(r.effProjKey, new Map());
-      const wfProj = windowFeatureMap.get(r.effProjKey)!;
-      const existing = wfProj.get(effectiveFeatKey);
-      if (!existing) {
-        wfProj.set(effectiveFeatKey, { name: r.featName, usd: r.usd });
-      } else {
-        existing.usd = round2(existing.usd + r.usd);
-      }
     }
   }
 
-  // --- projectFeatureMix: per-project window feature totals (top-6 only; skip Other) ---
-  const projectFeatureMix: OverviewVM['projectFeatureMix'] = top6.map((projAgg) => {
-    const featureMap = windowFeatureMap.get(projAgg.effProjKey) ?? new Map();
-    const features = [...featureMap.entries()]
-      .map(([featKey, data]) => ({
-        key: featKey,
-        name: featKey === '__unattributed__' ? 'Unattributed' : data.name,
-        color: featKey === '__unattributed__' ? STRIPED_SENTINEL : colorFor(featKey),
-        totalUsd: data.usd,
-      }))
+  // --- projectFeatureMix: per-project feature mix, keyed by topProjects.key (bucketProject format)
+  // so the sub-bar JS can match data-project-key attributes in the DOM.
+  const topProjectKeySet = new Set(topProjects.map((p) => p.key));
+  const pfmProjMap = new Map<string, Map<string, { name: string; totalUsd: number; color: string }>>();
+
+  for (const r of projectRows) {
+    const { projectKey } = bucketProject(r);
+    if (!topProjectKeySet.has(projectKey)) continue;
+
+    if (!pfmProjMap.has(projectKey)) pfmProjMap.set(projectKey, new Map());
+    const featMap = pfmProjMap.get(projectKey)!;
+
+    const effectiveFeatKey = r.featureKey === UNCATEGORIZED_KEY ? '__unattributed__' : r.featureKey;
+    const existing = featMap.get(effectiveFeatKey);
+    if (!existing) {
+      featMap.set(effectiveFeatKey, {
+        name: effectiveFeatKey === '__unattributed__' ? 'Unattributed' : (r.featureName || r.featureKey),
+        totalUsd: r.totalUsd,
+        color: effectiveFeatKey === '__unattributed__' ? STRIPED_SENTINEL : colorFor(r.featureKey),
+      });
+    } else {
+      existing.totalUsd = round2(existing.totalUsd + r.totalUsd);
+    }
+  }
+
+  const projectFeatureMix: OverviewVM['projectFeatureMix'] = topProjects.map((proj) => {
+    const featMap = pfmProjMap.get(proj.key) ?? new Map();
+    const features = [...featMap.entries()]
+      .map(([key, data]) => ({ key, name: data.name, color: data.color, totalUsd: data.totalUsd }))
       .sort((a, b) => b.totalUsd - a.totalUsd);
-    return { projectKey: projAgg.effProjKey, features };
+    return { projectKey: proj.key, features };
   });
 
   // --- unattributed block ---

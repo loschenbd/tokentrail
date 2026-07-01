@@ -471,3 +471,21 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   font-size: 13px;
 }
 .chart-hint code { background: rgba(139,111,71,0.16); padding: 1px 5px; border-radius: 3px; }
+
+/* Burn-paths inline feature sub-bars (Task 5; polish in Task 7) */
+.subbar {
+  display: flex;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.05);
+}
+.subbar-segment { height: 100%; }
+.subbar-segment--striped {
+  background: repeating-linear-gradient(
+    45deg,
+    #6B7280 0 4px,
+    rgba(255,255,255,0.35) 4px 6px
+  );
+}

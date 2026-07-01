@@ -246,14 +246,19 @@ describe('buildOverview', () => {
   });
 
   test('projectFeatureMix: per-project features sorted $ desc; window totals', () => {
+    // Uses repo so bucketProject groups all three feature_keys under one project entry.
+    // projectFeatureMix.projectKey must match topProjects.key (both use bucketProject format)
+    // so the sub-bar JS can locate the correct .subbar[data-project-key] DOM container.
     const db = openInMemoryDb();
     seedRollups(db, [
-      { date: daysAgo(3), projectKey: 'archi', featureKey: 'rag',        usd: 100 },
-      { date: daysAgo(3), projectKey: 'archi', featureKey: 'onboarding', usd:  50 },
-      { date: daysAgo(3), projectKey: 'archi', featureKey: 'uncategorized-mainline', usd: 75 },
+      { date: daysAgo(3), projectKey: 'archi', featureKey: 'rag',        repo: 'testorg/archi', usd: 100 },
+      { date: daysAgo(3), projectKey: 'archi', featureKey: 'onboarding', repo: 'testorg/archi', usd:  50 },
+      { date: daysAgo(3), projectKey: 'archi', featureKey: 'uncategorized-mainline', repo: 'testorg/archi', usd: 75 },
     ]);
     const vm = buildOverview({ db, days: 30 });
-    const mix = vm.projectFeatureMix.find((m) => m.projectKey === 'archi')!;
+    // bucketProject maps all three feature_keys → 'repo:testorg/archi' (grouped by repo).
+    const mix = vm.projectFeatureMix.find((m) => m.projectKey === 'repo:testorg/archi')!;
+    assert.ok(mix, 'projectFeatureMix entry exists for repo:testorg/archi');
     const keys = mix.features.map((f) => f.key);
     assert.deepEqual(keys, ['rag', '__unattributed__', 'onboarding']);
     assert.equal(mix.features[1]!.color, '__striped__');
@@ -359,11 +364,12 @@ function seedRollups(
     featureKey?: string;
     featureName?: string;
     projectKey?: string;
+    repo?: string;
   }>
 ): void {
   const insert = db.prepare(`
-    INSERT INTO feature_rollups (id, date, project_key, feature_key, feature_name, total_cost_usd, sessions_count)
-    VALUES (@id, @date, @projectKey, @key, @name, @cost, 1)
+    INSERT INTO feature_rollups (id, date, project_key, feature_key, feature_name, repo, total_cost_usd, sessions_count)
+    VALUES (@id, @date, @projectKey, @key, @name, @repo, @cost, 1)
   `);
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]!;
@@ -373,6 +379,7 @@ function seedRollups(
       projectKey: r.projectKey ?? null,
       key: r.featureKey ?? r.feature_key ?? 'misc',
       name: r.featureName ?? r.feature_name ?? 'misc',
+      repo: r.repo ?? null,
       cost: r.usd ?? r.cost ?? 0,
     });
   }

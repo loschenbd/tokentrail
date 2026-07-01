@@ -595,6 +595,49 @@
     node.appendChild(svg);
   }
 
+  function renderBurnPathsSubBars() {
+    const dataNode = document.getElementById('burn-paths-data');
+    if (!dataNode) return;
+    let payload;
+    try { payload = JSON.parse(dataNode.textContent || 'null'); } catch (e) { return; }
+    if (!Array.isArray(payload)) return;
+
+    payload.forEach((entry) => {
+      const container = document.querySelector(`.subbar[data-project-key="${cssEscape(entry.projectKey)}"]`);
+      if (!container) return;
+      const total = entry.features.reduce((s, f) => s + f.totalUsd, 0);
+      if (total <= 0) return;
+
+      // Enforce minimum visible segment width (2px). Small segments aggregate into a
+      // trailing "other-features" neutral bucket to preserve legibility.
+      const minPct = 2 / (container.clientWidth || 480) * 100;
+      const kept = [];
+      let otherUsd = 0;
+      entry.features.forEach((f) => {
+        const pct = (f.totalUsd / total) * 100;
+        if (pct >= minPct) kept.push({ ...f, pct });
+        else otherUsd += f.totalUsd;
+      });
+      if (otherUsd > 0) {
+        kept.push({ key: '__other_features__', name: 'other features', color: '#9CA3AF', totalUsd: otherUsd, pct: (otherUsd / total) * 100 });
+      }
+
+      container.innerHTML = kept.map((f) => {
+        const striped = f.color === '__striped__' ? ' subbar-segment--striped' : '';
+        const bg = f.color === '__striped__' ? '' : `background:${escapeAttr(f.color)};`;
+        const title = escapeAttr(`${f.name}: $${f.totalUsd.toFixed(0)}`);
+        return `<div class="subbar-segment${striped}" style="${bg}width:${f.pct.toFixed(2)}%" title="${title}"></div>`;
+      }).join('');
+    });
+  }
+
+  function cssEscape(s) {
+    return String(s).replace(/["\\]/g, '\\$&');
+  }
+  function escapeAttr(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  }
+
   function truncate(s, n) {
     return s.length <= n ? s : s.slice(0, n - 1) + '…';
   }
@@ -662,6 +705,7 @@
     renderTrend();
     renderTrailElevation();
     renderBranchGraph();
+    renderBurnPathsSubBars();
     setupRowExpanders();
     setupClusterJumps();
   });

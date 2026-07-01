@@ -49,12 +49,6 @@
     function fmtDate(unixSec) {
       return new Date(unixSec * 1000).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
     }
-    function fmtUsd(n) {
-      return '$' + (typeof n === 'number' ? n.toFixed(2) : n);
-    }
-    function esc(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
     function hexToRgba(hex, alpha) {
       const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
       if (!m) return hex;
@@ -631,6 +625,12 @@
     });
   }
 
+  function fmtUsd(n) {
+    return '$' + (typeof n === 'number' ? n.toFixed(2) : n);
+  }
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
   function cssEscape(s) {
     return String(s).replace(/["\\]/g, '\\$&');
   }
@@ -701,11 +701,71 @@
     });
   }
 
+  function renderUnattributedCard() {
+    const card = document.getElementById('unattributed-card');
+    const dataNode = document.getElementById('trend-data');
+    if (!card || !dataNode) return;
+    let payload;
+    try { payload = JSON.parse(dataNode.textContent || 'null'); } catch (e) { return; }
+    const u = payload && payload.unattributed;
+    if (!u) return;
+
+    const spark = drawSparkline(u.sparkline);
+    const projRows = u.topProjects.map((p) => {
+      const pct = p.projectTotalUsd > 0 ? (p.unattributedUsd / p.projectTotalUsd) * 100 : 0;
+      return `<div class="unatt-project">
+        <div class="unatt-project-head">
+          <span class="swatch" style="background:${escapeAttr(p.color)}"></span>
+          <span class="name">${esc(p.name)}</span>
+          <span class="amt">${fmtUsd(p.unattributedUsd)}</span>
+        </div>
+        <div class="unatt-project-bar"><div style="width:${pct.toFixed(1)}%"></div></div>
+      </div>`;
+    }).join('');
+
+    card.innerHTML = `
+      <div class="label">Unattributed</div>
+      <div class="unatt-hero">${fmtUsd(u.totalUsd)} <span class="muted">· ${u.pctOfTrail.toFixed(0)}% of trail</span></div>
+      <div class="unatt-sparkline">${spark}</div>
+      <div class="unatt-projects">${projRows}</div>
+      <button class="unatt-cta" type="button" data-clipboard="tokentrail infer-mainline">Run <code>tokentrail infer-mainline</code> →</button>
+    `;
+
+    const btn = card.querySelector('.unatt-cta');
+    btn.addEventListener('click', async (e) => {
+      const text = e.currentTarget.getAttribute('data-clipboard') || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        const original = btn.innerHTML;
+        btn.textContent = 'Copied ✓';
+        setTimeout(() => { btn.innerHTML = original; }, 1500);
+      } catch (err) {
+        // Fallback: no-op; label doesn't flip. Not worth a toast for a copy failure on localhost.
+      }
+    });
+  }
+
+  function drawSparkline(points) {
+    if (!points || points.length === 0) return '';
+    const w = 220, h = 40, pad = 2;
+    const max = Math.max(1, ...points.map((p) => p.usd));
+    const stepX = (w - pad * 2) / Math.max(1, points.length - 1);
+    const pts = points.map((p, i) => {
+      const x = pad + i * stepX;
+      const y = h - pad - (p.usd / max) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="${pts}" fill="none" stroke="#6B7280" stroke-width="1.5" />
+    </svg>`;
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     renderTrend();
     renderTrailElevation();
     renderBranchGraph();
     renderBurnPathsSubBars();
+    renderUnattributedCard();
     setupRowExpanders();
     setupClusterJumps();
   });

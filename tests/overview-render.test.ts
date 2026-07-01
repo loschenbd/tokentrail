@@ -126,6 +126,25 @@ test('burn paths payload includes projectFeatureMix JSON', () => {
   assert.match(html, /"__striped__"/);
 });
 
+test('unattributed card visible with rendered content when payload present', () => {
+  const vm: OverviewVM = {
+    ...emptyVM(),
+    totalUsd: 200,
+    unattributed: {
+      totalUsd: 60,
+      pctOfTrail: 30,
+      sparkline: Array.from({ length: 30 }, (_, i) => ({ date: `2026-06-${String(i+1).padStart(2,'0')}`, usd: i })),
+      topProjects: [
+        { key: 'archi', name: 'archi', color: '#0072B2', unattributedUsd: 40, projectTotalUsd: 120 },
+      ],
+    },
+  };
+  const html = renderOverview(vm);
+  assert.match(html, /id="unattributed-card"/);
+  // The card's data payload should be in the JSON blob so client JS can mount it.
+  assert.match(html, /"pctOfTrail":30/);
+});
+
 test('unattributed card placeholder hidden by default; visible marker when payload present', () => {
   const empty: OverviewVM = { ...emptyVM(), totalUsd: 0 };
   assert.doesNotMatch(renderOverview(empty), /id="unattributed-card"/);

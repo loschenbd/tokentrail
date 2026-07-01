@@ -189,10 +189,13 @@ export async function inferMainlineFeatures(
         // whole chunk (better than leaving every commit uncategorized).
         if (unresolved.length > 0 && llm) {
           const CHUNK = 6;
+          // Fallback slug is cached across ALL chunks in this session, so a
+          // 40-commit session where every batch call empties out pays for
+          // the session-title LLM call once, not once per chunk.
+          let sessionFallback: { key: string; name: string } | null = null;
           for (let off = 0; off < unresolved.length; off += CHUNK) {
             const batch = unresolved.slice(off, off + CHUNK);
             summary.llmCalls++;
-            let sessionFallback: { key: string; name: string } | null = null;
             try {
               const resp = await llm.client.chat.completions.create({
                 model: llm.model,

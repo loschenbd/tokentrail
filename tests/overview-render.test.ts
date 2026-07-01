@@ -13,8 +13,11 @@ function emptyVM(): OverviewVM {
     weekSessions: 0,
     topFeatures: [],
     topProjects: [],
-    features: [],
+    projectColors: {},
+    projects: [],
     days: [],
+    projectFeatureMix: [],
+    unattributed: null,
     anomalies: [],
     recentCommits: [],
   };
@@ -46,64 +49,118 @@ describe('renderOverview empty-state', () => {
   });
 });
 
-test('renders the legend scaffold next to the chart with one li per feature', () => {
-  // Build a minimal VM with 2 real features + Other + uncategorized.
+test('trend-data JSON embeds days and projects arrays', () => {
   const vm = makeVm({
-    features: [
-      { key: 'menubar',              name: 'menubar',              color: '#0072B2', totalUsd: 30, clickable: true,  stackPosition: 0 },
-      { key: 'ingest',               name: 'ingest',               color: '#E69F00', totalUsd: 20, clickable: true,  stackPosition: 1 },
-      { key: '__other__',            name: 'Other',                color: '#9CA3AF', totalUsd: 5,  clickable: false, stackPosition: 2 },
-      { key: 'uncategorized-mainline', name: 'uncategorized-mainline', color: '__striped__', totalUsd: 12, clickable: false, stackPosition: 3 },
-    ],
-    days: [{ date: '2026-06-29', total: 67, bands: { menubar: 30, ingest: 20, '__other__': 5, 'uncategorized-mainline': 12 }, commits: 1, prs: 0 }],
-  });
-  const html = renderOverview(vm);
-  assert.match(html, /id="trend-legend"/);
-  // 4 entries (top-of-stack first = uncategorized).
-  const lis = html.match(/<li[^>]+data-feature-key=/g) ?? [];
-  assert.equal(lis.length, 4);
-  // Order: uncategorized first, then __other__, then real features sorted desc.
-  const order = [...html.matchAll(/data-feature-key="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(order, ['uncategorized-mainline', '__other__', 'menubar', 'ingest']);
-  // clickable flags.
-  assert.match(html, /data-feature-key="menubar"[^>]*data-clickable="1"/);
-  assert.match(html, /data-feature-key="__other__"[^>]*data-clickable="0"/);
-  assert.match(html, /data-feature-key="uncategorized-mainline"[^>]*data-clickable="0"/);
-});
-
-test('trend-data JSON embeds both days and features arrays', () => {
-  const vm = makeVm({
-    features: [{ key: 'menubar', name: 'menubar', color: '#0072B2', totalUsd: 5, clickable: true, stackPosition: 0 }],
-    days: [{ date: '2026-06-29', total: 5, bands: { menubar: 5 }, commits: 0, prs: 0 }],
+    projects: [{ key: 'menubar', name: 'menubar', color: '#0072B2', totalUsd: 5, clickable: true, stackPosition: 0 }],
+    days: [{ date: '2026-06-29', total: 5, bands: { menubar: 5 }, featureBands: {}, unattributedTotal: 0, commits: 0, prs: 0 }],
   });
   const html = renderOverview(vm);
   const m = html.match(/<script type="application\/json" id="trend-data">([^<]+)<\/script>/);
   assert.ok(m);
   const parsed = JSON.parse(m![1]!);
   assert.ok(Array.isArray(parsed.days));
-  assert.ok(Array.isArray(parsed.features));
-  assert.equal(parsed.features[0].key, 'menubar');
+  assert.ok(Array.isArray(parsed.projects));
+  assert.equal(parsed.projects[0].key, 'menubar');
 });
 
-test('shows infer-mainline hint when only uncategorized-mainline has spend', () => {
-  const vm = makeVm({
-    totalUsd: 12,
-    features: [{ key: 'uncategorized-mainline', name: 'uncategorized-mainline', color: '__striped__', totalUsd: 12, clickable: false, stackPosition: 0 }],
-    days: [{ date: '2026-06-29', total: 12, bands: { 'uncategorized-mainline': 12 }, commits: 0, prs: 0 }],
-  });
-  const html = renderOverview(vm);
-  assert.match(html, /Run <code>tokentrail infer-mainline<\/code>/);
-});
-
-test('does NOT show the hint when at least one real feature has spend', () => {
-  const vm = makeVm({
-    totalUsd: 15,
-    features: [
-      { key: 'menubar', name: 'menubar', color: '#0072B2', totalUsd: 10, clickable: true, stackPosition: 0 },
-      { key: 'uncategorized-mainline', name: 'uncategorized-mainline', color: '__striped__', totalUsd: 5, clickable: false, stackPosition: 1 },
+test('trend legend uses data-project-key and orders by stackPosition desc', () => {
+  const vm: OverviewVM = {
+    ...emptyVM(),
+    totalUsd: 100,
+    projects: [
+      { key: 'a', name: 'Alpha', color: '#000', totalUsd: 60, clickable: true, stackPosition: 0 },
+      { key: 'b', name: 'Beta',  color: '#111', totalUsd: 40, clickable: true, stackPosition: 1 },
+      { key: '__other__', name: 'Other', color: '#9CA3AF', totalUsd: 5, clickable: false, stackPosition: 2 },
     ],
-    days: [{ date: '2026-06-29', total: 15, bands: { menubar: 10, 'uncategorized-mainline': 5 }, commits: 0, prs: 0 }],
-  });
+    days: [{ date: '2026-06-30', total: 105, bands: { a: 60, b: 40, __other__: 5 }, featureBands: {}, unattributedTotal: 0, commits: 0, prs: 0 }],
+  };
   const html = renderOverview(vm);
-  assert.doesNotMatch(html, /Run <code>tokentrail infer-mainline<\/code>/);
+  // First legend row is __other__ (highest stackPosition).
+  const otherIdx = html.indexOf('data-project-key="__other__"');
+  const bIdx = html.indexOf('data-project-key="b"');
+  const aIdx = html.indexOf('data-project-key="a"');
+  assert.ok(otherIdx > 0 && bIdx > 0 && aIdx > 0);
+  assert.ok(otherIdx < bIdx && bIdx < aIdx, 'legend order should be Other, b, a');
+});
+
+test('__other__ legend row has data-clickable="0"', () => {
+  const vm: OverviewVM = {
+    ...emptyVM(),
+    totalUsd: 100,
+    projects: [
+      { key: 'a', name: 'A', color: '#000', totalUsd: 60, clickable: true, stackPosition: 0 },
+      { key: '__other__', name: 'Other', color: '#9CA3AF', totalUsd: 40, clickable: false, stackPosition: 1 },
+    ],
+    days: [{ date: '2026-06-30', total: 100, bands: {}, featureBands: {}, unattributedTotal: 0, commits: 0, prs: 0 }],
+  };
+  const html = renderOverview(vm);
+  assert.match(html, /data-project-key="__other__"[^>]*data-clickable="0"/);
+});
+
+test('burn paths rows carry data-project-key and include an empty subbar container', () => {
+  const vm: OverviewVM = {
+    ...emptyVM(),
+    totalUsd: 100,
+    topProjects: [{ key: 'archi', name: 'archi', color: '#E69F00', totalUsd: 100, pct: 100, featureCount: 2, sessionCount: 3 }],
+  };
+  const html = renderOverview(vm);
+  assert.match(html, /class="project-row"[^>]*data-project-key="archi"/);
+  assert.match(html, /class="subbar"[^>]*data-project-key="archi"/);
+});
+
+test('burn paths payload includes projectFeatureMix JSON', () => {
+  const vm: OverviewVM = {
+    ...emptyVM(),
+    totalUsd: 100,
+    topProjects: [{ key: 'archi', name: 'archi', color: '#E69F00', totalUsd: 100, pct: 100, featureCount: 2, sessionCount: 3 }],
+    projectFeatureMix: [{
+      projectKey: 'archi',
+      features: [
+        { key: 'rag', name: 'RAG', color: '#0072B2', totalUsd: 60 },
+        { key: '__unattributed__', name: 'unattributed', color: '__striped__', totalUsd: 40 },
+      ],
+    }],
+  };
+  const html = renderOverview(vm);
+  assert.match(html, /id="burn-paths-data"/);
+  assert.match(html, /"projectKey":"archi"/);
+  assert.match(html, /"__striped__"/);
+});
+
+test('unattributed card visible with rendered content when payload present', () => {
+  const vm: OverviewVM = {
+    ...emptyVM(),
+    totalUsd: 200,
+    unattributed: {
+      totalUsd: 60,
+      pctOfTrail: 30,
+      sparkline: Array.from({ length: 30 }, (_, i) => ({ date: `2026-06-${String(i+1).padStart(2,'0')}`, usd: i })),
+      topProjects: [
+        { key: 'archi', name: 'archi', color: '#0072B2', unattributedUsd: 40, projectTotalUsd: 120 },
+      ],
+    },
+  };
+  const html = renderOverview(vm);
+  assert.match(html, /id="unattributed-card"/);
+  // The card's data payload should be in the JSON blob so client JS can mount it.
+  assert.match(html, /"pctOfTrail":30/);
+});
+
+test('unattributed card placeholder hidden by default; visible marker when payload present', () => {
+  const empty: OverviewVM = { ...emptyVM(), totalUsd: 0 };
+  assert.doesNotMatch(renderOverview(empty), /id="unattributed-card"/);
+
+  const withUnatt: OverviewVM = {
+    ...emptyVM(),
+    totalUsd: 100,
+    unattributed: {
+      totalUsd: 40,
+      pctOfTrail: 40,
+      sparkline: [],
+      topProjects: [],
+    },
+  };
+  const html = renderOverview(withUnatt);
+  assert.match(html, /id="unattributed-card"/);
+  assert.doesNotMatch(html, /id="unattributed-card"[^>]* hidden/);
 });

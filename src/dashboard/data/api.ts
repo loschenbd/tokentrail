@@ -1,5 +1,5 @@
 import type DatabaseType from 'better-sqlite3';
-import { buildOverview } from './overview.js';
+import { buildOverview, bucketProject } from './overview.js';
 
 const DASHBOARD_BASE_URL = 'http://127.0.0.1:4920';
 const MAX_PROJECTS = 3;
@@ -41,7 +41,7 @@ export type TodayResponse = {
 };
 
 export function buildToday(db: DatabaseType.Database): TodayResponse {
-  const overview = buildOverview(db, { days: 1 });
+  const overview = buildOverview({ db, days: 1 });
 
   const anomalyCount = (db
     .prepare(`SELECT COUNT(*) AS n FROM anomalies WHERE dismissed_at IS NULL`)
@@ -51,19 +51,43 @@ export function buildToday(db: DatabaseType.Database): TodayResponse {
     .prepare(`SELECT MAX(timestamp) AS t FROM usage_events`)
     .get() as { t: string | null }).t;
 
+  // Build per-project feature lists from today's feature_rollups.
+  // topProjects no longer carries feature details (new project-first shape),
+  // so we query and group features independently using the same bucketing logic.
+  const todayDateExpr = `date('now', 'localtime')`;
+  const allFeatureRows = db
+    .prepare(`
+      SELECT feature_key AS featureKey,
+             MAX(feature_name) AS featureName,
+             MAX(repo) AS repo,
+             ROUND(SUM(total_cost_usd), 2) AS totalUsd
+      FROM feature_rollups
+      WHERE date >= ${todayDateExpr}
+      GROUP BY feature_key
+      ORDER BY totalUsd DESC
+    `)
+    .all() as Array<{ featureKey: string; featureName: string; repo: string | null; totalUsd: number }>;
+
+  const projectFeaturesMap = new Map<string, TodayFeature[]>();
+  for (const r of allFeatureRows) {
+    const { projectKey } = bucketProject(r);
+    if (!projectFeaturesMap.has(projectKey)) projectFeaturesMap.set(projectKey, []);
+    projectFeaturesMap.get(projectKey)!.push({
+      key: r.featureKey,
+      name: r.featureName,
+      usd: r.totalUsd,
+      href: `${DASHBOARD_BASE_URL}/feature/${encodeURIComponent(r.featureKey)}`,
+    });
+  }
+
   return {
     todayUsd: overview.totalUsd,
     topProjects: overview.topProjects.slice(0, MAX_PROJECTS).map((p) => ({
-      key: p.projectKey,
-      name: p.projectName,
+      key: p.key,
+      name: p.name,
       usd: p.totalUsd,
-      href: `${DASHBOARD_BASE_URL}/project/${encodeURIComponent(p.projectKey)}`,
-      features: p.features.slice(0, MAX_FEATURES_PER_PROJECT).map((f) => ({
-        key: f.featureKey,
-        name: f.featureName,
-        usd: f.totalUsd,
-        href: `${DASHBOARD_BASE_URL}/feature/${encodeURIComponent(f.featureKey)}`,
-      })),
+      href: `${DASHBOARD_BASE_URL}/project/${encodeURIComponent(p.key)}`,
+      features: (projectFeaturesMap.get(p.key) ?? []).slice(0, MAX_FEATURES_PER_PROJECT),
     })),
     anomalyCount,
     lastEventAt,

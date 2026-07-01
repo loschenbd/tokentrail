@@ -36,7 +36,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.get('/', async (req, reply) => {
     const days = parseDays(req.query, opts.defaultDays);
-    const vm = buildOverview(getDb(), { days });
+    const vm = buildOverview({ db: getDb(), days });
     const body = renderOverview(vm);
     reply.type('text/html; charset=utf-8');
     return renderShell({ title: 'Tokentrail · Overview', activeTab: 'overview', days }, body);

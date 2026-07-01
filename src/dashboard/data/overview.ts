@@ -34,6 +34,20 @@ export type OverviewVM = {
     stackPosition: number;   // 0 = bottom (largest real project); 6 = Other
   }>;
 
+  /**
+   * Per-day breakdown.
+   *
+   * Invariant: `sum(days[i].bands) + days[i].unattributedTotal === days[i].total`.
+   *
+   * For rows where `project_key IS NOT NULL` the unattributed portion is dissolved
+   * into its project's band, so `unattributedTotal` is 0 and `sum(bands) === total`.
+   *
+   * For legacy rows with `project_key IS NULL` and `feature_key === 'uncategorized-mainline'`
+   * (old-format data before schema migration), the spend contributes to `total` and
+   * `unattributedTotal` but NOT to `bands` — there is no project to attribute it to.
+   * The chart renderer should use `sum(bands)` as the stack height and rely on the
+   * unattributed sidebar card to surface the excluded amount.
+   */
   days: Array<{
     date: string;
     total: number;

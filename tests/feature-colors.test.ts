@@ -2,6 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   colorFor,
+  colorForProject,
   PALETTE,
   OTHER_KEY,
   OTHER_COLOR,
@@ -45,4 +46,26 @@ describe('colorFor', () => {
     const c = colorFor('');
     assert.ok(PALETTE.includes(c));
   });
+});
+
+test('colorForProject is deterministic', () => {
+  const a = colorForProject('archi');
+  const b = colorForProject('archi');
+  assert.equal(a, b);
+});
+
+test('colorForProject returns a value from PALETTE', () => {
+  const c = colorForProject('tokentrail');
+  assert.ok(PALETTE.includes(c), `expected ${c} to be in PALETTE`);
+});
+
+test('colorForProject and colorFor have independent keyspaces', () => {
+  // Not strictly guaranteed by contract (they COULD collide for a specific
+  // slug), but for a broad sample the two mappings should differ often.
+  const keys = ['a','b','c','d','e','f','archi','tokentrail','malslp'];
+  const featurePicks = keys.map(colorFor);
+  const projectPicks = keys.map(colorForProject);
+  // At least one slug picks a different colour under the two functions.
+  const diffs = keys.filter((_, i) => featurePicks[i] !== projectPicks[i]);
+  assert.ok(diffs.length > 0, 'expected at least one key to differ');
 });

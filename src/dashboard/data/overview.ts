@@ -18,10 +18,12 @@ export type OverviewVM = {
   weekSessions: number;
   topFeatures: Array<{ featureKey: string; featureName: string; totalUsd: number }>;
   topProjects: Array<{
-    projectKey: string;
-    projectName: string;
+    key: string;
+    name: string;
     totalUsd: number;
-    features: Array<{ featureKey: string; featureName: string; totalUsd: number }>;
+    pct: number;
+    featureCount: number;
+    sessionCount: number;
   }>;
 
   // NEW: project-first trend chart bands.
@@ -151,41 +153,40 @@ export function buildOverview(
     `)
     .all() as OverviewVM['topFeatures'];
 
-  // --- topProjects (unchanged, uses bucketProject) ---
+  // --- topProjects (project-first shape: key, name, totalUsd, pct, featureCount, sessionCount) ---
   const projectRows = db
     .prepare(`
       SELECT feature_key AS featureKey,
              MAX(feature_name) AS featureName,
              MAX(repo) AS repo,
-             ROUND(SUM(total_cost_usd), 2) AS totalUsd
+             ROUND(SUM(total_cost_usd), 2) AS totalUsd,
+             COALESCE(SUM(sessions_count), 0) AS sessionsCount
       FROM feature_rollups
       WHERE date >= ${startExpr}
       GROUP BY feature_key
     `)
-    .all() as Array<{ featureKey: string; featureName: string; repo: string | null; totalUsd: number }>;
+    .all() as Array<{ featureKey: string; featureName: string; repo: string | null; totalUsd: number; sessionsCount: number }>;
 
-  const projectMap = new Map<string, OverviewVM['topProjects'][number]>();
+  type ProjectIntermediate = { key: string; name: string; totalUsd: number; featureCount: number; sessionCount: number };
+  const projectMap = new Map<string, ProjectIntermediate>();
   for (const r of projectRows) {
     const { projectKey, projectName } = bucketProject(r);
     let p = projectMap.get(projectKey);
     if (!p) {
-      p = { projectKey, projectName, totalUsd: 0, features: [] };
+      p = { key: projectKey, name: projectName, totalUsd: 0, featureCount: 0, sessionCount: 0 };
       projectMap.set(projectKey, p);
     }
     p.totalUsd = round2(p.totalUsd + r.totalUsd);
-    p.features.push({
-      featureKey: r.featureKey,
-      featureName: r.featureName,
-      totalUsd: r.totalUsd,
-    });
+    p.featureCount += 1;
+    p.sessionCount += r.sessionsCount;
   }
-  const topProjects = [...projectMap.values()]
+  const topProjects: OverviewVM['topProjects'] = [...projectMap.values()]
+    .sort((a, b) => b.totalUsd - a.totalUsd)
+    .slice(0, 12)
     .map((p) => ({
       ...p,
-      features: p.features.sort((a, b) => b.totalUsd - a.totalUsd),
-    }))
-    .sort((a, b) => b.totalUsd - a.totalUsd)
-    .slice(0, 12);
+      pct: total > 0 ? Math.round((p.totalUsd / total) * 100) : 0,
+    }));
 
   // --- anomalies, recentCommits (unchanged) ---
   const anomalies = db
@@ -434,7 +435,7 @@ export function buildOverview(
   };
 }
 
-function bucketProject(r: { featureKey: string; featureName: string; repo: string | null }): {
+export function bucketProject(r: { featureKey: string; featureName: string; repo: string | null }): {
   projectKey: string;
   projectName: string;
 } {

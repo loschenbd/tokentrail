@@ -178,46 +178,85 @@ export async function inferMainlineFeatures(
           }
         }
 
-        // Rule B: batch LLM call for unresolved commits.
+        // Rule B: LLM classification for unresolved commits, chunked.
+        //
+        // Local 8B-class models (llama3.1:8b in particular) silently return
+        // empty content when asked to produce large structured JSON in
+        // response_format: json_object mode — a 15-commit batch reliably
+        // returns "" while a 2-commit batch succeeds. Chunk to something
+        // safely under that threshold. On empty content or JSON parse
+        // failure, fall through to session-title-only labeling for the
+        // whole chunk (better than leaving every commit uncategorized).
         if (unresolved.length > 0 && llm) {
-          summary.llmCalls++;
-          try {
-            const resp = await llm.client.chat.completions.create({
-              model: llm.model,
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You label engineering work by topic. Output STRICT JSON only matching schema {"labels":[{"commit_sha":string,"topic_slug":string}]}. Slugs are kebab-case, ≤30 chars, no commit-type words (feat/fix/chore/refactor/docs/test/perf/style/build/ci/revert).',
-                },
-                {
-                  role: 'user',
-                  content: JSON.stringify({
-                    session_title: s.title ?? '',
-                    commits: unresolved.slice(0, 80).map((c) => ({ sha: c.sha, subject: c.subject })),
-                  }),
-                },
-              ],
-              response_format: { type: 'json_object' },
-              max_tokens: 800,
-            });
-            const content = resp.choices[0]?.message?.content ?? '';
-            const parsed = JSON.parse(content) as { labels?: Array<{ commit_sha: string; topic_slug: string }> };
-            if (Array.isArray(parsed.labels)) {
-              for (const lbl of parsed.labels) {
-                const raw = (lbl.topic_slug ?? '').trim();
-                if (!raw) continue;
-                const key = slugify(raw);
-                classBySha.set(lbl.commit_sha, {
-                  key,
-                  name: humanizeFromSlug(key),
-                  source: 'session-title-llm',
-                });
+          const CHUNK = 6;
+          for (let off = 0; off < unresolved.length; off += CHUNK) {
+            const batch = unresolved.slice(off, off + CHUNK);
+            summary.llmCalls++;
+            let sessionFallback: { key: string; name: string } | null = null;
+            try {
+              const resp = await llm.client.chat.completions.create({
+                model: llm.model,
+                messages: [
+                  {
+                    role: 'system',
+                    content: 'You label engineering work by topic. Output STRICT JSON only matching schema {"labels":[{"commit_sha":string,"topic_slug":string}]}. Slugs are kebab-case, ≤30 chars, no commit-type words (feat/fix/chore/refactor/docs/test/perf/style/build/ci/revert).',
+                  },
+                  {
+                    role: 'user',
+                    content: JSON.stringify({
+                      session_title: s.title ?? '',
+                      commits: batch.map((c) => ({ sha: c.sha, subject: c.subject })),
+                    }),
+                  },
+                ],
+                response_format: { type: 'json_object' },
+                max_tokens: 400,
+              });
+              const content = resp.choices[0]?.message?.content ?? '';
+              if (!content.trim()) {
+                console.log(`[infer-mainline] empty content on ${s.session_id} batch ${off}-${off + batch.length}; falling back`);
+                sessionFallback = await getSessionTitleSlug(llm, s.title ?? '', sessionFallback);
+              } else {
+                const parsed = JSON.parse(content) as { labels?: Array<{ commit_sha: string; topic_slug: string }> };
+                if (Array.isArray(parsed.labels) && parsed.labels.length > 0) {
+                  for (const lbl of parsed.labels) {
+                    const raw = (lbl.topic_slug ?? '').trim();
+                    if (!raw) continue;
+                    const key = slugify(raw);
+                    classBySha.set(lbl.commit_sha, {
+                      key,
+                      name: humanizeFromSlug(key),
+                      source: 'session-title-llm',
+                    });
+                  }
+                } else {
+                  sessionFallback = await getSessionTitleSlug(llm, s.title ?? '', sessionFallback);
+                }
+              }
+            } catch (e) {
+              console.log(
+                `[infer-mainline] LLM call failed for session ${s.session_id} batch ${off}: ${(e as Error).message}`
+              );
+              sessionFallback = await getSessionTitleSlug(llm, s.title ?? '', sessionFallback);
+            }
+            // Apply session-title fallback to every commit in this batch
+            // that the batch call didn't resolve.
+            if (sessionFallback) {
+              // If the fallback itself returned uncategorized, preserve
+              // the historical inference_source='no-signal' marker so
+              // callers can distinguish "labeled from a title" from
+              // "genuinely could not label."
+              const src = sessionFallback.key === 'uncategorized-mainline' ? 'no-signal' : 'session-title-llm';
+              for (const c of batch) {
+                if (!classBySha.has(c.sha)) {
+                  classBySha.set(c.sha, {
+                    key: sessionFallback.key,
+                    name: sessionFallback.name,
+                    source: src,
+                  });
+                }
               }
             }
-          } catch (e) {
-            console.log(
-              `[infer-mainline] LLM call failed for session ${s.session_id}: ${(e as Error).message}`
-            );
           }
         }
 
@@ -285,4 +324,34 @@ function humanizeFromSlug(slug: string): string {
   const s = slug.replace(/-/g, ' ').trim();
   if (!s) return 'Uncategorized';
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Rule B fallback used when the per-commit batch call fails or comes back
+// empty. Asks the LLM for a single topic slug for the whole session — a
+// much smaller prompt that succeeds where the batch didn't. Cached per
+// session so we only pay once even if multiple batches fall through.
+async function getSessionTitleSlug(
+  llm: NonNullable<ReturnType<typeof defaultGetLLMClient>>,
+  title: string,
+  cached: { key: string; name: string } | null
+): Promise<{ key: string; name: string }> {
+  if (cached) return cached;
+  try {
+    const resp = await llm.client.chat.completions.create({
+      model: llm.model,
+      messages: [
+        { role: 'system', content: 'Pick a single kebab-case topic_slug (≤30 chars) for this engineering session. STRICT JSON: {"topic_slug":string}' },
+        { role: 'user', content: JSON.stringify({ session_title: title }) },
+      ],
+      response_format: { type: 'json_object' },
+      max_tokens: 200,
+    });
+    const parsed = JSON.parse(resp.choices[0]?.message?.content ?? '') as { topic_slug?: string };
+    const raw = (parsed.topic_slug ?? '').trim();
+    if (raw) {
+      const key = slugify(raw);
+      return { key, name: humanizeFromSlug(key) };
+    }
+  } catch { /* fall through */ }
+  return { key: 'uncategorized-mainline', name: 'Uncategorized mainline' };
 }

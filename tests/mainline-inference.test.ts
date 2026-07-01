@@ -165,7 +165,11 @@ describe('inferMainlineFeatures()', () => {
     assert.ok(rows.every(r => r.inference_source === 'session-title-llm'));
   });
 
-  test('Rule B malformed response → falls to no-signal, summary.llmCalls still 1', async () => {
+  test('Rule B malformed response → session-title fallback, then no-signal when that also fails', async () => {
+    // When the batch call returns unparseable content the service now
+    // asks the LLM for a session-title slug as a fallback. In this test
+    // that call ALSO returns garbage, so the commit lands on no-signal.
+    // Two LLM calls total: one batch + one fallback.
     const db = makeDb();
     seed(db);
     db.exec(`

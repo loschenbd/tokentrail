@@ -2,6 +2,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   colorFor,
+  colorForProject,
+  resolveProjectColors,
   PALETTE,
   OTHER_KEY,
   OTHER_COLOR,
@@ -45,4 +47,33 @@ describe('colorFor', () => {
     const c = colorFor('');
     assert.ok(PALETTE.includes(c));
   });
+});
+
+test('colorForProject is deterministic', () => {
+  const a = colorForProject('archi');
+  const b = colorForProject('archi');
+  assert.equal(a, b);
+});
+
+test('colorForProject returns a valid hex color', () => {
+  const c = colorForProject('tokentrail');
+  assert.match(c, /^#[0-9a-f]{6}$/i);
+});
+
+test('colorForProject returns OTHER_COLOR for the __other__ sentinel', () => {
+  assert.equal(colorForProject(OTHER_KEY), OTHER_COLOR);
+});
+
+test('resolveProjectColors returns a unique color per key', () => {
+  const keys = ['archi', 'tokentrail', 'malslp', 'benjaminloschen', 'mudandsilicon',
+                'imessage-history', 'gemify-universal', 'pm-os', 'projects', 'job-search',
+                'ben-skylar', 'blogs'];
+  const map = resolveProjectColors(keys);
+  const picks = new Set(Object.values(map));
+  assert.equal(picks.size, keys.length, `expected ${keys.length} unique colors, got ${picks.size}`);
+});
+
+test('resolveProjectColors preserves OTHER_COLOR for the sentinel', () => {
+  const map = resolveProjectColors([OTHER_KEY, 'archi']);
+  assert.equal(map[OTHER_KEY], OTHER_COLOR);
 });

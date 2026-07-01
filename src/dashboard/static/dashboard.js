@@ -10,23 +10,74 @@
       return;
     }
     const days = payload.days;
-    const features = payload.features || [];
-    if (features.length === 0) {
+    // Read project-first payload (Task 3). Ignore any legacy `features` key.
+    const projects = payload.projects || [];
+    if (projects.length === 0) {
       node.innerHTML = '<div class="muted" style="padding:24px;text-align:center">No data in window.</div>';
       return;
     }
 
-    // Stack order: bottom first (lowest stackPosition).
-    const stackOrder = features.slice().sort((a, b) => a.stackPosition - b.stackPosition);
+    // Client-side twins of src/dashboard/lib/feature-colors.ts. Feature dots in
+    // the tooltip are within-hue shades of the SERVER-RESOLVED project color
+    // (payload.projectColors) so tooltip colors match the burn-paths sub-bar.
+    const projectColors = (payload && payload.projectColors) || {};
+    function hashFeat(k) {
+      let h = 0;
+      for (let i = 0; i < k.length; i++) h = ((h << 5) - h + k.charCodeAt(i)) | 0;
+      h = Math.imul(h ^ (h >>> 15), 0x9E3779B1);
+      return Math.abs(h >>> 0);
+    }
+    function hexToHsl(hex) {
+      const h = hex.replace('#', '');
+      const r = parseInt(h.slice(0, 2), 16) / 255;
+      const g = parseInt(h.slice(2, 4), 16) / 255;
+      const b = parseInt(h.slice(4, 6), 16) / 255;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      const l = (mx + mn) / 2;
+      let s = 0, hh = 0;
+      if (mx !== mn) {
+        const d = mx - mn;
+        s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+        if (mx === r) hh = (g - b) / d + (g < b ? 6 : 0);
+        else if (mx === g) hh = (b - r) / d + 2;
+        else hh = (r - g) / d + 4;
+        hh *= 60;
+      }
+      return [hh, s * 100, l * 100];
+    }
+    function hslToHex(h, s, l) {
+      const S = s / 100, L = l / 100;
+      const c = (1 - Math.abs(2 * L - 1)) * S;
+      const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+      const m = L - c / 2;
+      let r = 0, g = 0, b = 0;
+      if (h < 60) { r = c; g = x; }
+      else if (h < 120) { r = x; g = c; }
+      else if (h < 180) { g = c; b = x; }
+      else if (h < 240) { g = x; b = c; }
+      else if (h < 300) { r = x; b = c; }
+      else { r = c; b = x; }
+      const to = (v) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+      return `#${to(r)}${to(g)}${to(b)}`;
+    }
+    function colorForFeatureInProject(projectKey, featureKey) {
+      const base = projectColors[projectKey] || '#9CA3AF';
+      const [h, s, l] = hexToHsl(base);
+      const shifts = [-18, -9, 0, 9, 18];
+      const shift = shifts[hashFeat(featureKey) % shifts.length];
+      const nl = Math.max(22, Math.min(78, l + shift));
+      return hslToHex(h, s, nl);
+    }
+
+    // Stack order: bottom first (lowest stackPosition = largest project = bottom of stack).
+    const stackOrder = projects.slice().sort((a, b) => a.stackPosition - b.stackPosition);
     const xs = days.map((d) => new Date(d.date + 'T00:00:00').getTime() / 1000);
 
     // Per-series cumulative ys (each series carries the running sum up to its band, inclusive).
-    const seriesYs = stackOrder.map((feat, idx) => {
+    const seriesYs = stackOrder.map((proj, idx) => {
       return days.map((d) => {
         let sum = 0;
-        for (let i = 0; i <= idx; i++) {
-          sum += d.bands[stackOrder[i].key] || 0;
-        }
+        for (let i = 0; i <= idx; i++) sum += d.bands[stackOrder[i].key] || 0;
         return sum;
       });
     });
@@ -40,69 +91,78 @@
     function fmtDate(unixSec) {
       return new Date(unixSec * 1000).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
     }
-    function fmtUsd(n) {
-      return '$' + (typeof n === 'number' ? n.toFixed(2) : n);
-    }
-    function esc(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
-    // Striped fill: a tiny canvas pattern, created lazily so it's bound to the
-    // chart's own canvas context (uPlot will call the fill function per draw).
-    function makeStripePattern(ctx) {
-      const p = document.createElement('canvas');
-      p.width = 8; p.height = 8;
-      const c = p.getContext('2d');
-      c.fillStyle = '#6B7280';
-      c.fillRect(0, 0, 8, 8);
-      c.strokeStyle = 'rgba(255,255,255,0.35)';
-      c.lineWidth = 1.5;
-      c.beginPath(); c.moveTo(-2, 10); c.lineTo(10, -2); c.stroke();
-      c.beginPath(); c.moveTo(0, 14); c.lineTo(14, 0); c.stroke();
-      return ctx.createPattern(p, 'repeat');
-    }
-    // For striped series, return a fill function that builds the pattern lazily.
-    function fillFor(color) {
-      if (color === '__striped__') {
-        return (u) => {
-          const ctx = u.ctx;
-          if (!ctx._stripePattern) ctx._stripePattern = makeStripePattern(ctx);
-          return ctx._stripePattern;
-        };
-      }
-      // Slight transparency so band borders read; opaque inner color preserves identity.
-      return hexToRgba(color, 0.92);
-    }
     function hexToRgba(hex, alpha) {
       const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
       if (!m) return hex;
       return `rgba(${parseInt(m[1],16)},${parseInt(m[2],16)},${parseInt(m[3],16)},${alpha})`;
     }
 
-    // Helper: determine which band (if any) the y-value falls into at a given x-index.
-    // Returns the stackOrder feature object or null.
+    // Helper: determine which project band (if any) the y-value falls into at a given x-index.
     function hitBand(yVal, idx) {
       for (let i = 0; i < stackOrder.length; i++) {
         const bandTop = seriesYs[i][idx];
         const bandBot = i === 0 ? 0 : seriesYs[i - 1][idx];
-        if (yVal >= bandBot && yVal <= bandTop) {
-          return stackOrder[i];
-        }
+        if (yVal >= bandBot && yVal <= bandTop) return stackOrder[i];
       }
       return null;
     }
 
+    // Build tooltip HTML.
+    // Top block: per-project $ totals for the hovered day, sorted $ desc.
+    // Bottom block (only when activeProjectKey is a real project): up to 3 feature rows
+    //   for that project on that day, with clickable <a> links.
+    function renderTooltip(idx, activeProjectKey) {
+      const day = days[idx];
+      if (!day || day.total === 0) {
+        return `<div class="chart-tooltip-header">${esc(fmtDate(xs[idx]))}</div>`;
+      }
+      const perProject = Object.entries(day.bands)
+        .filter(([, usd]) => usd > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([key, usd]) => {
+          const proj = stackOrder.find((p) => p.key === key);
+          const color = proj ? proj.color : '#9CA3AF';
+          const name = proj ? proj.name : key;
+          const activeCls = key === activeProjectKey ? ' chart-tooltip-row--active' : '';
+          return `<div class="chart-tooltip-row${activeCls}"><span class="swatch" style="background:${esc(color)}"></span>${esc(name)}<span class="amt">${fmtUsd(usd)}</span></div>`;
+        }).join('');
+
+      // Bottom block skips when the active project has ≤1 feature — that case
+      // would just duplicate the top row's total, adding no information.
+      let bottom = '';
+      if (activeProjectKey && activeProjectKey !== '__other__') {
+        const active = stackOrder.find((p) => p.key === activeProjectKey);
+        const feats = (day.featureBands && day.featureBands[activeProjectKey]) || {};
+        const entries = Object.entries(feats)
+          .filter(([, usd]) => usd > 0)
+          .sort((a, b) => b[1] - a[1]);
+        if (entries.length > 1) {
+          const shown = entries.slice(0, 3);
+          const more = entries.length - shown.length;
+          const rows = shown.map(([key, usd]) => {
+            if (key === '__unattributed__') {
+              return `<div class="chart-tooltip-row chart-tooltip-row--unatt"><span class="swatch swatch--striped"></span>unattributed<span class="amt">${fmtUsd(usd)}</span></div>`;
+            }
+            return `<a class="chart-tooltip-row chart-tooltip-link" href="/feature/${encodeURIComponent(key)}"><span class="swatch" style="background:${esc(colorForFeatureInProject(activeProjectKey, key))}"></span>${esc(key)}<span class="amt">${fmtUsd(usd)}</span></a>`;
+          }).join('');
+          const label = active ? `${active.name}'s features` : `${activeProjectKey}'s features`;
+          bottom = `<div class="chart-tooltip-subhead">${esc(label)}</div>${rows}${more > 0 ? `<div class="chart-tooltip-more">+ ${more} more</div>` : ''}`;
+        }
+      }
+      return `<div class="chart-tooltip-header">${esc(fmtDate(xs[idx]))}</div><div class="chart-tooltip-label">Projects</div><div class="chart-tooltip-rows">${perProject}</div>${bottom}`;
+    }
+
     // uPlot series + bands wiring.
     // series[0] is the x-axis pseudo-series. Real series start at 1.
-    const series = [{}].concat(stackOrder.map((feat) => ({
-      label: feat.name,
-      stroke: feat.color === '__striped__' ? '#4B5563' : feat.color,
-      fill: fillFor(feat.color),
+    // Trend chart uses solid hex fills only (no stripes — makeStripePattern lives on in Task 5/6).
+    const series = [{}].concat(stackOrder.map((proj) => ({
+      label: proj.name,
+      stroke: proj.color,
+      fill: hexToRgba(proj.color, 0.92),
       width: 1,
       points: { show: false },
     })));
-    // Bands: each band fills between series idx-1 and idx (idx = 2..N for stacked).
-    // Band: { series: [topIdx, bottomIdx], fill }
+    // Bands: each band fills between series idx and idx-1 (stacked area).
     const bands = [];
     for (let i = 1; i < stackOrder.length; i++) {
       bands.push({ series: [i + 1, i] });
@@ -112,16 +172,13 @@
 
     // Declare setActiveKey before opts so it can be safely called from hooks.
     let chartCanvas;
-    // Whole-canvas dim instead of per-series alpha — keeps the striped fill
-    // for uncategorized-mainline dimmable. Upgrade path: store original
-    // series fills, swap to alpha-reduced fills + u.redraw() per active key.
     function setActiveKey(key) {
       if (!chartCanvas) return;
       chartCanvas.classList.toggle('chart-dimmed', !!key);
       if (legend) {
         legend.querySelectorAll('.trend-legend-row').forEach((li) => {
-          li.classList.toggle('active', li.getAttribute('data-feature-key') === key);
-          li.classList.toggle('inactive', !!key && li.getAttribute('data-feature-key') !== key);
+          li.classList.toggle('active', li.getAttribute('data-project-key') === key);
+          li.classList.toggle('inactive', !!key && li.getAttribute('data-project-key') !== key);
         });
       }
     }
@@ -146,38 +203,16 @@
               tooltip.style.display = 'none';
               return;
             }
-            const d = days[idx];
-            // Per-day breakdown sorted by $ desc, non-zero only.
-            const rows = stackOrder
-              .map((f) => ({ key: f.key, name: f.name, color: f.color, usd: d.bands[f.key] || 0 }))
-              .filter((r) => r.usd > 0)
-              .sort((a, b) => b.usd - a.usd);
-            const total = d.total || 0;
-            const denom = total > 0 ? total : 1;
-            let body = '<div class="chart-tooltip-date">' + fmtDate(xs[idx]) + '</div>' +
-              '<div class="chart-tooltip-value">' + fmtUsd(total) + '</div>';
-            if (total === 0) {
-              body += '<div class="chart-tooltip-meta">no activity</div>';
-            } else {
-              body += '<div class="chart-tooltip-rows">';
-              for (const r of rows) {
-                const pct = Math.round((r.usd / denom) * 100);
-                const swatch = r.color === '__striped__'
-                  ? '<span class="tooltip-swatch swatch--striped"></span>'
-                  : '<span class="tooltip-swatch" style="background:' + esc(r.color) + '"></span>';
-                body += '<div class="chart-tooltip-row">' + swatch +
-                  '<span class="name">' + esc(r.name) + '</span>' +
-                  '<span class="amt">' + fmtUsd(r.usd) + ' <span class="muted">(' + pct + '%)</span></span></div>';
-              }
-              body += '</div>';
-            }
-            body += '<div class="chart-tooltip-meta">' +
-              (d.commits || 0) + ' ' + ((d.commits || 0) === 1 ? 'commit' : 'commits') +
-              ' · ' + (d.prs || 0) + ' ' + ((d.prs || 0) === 1 ? 'PR' : 'PRs') +
-              '</div>';
-            tooltip.innerHTML = body;
+            // Determine which project band the cursor is over and highlight it.
+            const yVal = self.posToVal(self.cursor.top, 'y');
+            const band = hitBand(yVal, idx);
+            const activeProjectKey = band ? band.key : null;
+            setActiveKey(activeProjectKey);
+
+            tooltip.innerHTML = renderTooltip(idx, activeProjectKey);
             tooltip.style.display = 'block';
 
+            const total = days[idx].total || 0;
             const left = self.valToPos(xs[idx], 'x');
             const top = total === 0
               ? (self.cursor.top != null ? self.cursor.top : 0)
@@ -189,11 +224,6 @@
             if (py < 0) py = top + 12;
             tooltip.style.left = px + 'px';
             tooltip.style.top = py + 'px';
-
-            // Determine which band the cursor is over and highlight it.
-            const yVal = self.posToVal(self.cursor.top, 'y');
-            const band = hitBand(yVal, idx);
-            setActiveKey(band ? band.key : null);
           },
         ],
       },
@@ -207,19 +237,19 @@
 
     if (legend) {
       legend.querySelectorAll('.trend-legend-row').forEach((li) => {
-        const key = li.getAttribute('data-feature-key');
+        const key = li.getAttribute('data-project-key');
         const clickable = li.getAttribute('data-clickable') === '1';
         li.addEventListener('mouseenter', () => setActiveKey(key));
         li.addEventListener('mouseleave', () => setActiveKey(null));
         if (clickable && key) {
           li.addEventListener('click', () => {
-            window.location.href = '/feature/' + encodeURIComponent(key);
+            window.location.href = '/project/' + encodeURIComponent(key);
           });
         }
       });
     }
 
-    // Chart click: derive the active band from cursor position and navigate.
+    // Chart click: derive the active project band from cursor position and navigate.
     node.addEventListener('click', () => {
       const cu = node.__uplot;
       if (!cu) return;
@@ -227,16 +257,24 @@
       if (clickIdx == null) return;
       const yVal = cu.posToVal(cu.cursor.top, 'y');
       const active = hitBand(yVal, clickIdx);
-      if (active && active.clickable !== false && active.key !== '__other__' && active.key !== 'uncategorized-mainline') {
-        window.location.href = '/feature/' + encodeURIComponent(active.key);
+      if (active && active.clickable !== false && active.key !== '__other__') {
+        window.location.href = '/project/' + encodeURIComponent(active.key);
       }
     });
 
+    // Mouseleave guard: skip tooltip dismissal if the cursor entered the legend OR the tooltip itself.
+    // Symmetric listener on the tooltip lets the user click the feature <a> links inside it.
     node.addEventListener('mouseleave', () => {
+      if (legend && legend.matches(':hover')) return;
+      if (tooltip && tooltip.matches(':hover')) return;
+      setActiveKey(null);
       tooltip.style.display = 'none';
-      if (!legend || !legend.matches(':hover')) {
-        setActiveKey(null);
-      }
+    });
+    tooltip.addEventListener('mouseleave', () => {
+      if (legend && legend.matches(':hover')) return;
+      if (node && node.matches(':hover')) return;
+      setActiveKey(null);
+      tooltip.style.display = 'none';
     });
   }
 
@@ -597,6 +635,55 @@
     node.appendChild(svg);
   }
 
+  function renderBurnPathsSubBars() {
+    const dataNode = document.getElementById('burn-paths-data');
+    if (!dataNode) return;
+    let payload;
+    try { payload = JSON.parse(dataNode.textContent || 'null'); } catch (e) { return; }
+    if (!Array.isArray(payload)) return;
+
+    payload.forEach((entry) => {
+      const container = document.querySelector(`.subbar[data-project-key="${cssEscape(entry.projectKey)}"]`);
+      if (!container) return;
+      const total = entry.features.reduce((s, f) => s + f.totalUsd, 0);
+      if (total <= 0) return;
+
+      // Enforce minimum visible segment width (2px). Small segments aggregate into a
+      // trailing "other-features" neutral bucket to preserve legibility.
+      const minPct = 2 / (container.clientWidth || 480) * 100;
+      const kept = [];
+      let otherUsd = 0;
+      entry.features.forEach((f) => {
+        const pct = (f.totalUsd / total) * 100;
+        if (pct >= minPct) kept.push({ ...f, pct });
+        else otherUsd += f.totalUsd;
+      });
+      if (otherUsd > 0) {
+        kept.push({ key: '__other_features__', name: 'other features', color: '#9CA3AF', totalUsd: otherUsd, pct: (otherUsd / total) * 100 });
+      }
+
+      container.innerHTML = kept.map((f) => {
+        const striped = f.color === '__striped__' ? ' subbar-segment--striped' : '';
+        const bg = f.color === '__striped__' ? '' : `background:${escapeAttr(f.color)};`;
+        const title = escapeAttr(`${f.name}: $${f.totalUsd.toFixed(0)}`);
+        return `<div class="subbar-segment${striped}" style="${bg}width:${f.pct.toFixed(2)}%" title="${title}"></div>`;
+      }).join('');
+    });
+  }
+
+  function fmtUsd(n) {
+    return '$' + (typeof n === 'number' ? n.toFixed(2) : n);
+  }
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function cssEscape(s) {
+    return String(s).replace(/["\\]/g, '\\$&');
+  }
+  function escapeAttr(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  }
+
   function truncate(s, n) {
     return s.length <= n ? s : s.slice(0, n - 1) + '…';
   }
@@ -660,10 +747,80 @@
     });
   }
 
+  function renderUnattributedCard() {
+    const card = document.getElementById('unattributed-card');
+    const dataNode = document.getElementById('trend-data');
+    if (!card || !dataNode) return;
+    let payload;
+    try { payload = JSON.parse(dataNode.textContent || 'null'); } catch (e) { return; }
+    const u = payload && payload.unattributed;
+    if (!u) {
+      card.innerHTML = `
+        <div class="label">Unattributed</div>
+        <div class="unatt-hero-empty">$0 <span class="muted">· all sessions attributed</span></div>
+        <div class="muted unatt-empty-note">Every session in this window is tied to a project. Nothing to reconcile.</div>
+      `;
+      return;
+    }
+
+    const spark = drawSparkline(u.sparkline);
+    const projRows = u.topProjects.map((p) => {
+      const pct = p.projectTotalUsd > 0 ? (p.unattributedUsd / p.projectTotalUsd) * 100 : 0;
+      return `<div class="unatt-project">
+        <div class="unatt-project-head">
+          <span class="swatch" style="background:${escapeAttr(p.color)}"></span>
+          <span class="name">${esc(p.name)}</span>
+          <span class="amt">${fmtUsd(p.unattributedUsd)}</span>
+        </div>
+        <div class="unatt-project-bar"><div style="width:${pct.toFixed(1)}%"></div></div>
+      </div>`;
+    }).join('');
+
+    card.innerHTML = `
+      <div class="label">Unattributed</div>
+      <div class="unatt-hero">${fmtUsd(u.totalUsd)} <span class="muted">· ${u.pctOfTrail.toFixed(0)}% of trail</span></div>
+      <div class="unatt-sparkline">${spark}</div>
+      <div class="unatt-projects">${projRows}</div>
+      <button class="unatt-cta" type="button" data-clipboard="tokentrail infer-mainline">Run <code>tokentrail infer-mainline</code> →</button>
+    `;
+
+    const btn = card.querySelector('.unatt-cta');
+    const original = btn.innerHTML;
+    let restoreTimer = null;
+    btn.addEventListener('click', async (e) => {
+      const text = e.currentTarget.getAttribute('data-clipboard') || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        e.currentTarget.textContent = 'Copied ✓';
+        clearTimeout(restoreTimer);
+        restoreTimer = setTimeout(() => { e.currentTarget.innerHTML = original; }, 1500);
+      } catch (err) {
+        // Fallback: no-op; label doesn't flip. Not worth a toast for a copy failure on localhost.
+      }
+    });
+  }
+
+  function drawSparkline(points) {
+    if (!points || points.length === 0) return '';
+    const w = 220, h = 40, pad = 2;
+    const max = Math.max(1, ...points.map((p) => p.usd));
+    const stepX = (w - pad * 2) / Math.max(1, points.length - 1);
+    const pts = points.map((p, i) => {
+      const x = pad + i * stepX;
+      const y = h - pad - (p.usd / max) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="${pts}" fill="none" stroke="#6B7280" stroke-width="1.5" />
+    </svg>`;
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     renderTrend();
     renderTrailElevation();
     renderBranchGraph();
+    renderBurnPathsSubBars();
+    renderUnattributedCard();
     setupRowExpanders();
     setupClusterJumps();
   });

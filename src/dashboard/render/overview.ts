@@ -6,10 +6,6 @@ import { colorFor, STRIPED_SENTINEL } from '../lib/feature-colors.js';
 
 export function renderOverview(vm: OverviewVM): string {
   if (isEmpty(vm)) return renderEmptyState();
-  const onlyUncategorized =
-    vm.features.length === 1 &&
-    vm.features[0]!.key === 'uncategorized-mainline' &&
-    vm.totalUsd > 0;
   return `
 <div class="layout">
   <section class="main-col">
@@ -18,16 +14,16 @@ export function renderOverview(vm: OverviewVM): string {
       <div class="trend-layout">
         <div id="trend-chart" style="width:100%;height:280px"></div>
         <ul id="trend-legend" class="trend-legend">
-          ${renderTrendLegend(vm.features)}
+          ${renderTrendLegend(vm.projects)}
         </ul>
       </div>
-      <script type="application/json" id="trend-data">${jsonForScriptTag({ days: vm.days, features: vm.features })}</script>
-      ${onlyUncategorized ? '<div class="chart-hint">Run <code>tokentrail infer-mainline</code> to classify these.</div>' : ''}
+      <script type="application/json" id="trend-data">${jsonForScriptTag({ days: vm.days, projects: vm.projects, unattributed: vm.unattributed, projectColors: vm.projectColors })}</script>
     </div>
 
     <div class="card">
       <div class="label">Top burn paths</div>
-      ${renderTopProjects(vm.topProjects, vm.totalUsd)}
+      <script type="application/json" id="burn-paths-data">${jsonForScriptTag(vm.projectFeatureMix)}</script>
+      ${renderTopProjects(vm.topProjects)}
     </div>
   </section>
 
@@ -43,6 +39,8 @@ export function renderOverview(vm: OverviewVM): string {
       <div class="kicker">$${vm.weekUsd.toFixed(0)}</div>
       <div class="muted">${vm.weekSessions} sessions</div>
     </div>
+
+    <div class="card unatt-card" id="unattributed-card"></div>
 
     <div class="card">
       <div class="label">Worth a look</div>
@@ -88,37 +86,19 @@ ${renderTrailMap({ mode: 'onboarding' })}
   `;
 }
 
-function renderTopProjects(items: OverviewVM['topProjects'], totalUsd: number): string {
+function renderTopProjects(items: OverviewVM['topProjects']): string {
   if (items.length === 0) return '<div class="muted">No project activity yet.</div>';
-  const denom = totalUsd > 0 ? totalUsd : 1;
   return items
     .map((p, i) => {
-      const share = (p.totalUsd / denom) * 100;
-      const pct = Math.max(1, Math.round(share));
-      // Single-feature projects skip the project page; the feature page is
-      // strictly richer (sessions + topics) and the project page would just
-      // duplicate the same numbers.
-      const href = p.features.length === 1
-        ? `/feature/${encodeURIComponent(p.features[0]!.featureKey)}`
-        : `/project/${encodeURIComponent(p.projectKey)}`;
-      const featuresLabel = p.features.length === 1
-        ? ''
-        : `<span class="muted">· ${p.features.length} features</span>`;
-      // Dominant feature swatch (first entry, already sorted by totalUsd desc)
-      const dominantKey = p.features[0]?.featureKey ?? '';
-      const dominantColor = colorFor(dominantKey);
-      const projectSwatch = dominantColor === STRIPED_SENTINEL
-        ? '<span class="swatch swatch--striped"></span>'
-        : `<span class="swatch" style="background:${dominantColor}"></span>`;
-      return `
-        <a class="project-row" href="${href}">
-          <span class="mile">${i + 1}</span>
-          ${projectSwatch}
-          <span class="name">${escapeHtml(p.projectName)} ${featuresLabel}</span>
-          <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
-        </a>
-        <div class="bar"><span style="width:${pct}%"></span></div>
-      `;
+      const rank = i + 1;
+      const color = escapeHtml(p.color);
+      return `<div class="project-row" data-project-key="${escapeHtml(p.key)}" data-project-color="${color}">
+          <div class="rank">${rank}</div>
+          <span class="swatch" style="background:${color}"></span>
+          <div class="name-col"><a href="/project/${encodeURIComponent(p.key)}">${escapeHtml(p.name)}</a> <span class="muted">· ${p.featureCount} features</span></div>
+          <div class="amt-col">$${p.totalUsd.toFixed(0)} · ${p.pct.toFixed(0)}%</div>
+          <div class="subbar" data-project-key="${escapeHtml(p.key)}" style="--pct:${p.pct}"></div>
+        </div>`;
     })
     .join('');
 }
@@ -153,26 +133,16 @@ function jsonForScriptTag(data: unknown): string {
   return JSON.stringify(data).replace(/</g, '\\u003c');
 }
 
-function renderTrendLegend(features: OverviewVM['features']): string {
-  // Legend order: non-clickable buckets (highest stackPosition first), then
-  // real/clickable features sorted by totalUsd descending (largest spend first).
-  const ordered = [...features].sort((a, b) => {
-    const aReal = a.clickable ? 1 : 0;
-    const bReal = b.clickable ? 1 : 0;
-    if (aReal !== bReal) return aReal - bReal; // non-clickable before clickable
-    if (!a.clickable) return b.stackPosition - a.stackPosition; // non-clickable: highest pos first
-    return b.totalUsd - a.totalUsd; // clickable: largest spend first
-  });
-  return ordered
-    .map((f) => {
-      const swatchClass = f.color === '__striped__' ? 'swatch swatch--striped' : 'swatch';
-      const swatchStyle = f.color === '__striped__' ? '' : ` style="background:${f.color}"`;
-      const clickable = f.clickable ? '1' : '0';
-      return `<li class="trend-legend-row" data-feature-key="${escapeHtml(f.key)}" data-feature-color="${escapeHtml(f.color)}" data-clickable="${clickable}">
-        <span class="${swatchClass}"${swatchStyle}></span>
-        <span class="name">${escapeHtml(f.name)}</span>
-        <span class="amt">$${f.totalUsd.toFixed(2)}</span>
-      </li>`;
-    })
-    .join('');
+function renderTrendLegend(projects: OverviewVM['projects']): string {
+  // Sort descending by stackPosition: top-of-legend mirrors top-of-stack.
+  // __other__ (highest stackPosition) appears first; largest real project appears last.
+  const rows = [...projects].sort((a, b) => b.stackPosition - a.stackPosition);
+  return rows.map((p) => {
+    const clickable = p.clickable ? '1' : '0';
+    return `<li class="trend-legend-row" data-project-key="${escapeHtml(p.key)}" data-project-color="${escapeHtml(p.color)}" data-clickable="${clickable}">
+      <span class="swatch" style="background:${escapeHtml(p.color)}"></span>
+      <span class="name">${escapeHtml(p.name)}</span>
+      <span class="amt">$${p.totalUsd.toFixed(0)}</span>
+    </li>`;
+  }).join('');
 }

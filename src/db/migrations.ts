@@ -16,6 +16,11 @@ export function runMigrations(db: Database.Database): void {
     addColumnIfMissing(db, 'session_commits', 'repo', 'TEXT');
     addColumnIfMissing(db, 'feature_rollups', 'body_synced_at', 'TEXT');
     addColumnIfMissing(db, 'feature_rollups', 'session_ids', 'TEXT');
+    addColumnIfMissing(db, 'feature_rollups', 'project_key', 'TEXT');
+    // Expression-based unique index for project_key; matches ON CONFLICT in rollup.ts.
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_feature_rollups_unique
+      ON feature_rollups (date, COALESCE(project_key, ''), feature_key)`);
+    // Legacy unique index will remain on old DBs; new index provides project-aware dedup.
     // Idempotent backfill: early-version session_commits rows landed with
     // repo=NULL because the commits-backfill code path predated the
     // local/<basename> fallback. Borrow repo from the most-frequent

@@ -51,6 +51,7 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
   `CREATE TABLE IF NOT EXISTS feature_rollups (
     id                    TEXT PRIMARY KEY,
     date                  TEXT NOT NULL,
+    project_key           TEXT,            -- reserved for future use; current rollup writes leave it NULL
     feature_key           TEXT NOT NULL,
     feature_name          TEXT NOT NULL,
     repo                  TEXT,
@@ -62,10 +63,14 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     notion_page_id        TEXT,
     synced_to_notion_at   TEXT,
     created_at            TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(date, feature_key)
+    updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
+  // Note: the expression-based UNIQUE INDEX on
+  // (date, COALESCE(project_key, ''), feature_key) is created in
+  // migrations.ts AFTER addColumnIfMissing('project_key') runs, so
+  // legacy DBs (which pre-date the project_key column) don't fail
+  // startup on `no such column: project_key`.
   `CREATE INDEX IF NOT EXISTS idx_feature_rollups_date
     ON feature_rollups (date)`,
 

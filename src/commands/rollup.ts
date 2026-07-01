@@ -144,7 +144,7 @@ export async function runRollup(): Promise<RollupSummary> {
       @total_input_tokens, @total_output_tokens, @total_cost_usd, @sessions_count,
       @commit_summary, @session_ids
     )
-    ON CONFLICT(date, feature_key) DO UPDATE SET
+    ON CONFLICT(date, COALESCE(project_key, ''), feature_key) DO UPDATE SET
       feature_name        = excluded.feature_name,
       repo                = excluded.repo,
       branches            = excluded.branches,

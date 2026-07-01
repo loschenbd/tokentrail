@@ -13,7 +13,7 @@ export type TodayVM = {
 };
 
 export function buildTodayVM(db: DatabaseType.Database): TodayVM {
-  const overview = buildOverview(db, { days: 1 });
+  const overview = buildOverview({ db, days: 1 });
 
   const yesterdayRow = db
     .prepare(

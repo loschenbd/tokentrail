@@ -107,6 +107,25 @@ test('burn paths rows carry data-project-key and include an empty subbar contain
   assert.match(html, /class="subbar"[^>]*data-project-key="archi"/);
 });
 
+test('burn paths payload includes projectFeatureMix JSON', () => {
+  const vm: OverviewVM = {
+    ...emptyVM(),
+    totalUsd: 100,
+    topProjects: [{ key: 'archi', name: 'archi', totalUsd: 100, pct: 100, featureCount: 2, sessionCount: 3 }],
+    projectFeatureMix: [{
+      projectKey: 'archi',
+      features: [
+        { key: 'rag', name: 'RAG', color: '#0072B2', totalUsd: 60 },
+        { key: '__unattributed__', name: 'unattributed', color: '__striped__', totalUsd: 40 },
+      ],
+    }],
+  };
+  const html = renderOverview(vm);
+  assert.match(html, /id="burn-paths-data"/);
+  assert.match(html, /"projectKey":"archi"/);
+  assert.match(html, /"__striped__"/);
+});
+
 test('unattributed card placeholder hidden by default; visible marker when payload present', () => {
   const empty: OverviewVM = { ...emptyVM(), totalUsd: 0 };
   assert.doesNotMatch(renderOverview(empty), /id="unattributed-card"/);

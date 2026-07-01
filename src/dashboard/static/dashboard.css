@@ -559,3 +559,37 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .unatt-empty-note { font-size: 12px; margin-top: 4px; }
 .unatt-cta[disabled] { opacity: 0.7; cursor: progress; }
 .unatt-cta-status { font-size: 11px; margin-top: 6px; color: #6b563d; }
+
+/* --- project detail: velocity section --- */
+.project-page .velocity-stat {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: #4a3a24;
+  margin: 2px 0 8px;
+}
+.project-page .velocity-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.project-page .velocity-rows {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.project-page .velocity-row {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.project-page .velocity-row .k {
+  min-width: 90px;
+  color: #6b563d;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  padding-top: 1px;
+}
+.project-page .velocity-row .v { flex: 1; }

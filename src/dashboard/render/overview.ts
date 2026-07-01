@@ -2,7 +2,7 @@ import type { OverviewVM } from '../data/overview.js';
 import { escapeHtml } from './shell.js';
 import { claudeProjectsDir } from '../../services/jsonl-reader.js';
 import { renderTrailMap } from './trail-map.js';
-import { colorFor, colorForProject, STRIPED_SENTINEL } from '../lib/feature-colors.js';
+import { colorFor, STRIPED_SENTINEL } from '../lib/feature-colors.js';
 
 export function renderOverview(vm: OverviewVM): string {
   if (isEmpty(vm)) return renderEmptyState();
@@ -17,7 +17,7 @@ export function renderOverview(vm: OverviewVM): string {
           ${renderTrendLegend(vm.projects)}
         </ul>
       </div>
-      <script type="application/json" id="trend-data">${jsonForScriptTag({ days: vm.days, projects: vm.projects, unattributed: vm.unattributed })}</script>
+      <script type="application/json" id="trend-data">${jsonForScriptTag({ days: vm.days, projects: vm.projects, unattributed: vm.unattributed, projectColors: vm.projectColors })}</script>
     </div>
 
     <div class="card">
@@ -40,7 +40,7 @@ export function renderOverview(vm: OverviewVM): string {
       <div class="muted">${vm.weekSessions} sessions</div>
     </div>
 
-    ${vm.unattributed ? '<div class="card unatt-card" id="unattributed-card"></div>' : ''}
+    <div class="card unatt-card" id="unattributed-card"></div>
 
     <div class="card">
       <div class="label">Worth a look</div>
@@ -91,7 +91,7 @@ function renderTopProjects(items: OverviewVM['topProjects']): string {
   return items
     .map((p, i) => {
       const rank = i + 1;
-      const color = escapeHtml(colorForProject(p.key));
+      const color = escapeHtml(p.color);
       return `<div class="project-row" data-project-key="${escapeHtml(p.key)}" data-project-color="${color}">
           <div class="rank">${rank}</div>
           <span class="swatch" style="background:${color}"></span>

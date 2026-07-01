@@ -13,6 +13,7 @@ function emptyVM(): OverviewVM {
     weekSessions: 0,
     topFeatures: [],
     topProjects: [],
+    projectColors: {},
     projects: [],
     days: [],
     projectFeatureMix: [],
@@ -100,7 +101,7 @@ test('burn paths rows carry data-project-key and include an empty subbar contain
   const vm: OverviewVM = {
     ...emptyVM(),
     totalUsd: 100,
-    topProjects: [{ key: 'archi', name: 'archi', totalUsd: 100, pct: 100, featureCount: 2, sessionCount: 3 }],
+    topProjects: [{ key: 'archi', name: 'archi', color: '#E69F00', totalUsd: 100, pct: 100, featureCount: 2, sessionCount: 3 }],
   };
   const html = renderOverview(vm);
   assert.match(html, /class="project-row"[^>]*data-project-key="archi"/);
@@ -111,7 +112,7 @@ test('burn paths payload includes projectFeatureMix JSON', () => {
   const vm: OverviewVM = {
     ...emptyVM(),
     totalUsd: 100,
-    topProjects: [{ key: 'archi', name: 'archi', totalUsd: 100, pct: 100, featureCount: 2, sessionCount: 3 }],
+    topProjects: [{ key: 'archi', name: 'archi', color: '#E69F00', totalUsd: 100, pct: 100, featureCount: 2, sessionCount: 3 }],
     projectFeatureMix: [{
       projectKey: 'archi',
       features: [

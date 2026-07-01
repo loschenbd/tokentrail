@@ -18,6 +18,20 @@ export type ProjectDetailVM = {
   totalUsd: number;
   priorUsd: number;
   deltaPct: number;
+  avgUsdPerDay: number;
+  weekStats: {
+    thisWeekUsd: number;
+    lastWeekUsd: number;
+    priorWeekUsd: number;
+    thisVsLastPct: number;
+    lastVsPriorPct: number;
+  };
+  peakDay: {
+    date: string;
+    totalUsd: number;
+    featureKey: string;
+    featureName: string;
+  } | null;
   sessionCount: number;
   featureCount: number;
   dailySeries: Array<{ date: string; total: number; commits: number; prs: number }>;
@@ -232,12 +246,62 @@ export function buildProjectDetail(
     cost: round2(s.cost),
   }));
 
+  const avgUsdPerDay = round2(head.totalUsd / days);
+
+  // Rolling weeks: this = days 0..6, last = 7..13, prior = 14..20.
+  // We take these from dailySeries (already zero-filled). dailySeries is
+  // ordered oldest→newest, so this week is the tail.
+  const totalsByDate = new Map(dailySeries.map((d) => [d.date, d.total]));
+  const dateAt = (n: number) => (db.prepare(`SELECT date('now', '-${n} days', 'localtime') AS d`).get() as { d: string }).d;
+  const sumRange = (from: number, to: number): number => {
+    let s = 0;
+    for (let i = from; i <= to; i++) s += totalsByDate.get(dateAt(i)) ?? 0;
+    return round2(s);
+  };
+  const thisWeekUsd = sumRange(0, 6);
+  const lastWeekUsd = sumRange(7, 13);
+  const priorWeekUsd = sumRange(14, 20);
+  const deltaPctBetween = (curr: number, prev: number): number => {
+    if (prev > 0) return Math.round(((curr - prev) / prev) * 100);
+    return curr > 0 ? 100 : 0;
+  };
+  const weekStats = {
+    thisWeekUsd,
+    lastWeekUsd,
+    priorWeekUsd,
+    thisVsLastPct: deltaPctBetween(thisWeekUsd, lastWeekUsd),
+    lastVsPriorPct: deltaPctBetween(lastWeekUsd, priorWeekUsd),
+  };
+
+  // Peak day: highest-total day in-window with the top feature on that
+  // date. If two days tie, pick the more recent one (later in the series).
+  let peakDay: ProjectDetailVM['peakDay'] = null;
+  let peakUsd = 0;
+  for (const d of dailySeries) {
+    if (d.total >= peakUsd && d.total > 0) {
+      peakUsd = d.total;
+      peakDay = { date: d.date, totalUsd: d.total, featureKey: '', featureName: '' };
+    }
+  }
+  if (peakDay) {
+    const topFeat = db
+      .prepare(`SELECT feature_key AS k, MAX(feature_name) AS n, SUM(total_cost_usd) AS s FROM feature_rollups WHERE ${filterSql} AND date = @peakDate GROUP BY feature_key ORDER BY s DESC LIMIT 1`)
+      .get({ ...filterParams, peakDate: peakDay.date }) as { k: string; n: string; s: number } | undefined;
+    if (topFeat) {
+      peakDay.featureKey = topFeat.k;
+      peakDay.featureName = topFeat.n ?? topFeat.k;
+    }
+  }
+
   return {
     projectKey: opts.projectKey,
     projectName,
     totalUsd: round2(head.totalUsd),
     priorUsd: round2(prior),
     deltaPct,
+    avgUsdPerDay,
+    weekStats,
+    peakDay,
     sessionCount: distinctSessionCount,
     featureCount: features.length,
     dailySeries,

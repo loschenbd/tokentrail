@@ -593,3 +593,46 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   padding-top: 1px;
 }
 .project-page .velocity-row .v { flex: 1; }
+
+/* --- project detail: features list --- */
+.project-page .pfeat-list { display: flex; flex-direction: column; gap: 6px; }
+.project-page .pfeat-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  grid-template-areas:
+    "rank name amt"
+    ".    meta spark";
+  gap: 2px 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  text-decoration: none;
+  color: inherit;
+}
+.project-page .pfeat-row:hover { background: rgba(139,111,71,0.06); }
+.project-page .pfeat-rank {
+  grid-area: rank;
+  color: #6b563d;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  padding-top: 2px;
+}
+.project-page .pfeat-name {
+  grid-area: name;
+  font-weight: 600;
+  color: #4a3a24;
+}
+.project-page .pfeat-amt {
+  grid-area: amt;
+  font-variant-numeric: tabular-nums;
+  color: #4a3a24;
+}
+.project-page .pfeat-meta {
+  grid-area: meta;
+  color: #6b563d;
+  font-size: 12px;
+}
+.project-page .pfeat-spark {
+  grid-area: spark;
+  display: inline-block;
+  line-height: 0;
+}

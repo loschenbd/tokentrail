@@ -1,6 +1,7 @@
 import type { ProjectDetailVM } from '../data/project.js';
 import { escapeHtml } from './shell.js';
-import { resolveProjectColors } from '../lib/feature-colors.js';
+import { resolveProjectColors, shadeForFeature } from '../lib/feature-colors.js';
+import { renderSparkline } from './sparkline.js';
 import { renderVelocityChart } from './velocity.js';
 
 export function renderProject(vm: ProjectDetailVM): string {
@@ -9,7 +10,7 @@ export function renderProject(vm: ProjectDetailVM): string {
 <div class="project-page single-col" data-project-key="${escapeHtml(vm.projectKey)}" data-project-color="${escapeHtml(color)}">
   ${renderHero(vm)}
   ${renderVelocity(vm, color)}
-  <section class="card" data-section="features"></section>
+  ${renderFeatures(vm, color)}
   <section class="card" data-section="active-work"></section>
   <section class="card" data-section="worth-reconciling"></section>
 </div>
@@ -84,4 +85,41 @@ function formatMonDay(iso: string): string {
   const [_, m, dRaw] = iso.split('-').map(Number);
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return `${MONTHS[(m ?? 1) - 1]} ${dRaw ?? 1}`;
+}
+
+function renderFeatures(vm: ProjectDetailVM, color: string): string {
+  if (vm.features.length === 0) {
+    return `
+    <section class="card" data-section="features">
+      <div class="label">Features</div>
+      <div class="muted">No features in window.</div>
+    </section>`;
+  }
+  const denom = vm.totalUsd > 0 ? vm.totalUsd : 1;
+  const rows = vm.features.map((f, i) => {
+    const share = Math.round((f.totalUsd / denom) * 100);
+    const shade = shadeForFeature(color, f.featureKey);
+    const spark = renderSparkline({
+      points: f.daily,
+      color: shade,
+      width: 96,
+      height: 18,
+      ariaLabel: `${f.featureKey} 30d`,
+    });
+    const rawName = f.featureName || f.featureKey;
+    const displayName = rawName.length > 40 ? rawName.slice(0, 39) + '…' : rawName;
+    return `
+      <a class="pfeat-row" href="/feature/${encodeURIComponent(f.featureKey)}" title="${escapeHtml(rawName)}">
+        <span class="pfeat-rank">${i + 1}</span>
+        <span class="pfeat-name">${escapeHtml(displayName)}</span>
+        <span class="pfeat-amt">$${formatUsdCommas(f.totalUsd)} · ${share}%</span>
+        <span class="pfeat-meta"><span class="pfeat-sess">${f.sessionCount} sess</span> · <span class="pfeat-last">last ${formatMonDay(f.lastActive)}</span></span>
+        <span class="pfeat-spark">${spark}</span>
+      </a>`;
+  }).join('');
+  return `
+    <section class="card" data-section="features">
+      <div class="label">Features · ${vm.features.length}</div>
+      <div class="pfeat-list">${rows}</div>
+    </section>`;
 }

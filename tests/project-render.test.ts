@@ -116,6 +116,54 @@ describe('renderProject velocity section', () => {
   });
 });
 
+describe('renderProject features section', () => {
+  function fullVm() {
+    return baseVm({
+      totalUsd: 1000,
+      features: [
+        { featureKey: 'local-rag-chatbot', featureName: 'Local RAG + chatbot', totalUsd: 765, sessionCount: 5, lastActive: '2026-06-27', daily: [{date:'2026-06-20', totalUsd:0},{date:'2026-06-21', totalUsd:200},{date:'2026-06-27', totalUsd:565}] },
+        { featureKey: 'archi-homepage-redesign', featureName: 'Archi homepage redesign', totalUsd: 235, sessionCount: 3, lastActive: '2026-06-21', daily: [{date:'2026-06-20', totalUsd:100},{date:'2026-06-21', totalUsd:135}] },
+      ],
+    });
+  }
+
+  test('features section header includes the count', () => {
+    const seg = extractSection(renderProject(fullVm()), 'features');
+    assert.match(seg, /FEATURES/i);
+    assert.match(seg, /· 2/);
+  });
+
+  test('each row shows rank, name, sessions, lastActive, amount, share', () => {
+    const seg = extractSection(renderProject(fullVm()), 'features');
+    assert.match(seg, /Local RAG \+ chatbot/);
+    assert.match(seg, />5 sess</);   // sessions count
+    assert.match(seg, /Jun 27/);      // lastActive formatted as Mon D
+    assert.match(seg, /\$765/);
+    assert.match(seg, /77%/);         // 765 / 1000
+    assert.match(seg, /Archi homepage redesign/);
+    assert.match(seg, />3 sess</);
+    assert.match(seg, /Jun 21/);
+    assert.match(seg, /\$235/);
+    assert.match(seg, /24%/);         // 235 / 1000
+  });
+
+  test('row is a link to /feature/<key>', () => {
+    const seg = extractSection(renderProject(fullVm()), 'features');
+    assert.match(seg, /href="\/feature\/local-rag-chatbot"/);
+  });
+
+  test('sparkline svg is embedded per row', () => {
+    const seg = extractSection(renderProject(fullVm()), 'features');
+    const svgs = (seg.match(/<svg\b/g) ?? []).length;
+    assert.equal(svgs, 2);
+  });
+
+  test('empty features → muted note, no rows', () => {
+    const seg = extractSection(renderProject(baseVm({ features: [] })), 'features');
+    assert.match(seg, /No features in window/);
+  });
+});
+
 // helper — extract the `<section data-section="X">...</section>` slice.
 function extractSection(html: string, name: string): string {
   const start = html.indexOf(`data-section="${name}"`);

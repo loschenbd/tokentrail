@@ -13,8 +13,10 @@ function emptyVM(): OverviewVM {
     weekSessions: 0,
     topFeatures: [],
     topProjects: [],
-    features: [],
+    projects: [],
     days: [],
+    projectFeatureMix: [],
+    unattributed: null,
     anomalies: [],
     recentCommits: [],
   };
@@ -55,7 +57,7 @@ test('renders the legend scaffold next to the chart with one li per feature', ()
       { key: '__other__',            name: 'Other',                color: '#9CA3AF', totalUsd: 5,  clickable: false, stackPosition: 2 },
       { key: 'uncategorized-mainline', name: 'uncategorized-mainline', color: '__striped__', totalUsd: 12, clickable: false, stackPosition: 3 },
     ],
-    days: [{ date: '2026-06-29', total: 67, bands: { menubar: 30, ingest: 20, '__other__': 5, 'uncategorized-mainline': 12 }, commits: 1, prs: 0 }],
+    days: [{ date: '2026-06-29', total: 67, bands: { menubar: 30, ingest: 20, '__other__': 5, 'uncategorized-mainline': 12 }, featureBands: {}, unattributedTotal: 0, commits: 1, prs: 0 }],
   });
   const html = renderOverview(vm);
   assert.match(html, /id="trend-legend"/);
@@ -74,7 +76,7 @@ test('renders the legend scaffold next to the chart with one li per feature', ()
 test('trend-data JSON embeds both days and features arrays', () => {
   const vm = makeVm({
     features: [{ key: 'menubar', name: 'menubar', color: '#0072B2', totalUsd: 5, clickable: true, stackPosition: 0 }],
-    days: [{ date: '2026-06-29', total: 5, bands: { menubar: 5 }, commits: 0, prs: 0 }],
+    days: [{ date: '2026-06-29', total: 5, bands: { menubar: 5 }, featureBands: {}, unattributedTotal: 0, commits: 0, prs: 0 }],
   });
   const html = renderOverview(vm);
   const m = html.match(/<script type="application\/json" id="trend-data">([^<]+)<\/script>/);
@@ -89,7 +91,7 @@ test('shows infer-mainline hint when only uncategorized-mainline has spend', () 
   const vm = makeVm({
     totalUsd: 12,
     features: [{ key: 'uncategorized-mainline', name: 'uncategorized-mainline', color: '__striped__', totalUsd: 12, clickable: false, stackPosition: 0 }],
-    days: [{ date: '2026-06-29', total: 12, bands: { 'uncategorized-mainline': 12 }, commits: 0, prs: 0 }],
+    days: [{ date: '2026-06-29', total: 12, bands: { 'uncategorized-mainline': 12 }, featureBands: {}, unattributedTotal: 0, commits: 0, prs: 0 }],
   });
   const html = renderOverview(vm);
   assert.match(html, /Run <code>tokentrail infer-mainline<\/code>/);
@@ -102,7 +104,7 @@ test('does NOT show the hint when at least one real feature has spend', () => {
       { key: 'menubar', name: 'menubar', color: '#0072B2', totalUsd: 10, clickable: true, stackPosition: 0 },
       { key: 'uncategorized-mainline', name: 'uncategorized-mainline', color: '__striped__', totalUsd: 5, clickable: false, stackPosition: 1 },
     ],
-    days: [{ date: '2026-06-29', total: 15, bands: { menubar: 10, 'uncategorized-mainline': 5 }, commits: 0, prs: 0 }],
+    days: [{ date: '2026-06-29', total: 15, bands: { menubar: 10, 'uncategorized-mainline': 5 }, featureBands: {}, unattributedTotal: 0, commits: 0, prs: 0 }],
   });
   const html = renderOverview(vm);
   assert.doesNotMatch(html, /Run <code>tokentrail infer-mainline<\/code>/);

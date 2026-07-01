@@ -66,11 +66,11 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
-  // Expression-based unique index so COALESCE(project_key, '') treats NULL project
-  // as '' and dedupes correctly. ON CONFLICT clauses must use the same expression.
-  `CREATE UNIQUE INDEX IF NOT EXISTS idx_feature_rollups_unique
-    ON feature_rollups (date, COALESCE(project_key, ''), feature_key)`,
-
+  // Note: the expression-based UNIQUE INDEX on
+  // (date, COALESCE(project_key, ''), feature_key) is created in
+  // migrations.ts AFTER addColumnIfMissing('project_key') runs, so
+  // legacy DBs (which pre-date the project_key column) don't fail
+  // startup on `no such column: project_key`.
   `CREATE INDEX IF NOT EXISTS idx_feature_rollups_date
     ON feature_rollups (date)`,
 

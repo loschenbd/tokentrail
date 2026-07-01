@@ -74,11 +74,11 @@ run the labeling tools.
 ### Legend
 
 - Right-side vertical list, same shell as today.
-- **Rows** = two-tier sort matching the previous design's convention:
-  non-clickable buckets first by descending `stackPosition` (so `Other`
-  pins to the top of the legend), then clickable real projects by
-  descending `totalUsd` (largest-first, standard scannability). Matches
-  the sort helper landed in PR #38 for feature bands.
+- **Rows mirror the stack top-to-bottom.** Single-tier sort by descending
+  `stackPosition`: `Other` (stackPos 6) is row 1 at the top; then the
+  smallest real project (highest position among reals); down to the
+  largest real project at the bottom of the legend. Point-to-point match
+  with the chart's visual stack.
 - Each row = `swatch · project name · $total`.
 - Real-project rows are clickable and link to `/project/<key>`. `Other` is
   non-clickable.
@@ -126,8 +126,14 @@ The hover tooltip has two blocks:
 
 **Click behavior**
 - Click a project band → `/project/<key>`.
-- Feature swatches in the bottom block are NOT clickable in v1 (kept simple;
-  users can navigate to `/project/<key>` first, then click into `/feature/<key>`).
+- Click a feature row in the bottom block → `/feature/<key>`. Feature rows
+  render as `<a href="/feature/<key>">` inside the tooltip so keyboard-nav
+  and middle-click-to-new-tab both work.
+- The `unattributed` row is NOT clickable (no feature key to link to).
+- Tooltip must remain interactive: extend the existing chart-cursor
+  mouseleave guard so the tooltip does not dismiss while the cursor is
+  inside the tooltip DOM. Reuse the pattern from the PR #38
+  chart↔legend mouseleave race fix.
 
 **Zero-cost days**
 - Cursor over a zero-cost day (`total === 0`) shows only the date; both
@@ -396,6 +402,10 @@ Reuse existing indices; no schema migration.
 - **Dashboard.js** — light DOM-level assertions:
   - Sub-bar segments sum to 100% width.
   - Tooltip active-band detection uses project keys, not feature keys.
+  - Tooltip feature rows render as `<a href="/feature/<key>">` and the
+    `unattributed` row does not.
+  - Tooltip does not dismiss while cursor is inside the tooltip DOM
+    (mouseleave-guard extends the existing chart↔legend pattern).
   - Clipboard copy handler wires up.
 
 ---
@@ -408,8 +418,6 @@ Reuse existing indices; no schema migration.
 - Toggle between project-first and feature-first views. Project-first is
   the primary framing; a toggle would create two ways to hold the tool and
   neither would get polish.
-- Feature swatches on the trend chart hover being clickable (v2 could add;
-  v1 leaves them as labels).
 - Server-side execution of `tokentrail infer-mainline` from the button
   click. Clipboard copy only; user runs it in their terminal.
 - Historical / trended unattributed reduction ("you labeled 20% more this

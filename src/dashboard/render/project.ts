@@ -1,80 +1,54 @@
 import type { ProjectDetailVM } from '../data/project.js';
 import { escapeHtml } from './shell.js';
+import { resolveProjectColors } from '../lib/feature-colors.js';
 
 export function renderProject(vm: ProjectDetailVM): string {
+  const color = resolveProjectColors([vm.projectKey])[vm.projectKey]!;
   return `
-<div class="single-col">
-  <div class="card">
-    <div class="label">${escapeHtml(vm.projectKey)} · ${vm.featureCount} feature${vm.featureCount === 1 ? '' : 's'} · ${vm.sessionCount} sessions</div>
-    <div class="hero">${escapeHtml(vm.projectName)}</div>
-    <div class="kicker">$${vm.totalUsd.toFixed(0)}</div>
-    <div class="delta ${vm.deltaPct >= 0 ? 'up' : 'down'}">${vm.deltaPct >= 0 ? '▲' : '▼'} ${Math.abs(vm.deltaPct)}% vs prior</div>
-  </div>
-
-  <div class="card chart-card">
-    <div class="label">Trail elevation</div>
-    <div id="trail-elevation" data-trail-elevation style="width:100%;height:240px"></div>
-    <script type="application/json" id="trail-elevation-data">${jsonForScriptTag(
-      vm.sessions
-        .filter((s) => s.date !== null)
-        .map((s) => ({ sessionId: s.sessionId, date: s.date, cost: s.cost, title: s.title }))
-        .sort((a, b) => (a.date! < b.date! ? -1 : a.date! > b.date! ? 1 : 0))
-    )}</script>
-  </div>
-
-  ${vm.branchGraph === null ? '' : `
-  <div class="card chart-card">
-    <div class="label">Branches · last ${vm.branchGraph.days}d · ${vm.branchGraph.totalBranches} branch${vm.branchGraph.totalBranches === 1 ? '' : 'es'} · $${vm.branchGraph.totalUsd.toFixed(0)} total</div>
-    <div id="branch-graph" data-branch-graph style="width:100%;min-height:120px"></div>
-    <script type="application/json" id="branch-graph-data">${jsonForScriptTag(vm.branchGraph)}</script>
-  </div>`}
-
-  <div class="card">
-    <div class="label">Features</div>
-    ${vm.features.length === 0 ? '<div class="muted">No features in window.</div>' : renderFeatureList(vm.features, vm.totalUsd)}
-  </div>
-
-  ${vm.anomalies.length === 0 ? '' : `
-  <div class="card">
-    <div class="label">Worth a look</div>
-    ${vm.anomalies.map((a) => `<div class="anomaly-row"><span class="anomaly-date">${escapeHtml(a.date)}</span><span class="anomaly-reason">${escapeHtml(a.reason)}</span></div>`).join('')}
-  </div>`}
-
-  ${vm.recentCommits.length === 0 ? '' : `
-  <div class="card">
-    <div class="label">Recent commits</div>
-    ${vm.recentCommits.map((c) => {
-      const shaShort = c.sha.slice(0, 8);
-      const url = c.repo ? `https://github.com/${c.repo}/commit/${c.sha}` : null;
-      const sha = url
-        ? `<a class="sha" href="${escapeHtml(url)}" target="_blank" rel="noopener">${shaShort}</a>`
-        : `<span class="sha">${shaShort}</span>`;
-      return `<div class="commit-row">${sha} <span class="subject">${escapeHtml(c.subject)}</span></div>`;
-    }).join('')}
-  </div>`}
+<div class="project-page single-col" data-project-key="${escapeHtml(vm.projectKey)}" data-project-color="${escapeHtml(color)}">
+  ${renderHero(vm)}
+  <section class="card" data-section="velocity"></section>
+  <section class="card" data-section="features"></section>
+  <section class="card" data-section="active-work"></section>
+  <section class="card" data-section="worth-reconciling"></section>
 </div>
   `;
 }
 
-function renderFeatureList(items: ProjectDetailVM['features'], totalUsd: number): string {
-  const denom = totalUsd > 0 ? totalUsd : 1;
-  return items
-    .map((f) => {
-      const share = (f.totalUsd / denom) * 100;
-      const pct = Math.max(1, Math.round(share));
-      return `
-        <a class="feature-row" href="/feature/${encodeURIComponent(f.featureKey)}">
-          <span class="mile"></span>
-          <span class="name">${escapeHtml(f.featureName || f.featureKey)} <span class="muted">· ${f.sessionCount} sessions</span></span>
-          <span class="amt">$${f.totalUsd.toFixed(0)} <span class="muted share">· ${share.toFixed(0)}%</span></span>
-        </a>
-        <div class="bar"><span style="width:${pct}%"></span></div>
-      `;
-    })
-    .join('');
+function renderHero(vm: ProjectDetailVM): string {
+  const label = renderRepoLabel(vm.projectKey);
+  const deltaLine = renderDeltaLine(vm);
+  const mostActive = vm.features.length > 0
+    ? `<div class="hero-most-active">most active: <a href="/feature/${encodeURIComponent(vm.features[0]!.featureKey)}">${escapeHtml(vm.features[0]!.featureName || vm.features[0]!.featureKey)}</a> <span class="muted">($${vm.features[0]!.totalUsd.toFixed(0)})</span></div>`
+    : '';
+  return `
+    <section class="card project-hero" data-section="hero">
+      <div class="label">${label}</div>
+      <div class="hero">${escapeHtml(vm.projectName)}</div>
+      <div class="hero-amount">$${formatUsdCommas(vm.totalUsd)}</div>
+      ${deltaLine}
+      <div class="hero-meta">${vm.sessionCount} sessions · ${vm.featureCount} features</div>
+      ${mostActive}
+    </section>`;
 }
 
-// See overview.ts for why we don't escapeHtml() JSON inside a <script> tag.
-function jsonForScriptTag(data: unknown): string {
-  return JSON.stringify(data).replace(/</g, '\\u003c');
+function renderRepoLabel(projectKey: string): string {
+  // Preserves the existing key namespace vocabulary — the label just
+  // upper-cases it so it reads like a header tag.
+  return escapeHtml(projectKey.toUpperCase());
+}
+
+function renderDeltaLine(vm: ProjectDetailVM): string {
+  if (vm.priorUsd === 0 && vm.totalUsd > 0) {
+    return `<div class="hero-delta up">(new project)</div>`;
+  }
+  const arrow = vm.deltaPct >= 0 ? '▲' : '▼';
+  const cls = vm.deltaPct >= 0 ? 'up' : 'down';
+  const diff = vm.totalUsd - vm.priorUsd;
+  const diffStr = `$${formatUsdCommas(Math.abs(diff))} ${diff >= 0 ? 'more' : 'less'}`;
+  return `<div class="hero-delta ${cls}">${arrow}${Math.abs(vm.deltaPct)}% vs prior · <span class="muted">${diffStr}</span></div>`;
+}
+
+function formatUsdCommas(n: number): string {
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }

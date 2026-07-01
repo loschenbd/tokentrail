@@ -51,7 +51,7 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
   `CREATE TABLE IF NOT EXISTS feature_rollups (
     id                    TEXT PRIMARY KEY,
     date                  TEXT NOT NULL,
-    project_key           TEXT,
+    project_key           TEXT,            -- reserved for future use; current rollup writes leave it NULL
     feature_key           TEXT NOT NULL,
     feature_name          TEXT NOT NULL,
     repo                  TEXT,

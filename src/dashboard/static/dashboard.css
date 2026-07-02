@@ -636,3 +636,33 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   display: inline-block;
   line-height: 0;
 }
+
+/* --- project detail: active work --- */
+.project-page section[data-section="active-work"] .amt-tag {
+  float: right;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  color: #6b563d;
+}
+.project-page .branch-summary {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.project-page .bsum-row {
+  display: grid;
+  grid-template-columns: 70px 30px 1fr;
+  font-size: 12px;
+  align-items: baseline;
+}
+.project-page .bsum-k {
+  color: #6b563d;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+.project-page .bsum-n { font-variant-numeric: tabular-nums; font-weight: 600; color: #4a3a24; }
+.project-page .bsum-v .bsum-name { display: inline; }
+.project-page .commits-inline { margin-top: 14px; }
+.project-page .commits-inline .subheader { margin-bottom: 4px; }

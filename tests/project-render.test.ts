@@ -164,6 +164,52 @@ describe('renderProject features section', () => {
   });
 });
 
+describe('renderProject active-work section', () => {
+  const branchGraph = {
+    days: 30,
+    totalBranches: 3,
+    totalUsd: 12,
+    // Minimal shape — the renderer just carries it through as JSON.
+    branches: [
+      { name: 'onboarding-wizard', state: 'merged', mergedAt: '2026-06-09', totalUsd: 0, sessions: 0 },
+      { name: 'coherence-pass', state: 'stale', mergedAt: null, totalUsd: 0, sessions: 0 },
+      { name: 'worktree-local-semantic-search', state: 'open', mergedAt: null, totalUsd: 12, sessions: 0 },
+    ],
+  } as any;
+
+  test('branch summary shows open / merged / stale counts with names', () => {
+    const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');
+    assert.match(seg, /Open\s*1/);
+    assert.match(seg, /worktree-local-semantic-search/);
+    assert.match(seg, /Merged\s*1/);
+    assert.match(seg, /onboarding-wizard/);
+    assert.match(seg, /Stale\s*1/);
+    assert.match(seg, /coherence-pass/);
+  });
+
+  test('branch graph mount + JSON payload are embedded', () => {
+    const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');
+    assert.match(seg, /id="branch-graph"/);
+    assert.match(seg, /id="branch-graph-data"/);
+  });
+
+  test('recent commits render inline (not in a separate card)', () => {
+    const seg = extractSection(renderProject(baseVm({
+      branchGraph,
+      recentCommits: [
+        { sha: 'a2c6cad1000000', subject: 'fix: nodes grow by radius', repo: 'loschenbd/archi', authoredAt: '2026-06-09T00:00:00Z' },
+      ],
+    })), 'active-work');
+    assert.match(seg, /a2c6cad1/);
+    assert.match(seg, /fix: nodes grow by radius/);
+  });
+
+  test('empty state: no branches AND no commits → gentle placeholder', () => {
+    const seg = extractSection(renderProject(baseVm({ branchGraph: null, recentCommits: [] })), 'active-work');
+    assert.match(seg, /No branches touched archi in this window/);
+  });
+});
+
 // helper — extract the `<section data-section="X">...</section>` slice.
 function extractSection(html: string, name: string): string {
   const start = html.indexOf(`data-section="${name}"`);

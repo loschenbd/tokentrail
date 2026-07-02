@@ -11,7 +11,7 @@ export function renderProject(vm: ProjectDetailVM): string {
   ${renderHero(vm)}
   ${renderVelocity(vm, color)}
   ${renderFeatures(vm, color)}
-  <section class="card" data-section="active-work"></section>
+  ${renderActiveWork(vm)}
   <section class="card" data-section="worth-reconciling"></section>
 </div>
   `;
@@ -85,6 +85,69 @@ function formatMonDay(iso: string): string {
   const [_, m, dRaw] = iso.split('-').map(Number);
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return `${MONTHS[(m ?? 1) - 1]} ${dRaw ?? 1}`;
+}
+
+// See feature.ts for why we don't escapeHtml() JSON inside a <script> tag.
+function jsonForScriptTag(data: unknown): string {
+  return JSON.stringify(data).replace(/</g, '\\u003c');
+}
+
+function renderActiveWork(vm: ProjectDetailVM): string {
+  const hasBranches = vm.branchGraph && vm.branchGraph.branches && vm.branchGraph.branches.length > 0;
+  const hasCommits = vm.recentCommits.length > 0;
+  if (!hasBranches && !hasCommits) {
+    return `
+    <section class="card" data-section="active-work">
+      <div class="label">Active work · last 30d</div>
+      <div class="muted">No branches touched ${escapeHtml(vm.projectName)} in this window.</div>
+    </section>`;
+  }
+  const summary = hasBranches ? renderBranchSummary(vm.branchGraph!) : '';
+  const graph = hasBranches
+    ? `<div id="branch-graph" data-branch-graph style="width:100%;min-height:120px;max-height:140px;overflow:hidden"></div>
+       <script type="application/json" id="branch-graph-data">${jsonForScriptTag(vm.branchGraph)}</script>`
+    : '';
+  const totalBranchUsd = hasBranches ? vm.branchGraph!.totalUsd : 0;
+  const commits = hasCommits
+    ? `<div class="commits-inline">
+         <div class="label subheader">Recent commits</div>
+         ${vm.recentCommits.map((c) => {
+           const shaShort = c.sha.slice(0, 8);
+           const url = c.repo ? `https://github.com/${c.repo}/commit/${c.sha}` : null;
+           const sha = url
+             ? `<a class="sha" href="${escapeHtml(url)}" target="_blank" rel="noopener">${shaShort}</a>`
+             : `<span class="sha">${shaShort}</span>`;
+           return `<div class="commit-row">${sha} <span class="subject">${escapeHtml(c.subject)}</span></div>`;
+         }).join('')}
+       </div>`
+    : '';
+  return `
+    <section class="card chart-card" data-section="active-work">
+      <div class="label">Active work · last ${vm.branchGraph?.days ?? 30}d <span class="amt-tag">$${totalBranchUsd.toFixed(0)}</span></div>
+      ${graph}
+      ${summary}
+      ${commits}
+    </section>`;
+}
+
+function renderBranchSummary(bg: NonNullable<ProjectDetailVM['branchGraph']>): string {
+  type BranchLike = { name: string; state?: string; totalUsd?: number };
+  const branches = (bg.branches ?? []) as BranchLike[];
+  const bucket = (state: string) => branches.filter((b) => b.state === state);
+  const rowFor = (label: string, state: string) => {
+    const items = bucket(state);
+    if (items.length === 0) return '';
+    const inline = items.map((b) => {
+      const usd = (b.totalUsd ?? 0) > 0 ? ` <span class="muted">$${(b.totalUsd ?? 0).toFixed(0)}</span>` : '';
+      return `<span class="bsum-name">${escapeHtml(b.name)}${usd}</span>`;
+    }).join(' · ');
+    return `<div class="bsum-row"><span class="bsum-k">${label} ${items.length}</span><span class="bsum-v">${inline}</span></div>`;
+  };
+  return `<div class="branch-summary">
+    ${rowFor('Open',   'open')}
+    ${rowFor('Merged', 'merged')}
+    ${rowFor('Stale',  'stale')}
+  </div>`;
 }
 
 function renderFeatures(vm: ProjectDetailVM, color: string): string {

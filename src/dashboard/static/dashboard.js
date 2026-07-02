@@ -747,6 +747,49 @@
     });
   }
 
+  function wireInferMainlineCta(btn, status) {
+    if (!btn || !status) return;
+    const original = btn.innerHTML;
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      btn.textContent = 'Running…';
+      status.hidden = false;
+      status.innerHTML = 'Starting…';
+      const evt = new EventSource('/api/infer-mainline/stream');
+      let lastCurrent = 0;
+      let lastTotal = 0;
+      evt.addEventListener('start', (e) => {
+        const d = JSON.parse(e.data);
+        status.innerHTML = `Retrying ${d.retriedSessions || 0} stuck sessions…`;
+      });
+      evt.addEventListener('progress', (e) => {
+        const p = JSON.parse(e.data);
+        lastCurrent = p.current; lastTotal = p.total;
+        const t = (p.title || '(untitled)').slice(0, 60);
+        const verb = p.action === 'skip' ? 'skipping' : p.action === 'llm' ? 'LLM' : 'rules';
+        status.innerHTML = `Session <b>${p.current}/${p.total}</b> · ${verb}<br><span class="muted">${t}</span>`;
+      });
+      evt.addEventListener('rollup', () => { status.innerHTML = `Re-rolling up ${lastTotal || ''} sessions…`; });
+      evt.addEventListener('done', (e) => {
+        const d = JSON.parse(e.data);
+        const s = d.summary || {};
+        status.innerHTML = `Retried ${d.retriedSessions || 0}, relabeled ${s.sessionsRelabeled || 0} sessions (${s.eventsRelabeled || 0} events). Reloading…`;
+        evt.close();
+        setTimeout(() => location.reload(), 800);
+      });
+      evt.addEventListener('error', (e) => {
+        try {
+          const d = e.data ? JSON.parse(e.data) : null;
+          if (d && d.message) status.textContent = 'Error: ' + d.message;
+          else if (lastCurrent > 0) status.textContent = `Connection dropped at session ${lastCurrent}/${lastTotal}. Reload and try again.`;
+        } catch { /* ignore */ }
+        evt.close();
+        btn.disabled = false;
+        btn.innerHTML = original;
+      });
+    });
+  }
+
   function renderUnattributedCard() {
     const card = document.getElementById('unattributed-card');
     const dataNode = document.getElementById('trend-data');
@@ -787,61 +830,7 @@
 
     const btn = card.querySelector('.unatt-cta');
     const status = card.querySelector('.unatt-cta-status');
-    const original = btn.innerHTML;
-    btn.addEventListener('click', () => {
-      btn.disabled = true;
-      btn.textContent = 'Running…';
-      status.hidden = false;
-      status.innerHTML = 'Starting…';
-
-      const evt = new EventSource('/api/infer-mainline/stream');
-      let retried = 0;
-      let lastCurrent = 0;
-      let lastTotal = 0;
-
-      evt.addEventListener('start', (e) => {
-        const d = JSON.parse(e.data);
-        retried = d.retriedSessions || 0;
-        status.innerHTML = `Retrying ${retried} stuck sessions…`;
-      });
-
-      evt.addEventListener('progress', (e) => {
-        const p = JSON.parse(e.data);
-        lastCurrent = p.current;
-        lastTotal = p.total;
-        const t = (p.title || '(untitled)').slice(0, 60);
-        const verb = p.action === 'skip' ? 'skipping' : p.action === 'llm' ? 'LLM' : 'rules';
-        status.innerHTML = `Session <b>${p.current}/${p.total}</b> · ${verb}<br><span class="muted">${t}</span>`;
-      });
-
-      evt.addEventListener('rollup', () => {
-        status.innerHTML = `Re-rolling up ${lastTotal || ''} sessions…`;
-      });
-
-      evt.addEventListener('done', (e) => {
-        const d = JSON.parse(e.data);
-        const s = d.summary || {};
-        status.innerHTML = `Retried ${d.retriedSessions || 0}, relabeled ${s.sessionsRelabeled || 0} sessions (${s.eventsRelabeled || 0} events). Reloading…`;
-        evt.close();
-        setTimeout(() => location.reload(), 800);
-      });
-
-      evt.addEventListener('error', (e) => {
-        // EventSource fires generic 'error' events on network hiccups too.
-        // If the server sent an explicit error event, e.data is present.
-        try {
-          const d = e.data ? JSON.parse(e.data) : null;
-          if (d && d.message) {
-            status.textContent = 'Error: ' + d.message;
-          } else if (lastCurrent > 0) {
-            status.textContent = `Connection dropped at session ${lastCurrent}/${lastTotal}. Reload and try again.`;
-          }
-        } catch { /* ignore parse failures */ }
-        evt.close();
-        btn.disabled = false;
-        btn.innerHTML = original;
-      });
-    });
+    wireInferMainlineCta(btn, status);
   }
 
   function drawSparkline(points) {
@@ -859,6 +848,14 @@
     </svg>`;
   }
 
+  function wireProjectUnattCta() {
+    const btn = document.querySelector('.project-page [data-project-cta]');
+    if (!btn) return;
+    const parent = btn.parentElement;
+    const status = parent ? parent.querySelector('.unatt-cta-status') : null;
+    wireInferMainlineCta(btn, status);
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     renderTrend();
     renderTrailElevation();
@@ -867,6 +864,7 @@
     renderUnattributedCard();
     setupRowExpanders();
     setupClusterJumps();
+    wireProjectUnattCta();
   });
 
   // Anomaly dismiss/restore actions. Delegated handler so we don't need

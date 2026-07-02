@@ -165,3 +165,41 @@ test('unattributed card placeholder hidden by default; visible marker when paylo
   assert.match(html, /id="unattributed-card"/);
   assert.doesNotMatch(html, /id="unattributed-card"[^>]* hidden/);
 });
+
+describe('expandable Other legend row', () => {
+  const otherVm = () =>
+    makeVm({
+      projects: [
+        { key: 'repo:o/a', name: 'a', color: '#0072B2', totalUsd: 50, clickable: true, stackPosition: 0 },
+        { key: '__other__', name: 'Other', color: '#999', totalUsd: 30, clickable: false, stackPosition: 6 },
+      ],
+      otherProjects: [
+        { key: 'repo:o/tail1', name: 'tail1', totalUsd: 20 },
+        { key: 'feature:outside:projects-root', name: 'Projects (root)', totalUsd: 10 },
+      ],
+    });
+
+  test('Other row gets the expandable marker and chevron', () => {
+    const html = renderOverview(otherVm());
+    assert.match(html, /data-project-key="__other__"[^>]*data-expandable="1"/);
+    assert.match(html, /class="chevron"/);
+  });
+
+  test('renders one clickable sub-row per tail project with amounts', () => {
+    const html = renderOverview(otherVm());
+    assert.match(html, /trend-legend-subrow" data-project-key="repo:o\/tail1"/);
+    assert.match(html, /trend-legend-subrow" data-project-key="feature:outside:projects-root"/);
+    assert.match(html, /\$20/);
+    assert.match(html, /\$10/);
+  });
+
+  test('no marker or sub-rows when the tail is empty', () => {
+    const vm = makeVm({
+      projects: [{ key: 'repo:o/a', name: 'a', color: '#0072B2', totalUsd: 50, clickable: true, stackPosition: 0 }],
+      otherProjects: [],
+    });
+    const html = renderOverview(vm);
+    assert.doesNotMatch(html, /data-expandable/);
+    assert.doesNotMatch(html, /trend-legend-subrow/);
+  });
+});

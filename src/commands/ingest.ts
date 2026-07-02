@@ -5,6 +5,7 @@ import {
   readUsageEvents,
 } from '../services/jsonl-reader.js';
 import { decodeProjectDir, repoContextFor } from '../services/git.js';
+import { knownSlugForDir } from '../db/repo-heal.js';
 import { estimateCostUsd } from '../lib/cost.js';
 import { refreshWorkUnits } from '../services/work-units.js';
 import {
@@ -117,6 +118,12 @@ export async function runIngest(): Promise<IngestSummary> {
       projectDir = dir;
       dirCache.set(event.projectDirEncoded, dir);
       ctx = repoContextFor(dir);
+      // A local/<basename> fallback for a dir that previously produced a
+      // remote slug is the same project — stamp the slug, don't fragment.
+      if (ctx.repo?.startsWith('local/')) {
+        const known = knownSlugForDir(db, dir);
+        if (known) ctx = { ...ctx, repo: known };
+      }
       repoCache.set(event.projectDirEncoded, ctx);
     }
 

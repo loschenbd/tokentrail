@@ -95,20 +95,21 @@ Covers any row the migration could not prove (e.g. ambiguous dirs).
 `getOverviewVM()` already computes `tailProj`; expose it on the VM:
 
 ```ts
-otherProjects: Array<{ key: string; name: string; totalUsd: number; clickable: boolean }>
+otherProjects: Array<{ key: string; name: string; totalUsd: number }>
 ```
 
-Sorted descending by `totalUsd`. `clickable` is false for `outside:*`
-pseudo-projects (no project page exists); true for real `repo:`/`local:`
-keys, which share the top-6 key namespace and route to existing project
-detail pages.
+Sorted descending by `totalUsd`. All entries are clickable: `repo:`,
+`local:`, and `feature:` keys all route to existing project detail pages
+(`parseProjectKey` in `src/dashboard/data/project.ts` handles all three
+kinds — verified during planning; the earlier assumption that `outside:*`
+pseudo-projects lack pages was wrong).
 
 ### Render (`src/dashboard/render/overview.ts`)
 
 - The "Other" legend row gains a chevron (`▾`/`▸`) and an indented sub-list
   beneath it, collapsed by default.
-- Sub-rows: project name + dollar amount. Clickable rows link to the project
-  page with a `→` affordance; `outside:*` rows render as plain text.
+- Sub-rows: project name + dollar amount; every row links to its project
+  detail page.
 - No swatches on sub-rows (they are all inside the one gray band) and no
   truncation — show all entries (post-heal the tail is ~4–7 rows).
 

@@ -15,6 +15,7 @@ function emptyVM(): OverviewVM {
     topProjects: [],
     projectColors: {},
     projects: [],
+    otherProjects: [],
     days: [],
     projectFeatureMix: [],
     unattributed: null,

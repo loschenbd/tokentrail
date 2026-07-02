@@ -652,7 +652,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 }
 .project-page .bsum-row {
   display: grid;
-  grid-template-columns: 70px 30px 1fr;
+  grid-template-columns: 100px 1fr;
   font-size: 12px;
   align-items: baseline;
 }
@@ -662,7 +662,6 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   letter-spacing: 0.04em;
   font-size: 10px;
 }
-.project-page .bsum-n { font-variant-numeric: tabular-nums; font-weight: 600; color: #4a3a24; }
 .project-page .bsum-v .bsum-name { display: inline; }
 .project-page .commits-inline { margin-top: 14px; }
 .project-page .commits-inline .subheader { margin-bottom: 4px; }

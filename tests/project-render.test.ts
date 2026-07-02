@@ -32,13 +32,18 @@ function baseVm(overrides: Partial<ProjectDetailVM> = {}): ProjectDetailVM {
     recentCommits: [],
     anomalies: [],
     branchGraph: null,
+    unattributed: null,
     ...overrides,
   };
 }
 
 describe('renderProject skeleton', () => {
   test('renders five sections in order: hero, velocity, features, active-work, worth-reconciling', () => {
-    const html = renderProject(baseVm());
+    // Provide an anomaly so the worth-reconciling section renders as a card
+    // (empty unattributed + empty anomalies collapses to a note without a data-section).
+    const html = renderProject(baseVm({
+      anomalies: [{ id: 1, kind: 'spike_day', date: '2026-06-15', featureKey: 'f', sessionId: null, amount: 100, reason: 'test', cause: null }],
+    }));
     const order = ['hero', 'velocity', 'features', 'active-work', 'worth-reconciling'];
     let last = -1;
     for (const s of order) {
@@ -207,6 +212,53 @@ describe('renderProject active-work section', () => {
   test('empty state: no branches AND no commits → gentle placeholder', () => {
     const seg = extractSection(renderProject(baseVm({ branchGraph: null, recentCommits: [] })), 'active-work');
     assert.match(seg, /No branches touched archi in this window/);
+  });
+});
+
+describe('renderProject worth-reconciling section', () => {
+  test('collapses to "All clear on <name>." when unattributed is null AND anomalies empty', () => {
+    const html = renderProject(baseVm({ unattributed: null, anomalies: [] }));
+    assert.match(html, /All clear on archi\./);
+    // The section container should NOT be present.
+    assert.doesNotMatch(html, /data-section="worth-reconciling"/);
+  });
+
+  test('renders unattributed subblock when unattributed is non-null', () => {
+    const vm = baseVm({
+      unattributed: {
+        totalUsd: 155,
+        sparkline: [{ date: '2026-06-01', usd: 40 }, { date: '2026-06-02', usd: 115 }],
+        topFeatures: [],
+      },
+    });
+    const seg = extractSection(renderProject(vm), 'worth-reconciling');
+    assert.match(seg, /Unattributed on archi/);
+    assert.match(seg, /\$155/);
+    assert.match(seg, /<svg\b/);
+    assert.match(seg, /Run <code>tokentrail infer-mainline<\/code>/);
+  });
+
+  test('renders unattributed positive empty state when null', () => {
+    const vm = baseVm({
+      unattributed: null,
+      anomalies: [
+        { id: 1, kind: 'spike_day', date: '2026-06-15', featureKey: 'local-rag-chatbot', sessionId: '075fff73', amount: 412, reason: '4.2× the prior week', cause: { kind: 'session', ref: '075fff73', label: 'brainstorm copy' } } as any,
+      ],
+    });
+    const seg = extractSection(renderProject(vm), 'worth-reconciling');
+    assert.match(seg, /all sessions attributed/);
+  });
+
+  test('renders anomaly rows with cause line', () => {
+    const vm = baseVm({
+      anomalies: [
+        { id: 1, kind: 'spike_day', date: '2026-06-15', featureKey: 'local-rag-chatbot', sessionId: '075fff73abc', amount: 412, reason: '4.2× the prior week', cause: { kind: 'session', ref: '075fff73abc', label: 'brainstorm copy' } } as any,
+      ],
+    });
+    const seg = extractSection(renderProject(vm), 'worth-reconciling');
+    assert.match(seg, /4\.2× the prior week/);
+    assert.match(seg, /brainstorm copy/);
+    assert.match(seg, /href="\/session\/075fff73abc"/);
   });
 });
 

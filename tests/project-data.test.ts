@@ -204,4 +204,24 @@ describe('buildProjectDetail', () => {
     assert.equal(anom.cause?.ref, 'archi-a');
     assert.equal(anom.cause?.label, 'Feature A pretty');
   });
+
+  test('unattributed block aggregates uncategorized-mainline for this project', () => {
+    const db = makeDb();
+    const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;
+    insertRollup(db, { date: day(1), featureKey: 'uncategorized-mainline', featureName: 'Uncategorized mainline', repo: 'loschenbd/archi', cost: 40, sessionIds: 'sX', sessions: 1 });
+    insertRollup(db, { date: day(2), featureKey: 'uncategorized-mainline', featureName: 'Uncategorized mainline', repo: 'loschenbd/archi', cost: 60, sessionIds: 'sY', sessions: 1 });
+    insertRollup(db, { date: day(1), featureKey: 'good-feat', featureName: 'Good', repo: 'loschenbd/archi', cost: 20, sessionIds: 'sZ', sessions: 1 });
+    const vm = buildProjectDetail(db, { projectKey: 'repo:loschenbd/archi', days: 7 })!;
+    assert.ok(vm.unattributed);
+    assert.equal(vm.unattributed!.totalUsd, 100);
+    assert.equal(vm.unattributed!.sparkline.length, 7);
+  });
+
+  test('unattributed is null when the project has no uncategorized-mainline spend', () => {
+    const db = makeDb();
+    const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;
+    insertRollup(db, { date: day(1), featureKey: 'clean', featureName: 'Clean', repo: 'loschenbd/archi', cost: 20, sessionIds: 's1', sessions: 1 });
+    const vm = buildProjectDetail(db, { projectKey: 'repo:loschenbd/archi', days: 7 })!;
+    assert.equal(vm.unattributed, null);
+  });
 });

@@ -12,7 +12,7 @@ export function renderProject(vm: ProjectDetailVM): string {
   ${renderVelocity(vm, color)}
   ${renderFeatures(vm, color)}
   ${renderActiveWork(vm)}
-  <section class="card" data-section="worth-reconciling"></section>
+  ${renderWorthReconciling(vm)}
 </div>
   `;
 }
@@ -148,6 +148,71 @@ function renderBranchSummary(bg: NonNullable<ProjectDetailVM['branchGraph']>): s
     ${rowFor('Merged', 'merged')}
     ${rowFor('Stale',  'stale')}
   </div>`;
+}
+
+function renderWorthReconciling(vm: ProjectDetailVM): string {
+  const hasAnoms = vm.anomalies.length > 0;
+  const hasUnatt = vm.unattributed !== null;
+  if (!hasUnatt && !hasAnoms) {
+    return `<div class="reconciled-note">All clear on ${escapeHtml(vm.projectName)}.</div>`;
+  }
+  const unattBlock = hasUnatt
+    ? renderUnattSubblock(vm, vm.unattributed!)
+    : renderUnattEmpty(vm);
+  const anomBlock = hasAnoms
+    ? renderAnomalyRows(vm.anomalies)
+    : `<div class="muted">No anomalies flagged in this window.</div>`;
+  return `
+    <section class="card" data-section="worth-reconciling">
+      <div class="label">Worth reconciling</div>
+      <div class="wr-block wr-unatt">
+        <div class="wr-sub-label">Unattributed on ${escapeHtml(vm.projectName)}</div>
+        ${unattBlock}
+      </div>
+      <div class="wr-block wr-anoms">
+        <div class="wr-sub-label">Anomalies <span class="muted">${vm.anomalies.length} active</span></div>
+        ${anomBlock}
+      </div>
+    </section>`;
+}
+
+function renderUnattEmpty(_vm: ProjectDetailVM): string {
+  return `
+    <div class="wr-unatt-empty">
+      <span class="wr-check">✓</span> $0 <span class="muted">· all sessions attributed</span>
+    </div>`;
+}
+
+function renderUnattSubblock(vm: ProjectDetailVM, u: NonNullable<ProjectDetailVM['unattributed']>): string {
+  // Sparkline uses muted grey (matches overview unattributed card), NOT
+  // the project's hue — visually distinguishes "reconcile" from "spend".
+  const svg = renderSparkline({
+    points: u.sparkline.map((p) => ({ date: p.date, totalUsd: p.usd })),
+    color: '#6b7280',
+    width: 220,
+    height: 40,
+    ariaLabel: 'Unattributed sparkline',
+  });
+  return `
+    <div class="wr-unatt-hero">$${u.totalUsd.toFixed(0)} <span class="muted">of ${escapeHtml(vm.projectName)}</span></div>
+    <div class="wr-unatt-spark">${svg}</div>
+    <button class="unatt-cta" type="button" data-project-cta>Run <code>tokentrail infer-mainline</code> →</button>
+    <div class="unatt-cta-status" role="status" aria-live="polite" hidden></div>`;
+}
+
+function renderAnomalyRows(items: ProjectDetailVM['anomalies']): string {
+  return items.map((a) => {
+    const causeLine = a.cause
+      ? (a.cause.kind === 'session'
+          ? `<a class="wr-anom-cause" href="/session/${encodeURIComponent(a.cause.ref)}">${escapeHtml(a.cause.label)}</a>`
+          : `<span class="wr-anom-cause muted">${escapeHtml(a.cause.label)}</span>`)
+      : '';
+    return `
+      <div class="wr-anom">
+        <div class="wr-anom-head"><span class="wr-anom-date">${escapeHtml(a.date)}</span> $${a.amount.toFixed(0)} — ${escapeHtml(a.reason)}</div>
+        ${causeLine ? `<div class="wr-anom-cause-row">${causeLine}</div>` : ''}
+      </div>`;
+  }).join('');
 }
 
 function renderFeatures(vm: ProjectDetailVM, color: string): string {

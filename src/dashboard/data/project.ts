@@ -60,6 +60,11 @@ export type ProjectDetailVM = {
     reason: string;
     cause: { kind: 'session' | 'feature'; ref: string; label: string } | null;
   }>;
+  unattributed: {
+    totalUsd: number;
+    sparkline: Array<{ date: string; usd: number }>;
+    topFeatures: Array<{ featureKey: string; featureName: string; usd: number }>;
+  } | null;
   branchGraph: BranchGraphVM | null;
 };
 
@@ -352,6 +357,26 @@ export function buildProjectDetail(
     }
   }
 
+  // Unattributed block: same 'uncategorized-mainline' key the overview
+  // unattributed card uses, scoped to this project. Only rendered when
+  // totalUsd > 0.
+  const unattTotal = round2(
+    (db
+      .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS s FROM feature_rollups WHERE ${filterSql} AND feature_key = 'uncategorized-mainline' AND date >= ${startExpr}`)
+      .get(filterParams) as { s: number }).s
+  );
+  const unattSparkline = unattTotal > 0
+    ? dailySeries.map((d) => ({
+        date: d.date,
+        usd: round2((db
+          .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS s FROM feature_rollups WHERE ${filterSql} AND feature_key = 'uncategorized-mainline' AND date = @day`)
+          .get({ ...filterParams, day: d.date }) as { s: number }).s),
+      }))
+    : [];
+  const unattributed = unattTotal > 0
+    ? { totalUsd: unattTotal, sparkline: unattSparkline, topFeatures: [] as Array<{ featureKey: string; featureName: string; usd: number }> }
+    : null;
+
   return {
     projectKey: opts.projectKey,
     projectName,
@@ -368,6 +393,7 @@ export function buildProjectDetail(
     sessions,
     recentCommits,
     anomalies,
+    unattributed,
     branchGraph,
   };
 }

@@ -200,7 +200,10 @@
           (self) => {
             const idx = self.cursor.idx;
             if (idx == null || idx < 0 || idx >= days.length) {
-              tooltip.style.display = 'none';
+              // Don't hide the tooltip here — cursor.idx = null also fires when
+              // the mouse crosses onto a .chart-tooltip-link (pointer-events: auto)
+              // to click a feature drill-down, and hiding here would kill the link
+              // before the click lands. node.mouseleave owns actual dismissal.
               return;
             }
             // Determine which project band the cursor is over and highlight it.

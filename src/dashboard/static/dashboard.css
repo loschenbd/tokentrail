@@ -183,7 +183,11 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 
 .chart-tooltip {
   position: absolute;
-  pointer-events: auto;
+  /* pointer-events: none lets cursor events pass through to uPlot's over layer.
+     Without this, the tooltip sitting 12px next to the cursor intercepts every
+     other mousemove — half the plot area misses the crosshair + tooltip.
+     Interactive descendants (.chart-tooltip-link) re-enable events. */
+  pointer-events: none;
   background: var(--color-parchment-top);
   border: 1px dashed var(--color-rule);
   border-radius: 4px;
@@ -207,6 +211,8 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   text-decoration: none;
   color: inherit;
   padding: 2px 0;
+  /* Restore hit-testing on the drill-down links; parent tooltip is pointer-events: none. */
+  pointer-events: auto;
 }
 .chart-tooltip-link:hover { background: rgba(139,111,71,0.08); }
 .chart-tooltip-label {

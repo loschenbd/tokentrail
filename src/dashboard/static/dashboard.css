@@ -457,6 +457,21 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 .trend-legend-row:hover { background: rgba(139,111,71,0.08); }
 .trend-legend-row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trend-legend-row .amt { color: #6b563d; font-variant-numeric: tabular-nums; }
+.trend-legend-row .chevron { color: #8b6f47; font-size: 11px; }
+.trend-legend-subrow {
+  display: none;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 24px;   /* indent past the swatch column */
+  border-radius: 4px;
+  cursor: pointer;
+  color: #6b563d;
+}
+.trend-legend.other-expanded .trend-legend-subrow { display: grid; }
+.trend-legend-subrow:hover { background: rgba(139,111,71,0.08); }
+.trend-legend-subrow .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trend-legend-subrow .amt { font-variant-numeric: tabular-nums; }
 .swatch {
   display: inline-block;
   width: 12px;

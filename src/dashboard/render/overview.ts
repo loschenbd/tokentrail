@@ -2,7 +2,7 @@ import type { OverviewVM } from '../data/overview.js';
 import { escapeHtml } from './shell.js';
 import { claudeProjectsDir } from '../../services/jsonl-reader.js';
 import { renderTrailMap } from './trail-map.js';
-import { colorFor, STRIPED_SENTINEL } from '../lib/feature-colors.js';
+import { colorFor, STRIPED_SENTINEL, OTHER_KEY } from '../lib/feature-colors.js';
 
 export function renderOverview(vm: OverviewVM): string {
   if (isEmpty(vm)) return renderEmptyState();
@@ -14,7 +14,7 @@ export function renderOverview(vm: OverviewVM): string {
       <div class="trend-layout">
         <div id="trend-chart" style="width:100%;height:280px"></div>
         <ul id="trend-legend" class="trend-legend">
-          ${renderTrendLegend(vm.projects)}
+          ${renderTrendLegend(vm.projects, vm.otherProjects)}
         </ul>
       </div>
       <script type="application/json" id="trend-data">${jsonForScriptTag({ days: vm.days, projects: vm.projects, unattributed: vm.unattributed, projectColors: vm.projectColors })}</script>
@@ -133,16 +133,28 @@ function jsonForScriptTag(data: unknown): string {
   return JSON.stringify(data).replace(/</g, '\\u003c');
 }
 
-function renderTrendLegend(projects: OverviewVM['projects']): string {
+function renderTrendLegend(
+  projects: OverviewVM['projects'],
+  otherProjects: OverviewVM['otherProjects']
+): string {
   // Sort descending by stackPosition: top-of-legend mirrors top-of-stack.
   // __other__ (highest stackPosition) appears first; largest real project appears last.
   const rows = [...projects].sort((a, b) => b.stackPosition - a.stackPosition);
   return rows.map((p) => {
     const clickable = p.clickable ? '1' : '0';
-    return `<li class="trend-legend-row" data-project-key="${escapeHtml(p.key)}" data-project-color="${escapeHtml(p.color)}" data-clickable="${clickable}">
+    const expandable = p.key === OTHER_KEY && otherProjects.length > 0;
+    const row = `<li class="trend-legend-row" data-project-key="${escapeHtml(p.key)}" data-project-color="${escapeHtml(p.color)}" data-clickable="${clickable}"${expandable ? ' data-expandable="1" role="button" tabindex="0" aria-expanded="false"' : ''}>
       <span class="swatch" style="background:${escapeHtml(p.color)}"></span>
-      <span class="name">${escapeHtml(p.name)}</span>
+      <span class="name">${escapeHtml(p.name)}${expandable ? ' <span class="chevron">&#9656;</span>' : ''}</span>
       <span class="amt">$${p.totalUsd.toFixed(0)}</span>
     </li>`;
+    if (!expandable) return row;
+    // Sub-rows are flat siblings (not a nested list): the legend <ul> is a
+    // flex column and each row is its own grid, so nesting would fight both.
+    const subRows = otherProjects.map((o) => `<li class="trend-legend-subrow" data-project-key="${escapeHtml(o.key)}">
+      <span class="name">${escapeHtml(o.name)}</span>
+      <span class="amt">$${o.totalUsd.toFixed(0)}</span>
+    </li>`).join('');
+    return row + subRows;
   }).join('');
 }

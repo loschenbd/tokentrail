@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import type DatabaseType from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';
-import { buildOverview } from '../src/dashboard/data/overview.js';
+import { buildOverview, bucketProject } from '../src/dashboard/data/overview.js';
 import { buildFeatureDetail } from '../src/dashboard/data/feature.js';
 
 const require = createRequire(import.meta.url);
@@ -331,6 +331,50 @@ describe('buildOverview', () => {
     assert.equal(bandSum + row.unattributedTotal, row.total);
     assert.equal(row.unattributedTotal, 40);
     assert.equal(bandSum, 60);
+  });
+});
+
+describe('bucketProject slug preference', () => {
+  test('prefers the slug entry over a local/ entry regardless of CSV order', () => {
+    const r = { featureKey: 'f', featureName: 'F', repo: 'local/mud,owner/mud' };
+    assert.deepEqual(bucketProject(r), { projectKey: 'repo:owner/mud', projectName: 'mud' });
+  });
+
+  test('falls back to the local/ entry when no slug is present', () => {
+    const r = { featureKey: 'f', featureName: 'F', repo: 'local/mud' };
+    assert.deepEqual(bucketProject(r), { projectKey: 'local:mud', projectName: 'mud' });
+  });
+});
+
+describe('otherProjects', () => {
+  test('exposes tail projects (rank 7+) sorted descending', () => {
+    const db = makeDb();
+    // 8 projects: $80, $70, ... $10. Top 6 get bands; $20 and $10 are the tail.
+    seedRollups(
+      db,
+      Array.from({ length: 8 }, (_, i) => ({
+        date: daysAgo(1),
+        cost: 80 - i * 10,
+        featureKey: `feat-${i}`,
+        featureName: `Feat ${i}`,
+        repo: `owner/proj-${i}`,
+      }))
+    );
+    const vm = buildOverview({ db, days: 30 });
+    assert.deepEqual(
+      vm.otherProjects.map((p) => ({ key: p.key, totalUsd: p.totalUsd })),
+      [
+        { key: 'repo:owner/proj-6', totalUsd: 20 },
+        { key: 'repo:owner/proj-7', totalUsd: 10 },
+      ]
+    );
+  });
+
+  test('is empty when six or fewer projects exist', () => {
+    const db = makeDb();
+    seedRollups(db, [{ date: daysAgo(1), cost: 10, featureKey: 'f', featureName: 'F', repo: 'owner/p' }]);
+    const vm = buildOverview({ db, days: 30 });
+    assert.deepEqual(vm.otherProjects, []);
   });
 });
 

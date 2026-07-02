@@ -197,37 +197,49 @@
       ],
       hooks: {
         setCursor: [
-          (self) => {
-            const idx = self.cursor.idx;
-            if (idx == null || idx < 0 || idx >= days.length) {
-              // Don't hide the tooltip here — cursor.idx = null also fires when
-              // the mouse crosses onto a .chart-tooltip-link (pointer-events: auto)
-              // to click a feature drill-down, and hiding here would kill the link
-              // before the click lands. node.mouseleave owns actual dismissal.
-              return;
-            }
-            // Determine which project band the cursor is over and highlight it.
-            const yVal = self.posToVal(self.cursor.top, 'y');
-            const band = hitBand(yVal, idx);
-            const activeProjectKey = band ? band.key : null;
-            setActiveKey(activeProjectKey);
+          (() => {
+            // Track prior state so we only re-render on real changes. Every
+            // mouse move fires setCursor, but tooltip content only depends
+            // on (idx, activeProjectKey) — re-rendering on every rAF makes
+            // the tooltip flicker/rewrite while the user tries to reach a
+            // drill-down link, and the link disappears out from under them.
+            let lastIdx = null;
+            let lastKey = null;
+            return (self) => {
+              const idx = self.cursor.idx;
+              if (idx == null || idx < 0 || idx >= days.length) {
+                // Don't hide the tooltip — cursor.idx = null also fires when
+                // the mouse crosses onto a .chart-tooltip-link (pointer-events:
+                // auto). Hiding here kills the link before the click lands.
+                // node.mouseleave owns actual dismissal.
+                return;
+              }
+              const yVal = self.posToVal(self.cursor.top, 'y');
+              const band = hitBand(yVal, idx);
+              const activeProjectKey = band ? band.key : null;
+              setActiveKey(activeProjectKey);
 
-            tooltip.innerHTML = renderTooltip(idx, activeProjectKey);
-            tooltip.style.display = 'block';
+              // Skip re-render if content unchanged — keeps drill-down link
+              // positions stable so the user can reach them.
+              if (idx === lastIdx && activeProjectKey === lastKey) return;
+              lastIdx = idx; lastKey = activeProjectKey;
 
-            const total = days[idx].total || 0;
-            const left = self.valToPos(xs[idx], 'x');
-            const top = total === 0
-              ? (self.cursor.top != null ? self.cursor.top : 0)
-              : self.valToPos(seriesYs[seriesYs.length - 1][idx], 'y');
-            const rect = node.getBoundingClientRect();
-            const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
-            let px = left + 12, py = top - th - 8;
-            if (px + tw > rect.width) px = left - tw - 12;
-            if (py < 0) py = top + 12;
-            tooltip.style.left = px + 'px';
-            tooltip.style.top = py + 'px';
-          },
+              tooltip.innerHTML = renderTooltip(idx, activeProjectKey);
+              tooltip.style.display = 'block';
+
+              // Position tooltip pinned to the TOP of the plot area, offset
+              // horizontally to the current x. It never moves in y, so it
+              // never overlaps the cursor and the drill-down link never
+              // steals mouseleave events from u-over as the user reaches it.
+              const left = self.valToPos(xs[idx], 'x');
+              const rect = node.getBoundingClientRect();
+              const tw = tooltip.offsetWidth;
+              let px = left + 12;
+              if (px + tw > rect.width) px = left - tw - 12;
+              tooltip.style.left = px + 'px';
+              tooltip.style.top = '8px';
+            };
+          })(),
         ],
       },
     };

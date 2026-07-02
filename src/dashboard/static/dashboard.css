@@ -211,8 +211,10 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   text-decoration: none;
   color: inherit;
   padding: 2px 0;
-  /* Restore hit-testing on the drill-down links; parent tooltip is pointer-events: none. */
-  pointer-events: auto;
+  /* Inherit pointer-events: none from the tooltip container so hit-testing
+     doesn't steal mousemove events from uPlot's cursor tracker. The tooltip
+     is a hover-preview; navigation is via the chart click (project drill-down)
+     and the burn-paths section below. */
 }
 .chart-tooltip-link:hover { background: rgba(139,111,71,0.08); }
 .chart-tooltip-label {

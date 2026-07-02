@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { renderDaemonPlist, resolveTokentrailBin } from '../src/commands/init.js';
+import { renderDaemonPlist, resolveTokentrailBin, resolveTrackerDbPath } from '../src/commands/init.js';
 
 describe('renderDaemonPlist', () => {
   test('plist invokes the installed tokentrail bin and drops the tsx loader', () => {
     const plist = renderDaemonPlist({
       tokentrailBin: '/opt/homebrew/bin/tokentrail',
       repoRoot: '/tmp/repo',
+      trackerDbPath: '/tmp/repo/data/tracker.db',
     });
     assert.match(plist, /<string>\/opt\/homebrew\/bin\/tokentrail<\/string>/);
     assert.match(plist, /<string>dashboard<\/string>/);
@@ -17,6 +18,42 @@ describe('renderDaemonPlist', () => {
     assert.doesNotMatch(plist, /tsx/);
     assert.doesNotMatch(plist, /--import/);
     assert.doesNotMatch(plist, /index\.ts/);
+  });
+
+  test('plist pins TRACKER_DB_PATH so a brew daemon never opens a Cellar-local DB', () => {
+    const plist = renderDaemonPlist({
+      tokentrailBin: '/opt/homebrew/bin/tokentrail',
+      repoRoot: '/opt/homebrew/Cellar/tokentrail/0.2.6/libexec',
+      trackerDbPath: '/Users/dev/Projects/tokentrail/data/tracker.db',
+    });
+    assert.match(plist, /<key>EnvironmentVariables<\/key>/);
+    assert.match(plist, /<key>TRACKER_DB_PATH<\/key>/);
+    assert.match(plist, /<string>\/Users\/dev\/Projects\/tokentrail\/data\/tracker\.db<\/string>/);
+  });
+});
+
+describe('resolveTrackerDbPath', () => {
+  test('an explicit TRACKER_DB_PATH env always wins', () => {
+    assert.equal(
+      resolveTrackerDbPath({ TRACKER_DB_PATH: '/custom/tracker.db' }, '/home/none'),
+      '/custom/tracker.db'
+    );
+  });
+
+  test('picks the first existing candidate under the given home', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tt-home-'));
+    const dbDir = join(home, 'Projects', 'tokentrail', 'data');
+    mkdirSync(dbDir, { recursive: true });
+    writeFileSync(join(dbDir, 'tracker.db'), '');
+    assert.equal(resolveTrackerDbPath({}, home), join(dbDir, 'tracker.db'));
+  });
+
+  test('falls back to Application Support when no candidate exists', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tt-home-'));
+    assert.equal(
+      resolveTrackerDbPath({}, home),
+      join(home, 'Library', 'Application Support', 'tokentrail', 'tracker.db')
+    );
   });
 });
 

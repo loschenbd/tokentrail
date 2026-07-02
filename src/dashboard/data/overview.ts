@@ -43,6 +43,10 @@ export type OverviewVM = {
     stackPosition: number;   // 0 = bottom (largest real project); 6 = Other
   }>;
 
+  // Tail projects (rank 7+) collapsed into the Other band; the legend
+  // renders these as an expandable sub-list. Sorted descending by spend.
+  otherProjects: Array<{ key: string; name: string; totalUsd: number }>;
+
   /**
    * Per-day breakdown.
    *
@@ -283,6 +287,12 @@ export function buildOverview(
     });
   }
 
+  const otherProjects: OverviewVM['otherProjects'] = tailProj.map((r) => ({
+    key: r.projKey,
+    name: r.projName,
+    totalUsd: r.total,
+  }));
+
   // --- Commits / PRs per day ---
   const observedRows = db
     .prepare(`SELECT date, SUM(total_cost_usd) AS total FROM feature_rollups WHERE date >= ${startExpr} GROUP BY date`)
@@ -447,6 +457,7 @@ export function buildOverview(
     topProjects,
     projectColors,
     projects,
+    otherProjects,
     days: dayRows,
     projectFeatureMix,
     unattributed,
@@ -460,8 +471,10 @@ export function bucketProject(r: { featureKey: string; featureName: string; repo
   projectName: string;
 } {
   if (r.repo && r.repo.trim()) {
-    // CSV-resilient: take the first non-empty repo string.
-    const firstRepo = r.repo.split(',').map((s) => s.trim()).find((s) => s.length > 0) ?? r.repo;
+    // CSV-resilient: prefer the first slug-style entry; a local/ alias of
+    // the same project only wins when no remote slug was ever observed.
+    const entries = r.repo.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+    const firstRepo = entries.find((s) => !s.startsWith('local/')) ?? entries[0] ?? r.repo;
     const owner = firstRepo.includes('/') ? firstRepo.split('/')[0] : '';
     const name = firstRepo.split('/').pop() ?? firstRepo;
     // local/<basename> reads better as just the basename; GitHub-style

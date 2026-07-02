@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { SCHEMA_STATEMENTS } from './schema.js';
+import { healLocalRepoIdentities } from './repo-heal.js';
 
 export function runMigrations(db: Database.Database): void {
   db.pragma('journal_mode = WAL');
@@ -52,6 +53,18 @@ export function runMigrations(db: Database.Database): void {
       ON usage_events (inferred_feature_key)`);
   });
   tx();
+  try {
+    const healResult = db.transaction(() => healLocalRepoIdentities(db))();
+    if (healResult.healed.length > 0) {
+      const detail = healResult.healed.map((h) => `${h.from} -> ${h.to}`).join(', ');
+      console.log(`Merged ${healResult.healed.length} local repo identit${healResult.healed.length === 1 ? 'y' : 'ies'}: ${detail}`);
+    }
+    for (const a of healResult.ambiguous) {
+      console.log(`Skipped ${a}: could not prove a single remote identity; left as-is.`);
+    }
+  } catch (err) {
+    console.error(`Repo identity heal skipped: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 function addColumnIfMissing(

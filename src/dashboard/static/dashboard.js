@@ -247,6 +247,29 @@
           });
         }
       });
+      // Expandable Other row: toggle the tail-project sub-list.
+      const otherRow = legend.querySelector('[data-expandable="1"]');
+      if (otherRow) {
+        function toggleOther() {
+          const expanded = legend.classList.toggle('other-expanded');
+          otherRow.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+          const chevron = otherRow.querySelector('.chevron');
+          if (chevron) chevron.textContent = expanded ? '▾' : '▸';
+        }
+        otherRow.addEventListener('click', toggleOther);
+        otherRow.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleOther(); }
+        });
+      }
+      // Sub-rows navigate to their project page. No band highlight on hover:
+      // the Other band is an aggregate — there is nothing to isolate.
+      legend.querySelectorAll('.trend-legend-subrow').forEach((li) => {
+        const key = li.getAttribute('data-project-key');
+        if (!key) return;
+        li.addEventListener('click', () => {
+          window.location.href = '/project/' + encodeURIComponent(key);
+        });
+      });
     }
 
     // Chart click: derive the active project band from cursor position and navigate.

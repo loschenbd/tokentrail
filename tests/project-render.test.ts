@@ -2,6 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderProject } from '../src/dashboard/render/project.js';
 import type { ProjectDetailVM } from '../src/dashboard/data/project.js';
+import type { BranchGraphVM } from '../src/dashboard/data/branches.js';
 
 function baseVm(overrides: Partial<ProjectDetailVM> = {}): ProjectDetailVM {
   // 30 daily entries so stat line reads "vs prior 30d"
@@ -170,17 +171,19 @@ describe('renderProject features section', () => {
 });
 
 describe('renderProject active-work section', () => {
-  const branchGraph = {
+  const branchGraph: BranchGraphVM = {
+    trunk: 'main',
+    windowStart: '2026-06-01',
+    windowEnd: '2026-06-30',
     days: 30,
     totalBranches: 3,
     totalUsd: 12,
-    // Minimal shape — the renderer just carries it through as JSON.
     branches: [
-      { name: 'onboarding-wizard', state: 'merged', mergedAt: '2026-06-09', totalUsd: 0, sessions: 0 },
-      { name: 'coherence-pass', state: 'stale', mergedAt: null, totalUsd: 0, sessions: 0 },
-      { name: 'worktree-local-semantic-search', state: 'open', mergedAt: null, totalUsd: 12, sessions: 0 },
+      { branch: 'onboarding-wizard', firstEventAt: '2026-06-01', lastEventAt: '2026-06-09', mergedAt: '2026-06-09', status: 'merged', totalUsd: 0, sessionCount: 0, prNumber: null, prUrl: null, featureKey: null },
+      { branch: 'coherence-pass', firstEventAt: '2026-06-01', lastEventAt: '2026-06-05', mergedAt: null, status: 'stale', totalUsd: 0, sessionCount: 0, prNumber: null, prUrl: null, featureKey: null },
+      { branch: 'worktree-local-semantic-search', firstEventAt: '2026-06-01', lastEventAt: '2026-06-29', mergedAt: null, status: 'open', totalUsd: 12, sessionCount: 0, prNumber: null, prUrl: null, featureKey: null },
     ],
-  } as any;
+  };
 
   test('branch summary shows open / merged / stale counts with names', () => {
     const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');

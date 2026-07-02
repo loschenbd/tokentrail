@@ -1,4 +1,5 @@
 import type { ProjectDetailVM } from '../data/project.js';
+import type { BranchLifecycle } from '../data/branches.js';
 import { escapeHtml } from './shell.js';
 import { resolveProjectColors, shadeForFeature } from '../lib/feature-colors.js';
 import { renderSparkline } from './sparkline.js';
@@ -131,15 +132,14 @@ function renderActiveWork(vm: ProjectDetailVM): string {
 }
 
 function renderBranchSummary(bg: NonNullable<ProjectDetailVM['branchGraph']>): string {
-  type BranchLike = { name: string; state?: string; totalUsd?: number };
-  const branches = (bg.branches ?? []) as unknown as BranchLike[];
-  const bucket = (state: string) => branches.filter((b) => b.state === state);
-  const rowFor = (label: string, state: string) => {
-    const items = bucket(state);
+  const branches: BranchLifecycle[] = bg.branches ?? [];
+  const bucket = (status: BranchLifecycle['status']) => branches.filter((b) => b.status === status);
+  const rowFor = (label: string, status: BranchLifecycle['status']) => {
+    const items = bucket(status);
     if (items.length === 0) return '';
     const inline = items.map((b) => {
-      const usd = (b.totalUsd ?? 0) > 0 ? ` <span class="muted">$${(b.totalUsd ?? 0).toFixed(0)}</span>` : '';
-      return `<span class="bsum-name">${escapeHtml(b.name)}${usd}</span>`;
+      const usd = b.totalUsd > 0 ? ` <span class="muted">$${b.totalUsd.toFixed(0)}</span>` : '';
+      return `<span class="bsum-name">${escapeHtml(b.branch)}${usd}</span>`;
     }).join(' · ');
     return `<div class="bsum-row"><span class="bsum-k">${label} ${items.length}</span><span class="bsum-v">${inline}</span></div>`;
   };

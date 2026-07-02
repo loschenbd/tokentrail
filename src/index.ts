@@ -1,12 +1,31 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import { Command } from 'commander';
-import { createRequire } from 'node:module';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, parse } from 'node:path';
 
 // Single source of truth for the version. Drift between package.json and a
 // hardcoded literal here once shipped a 0.2.1 tarball that reported 0.2.0
 // and broke the Homebrew formula's test block.
-const pkg = createRequire(import.meta.url)('../../package.json') as { version: string };
+//
+// Walk upward instead of hardcoding ../../: that offset is only right for
+// the compiled dist/src/ layout — from src/ it escapes the checkout and
+// lands on <parent-of-repo>/package.json, breaking every tsx-from-source
+// run (npm run dev, worktrees, the launchd daemon).
+function findPackageJson(startDir: string): string {
+  let dir = startDir;
+  const { root } = parse(dir);
+  while (dir !== root) {
+    const candidate = join(dir, 'package.json');
+    if (existsSync(candidate)) return candidate;
+    dir = dirname(dir);
+  }
+  throw new Error(`package.json not found above ${startDir}`);
+}
+const pkg = JSON.parse(
+  readFileSync(findPackageJson(dirname(fileURLToPath(import.meta.url))), 'utf8')
+) as { version: string };
 
 const program = new Command();
 

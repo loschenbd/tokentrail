@@ -138,6 +138,31 @@ export function resolveTokentrailBin(argv1: string = process.argv[1] ?? ''): str
   return argv1;
 }
 
+/**
+ * Pick the tracker DB path to pin into the launchd plist's environment.
+ *
+ * The daemon's WorkingDirectory is pkgRoot() — on brew installs that's the
+ * Cellar libexec, where a cwd-relative `data/tracker.db` would spawn a fresh
+ * empty DB that gets wiped on every upgrade. Mirror the candidate search in
+ * scripts/macos-app/launch.sh so both launchers agree on which DB is "the"
+ * DB; keep the two lists in sync when editing either.
+ */
+export function resolveTrackerDbPath(
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir()
+): string {
+  if (env.TRACKER_DB_PATH) return env.TRACKER_DB_PATH;
+  const candidates = [
+    join(home, 'Projects', 'tokentrail', 'data', 'tracker.db'),
+    join(home, 'tokentrail', 'data', 'tracker.db'),
+    join(home, 'Library', 'Application Support', 'tokentrail', 'tracker.db'),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return candidates[candidates.length - 1]!;
+}
+
 export function installDaemon(opts: InitOptions, repoRoot: string): void {
   console.log('• Dashboard daemon (launchd)');
 
@@ -148,7 +173,7 @@ export function installDaemon(opts: InitOptions, repoRoot: string): void {
     return;
   }
 
-  const plist = renderDaemonPlist({ tokentrailBin, repoRoot });
+  const plist = renderDaemonPlist({ tokentrailBin, repoRoot, trackerDbPath: resolveTrackerDbPath() });
 
   const plistDir = dirname(DAEMON_PLIST_PATH);
   const exists = existsSync(DAEMON_PLIST_PATH);
@@ -267,7 +292,11 @@ function printNextSteps(opts: InitOptions): void {
   console.log('  · See the trail:       tokentrail report');
 }
 
-export function renderDaemonPlist(args: { tokentrailBin: string; repoRoot: string }): string {
+export function renderDaemonPlist(args: {
+  tokentrailBin: string;
+  repoRoot: string;
+  trackerDbPath: string;
+}): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -282,6 +311,11 @@ export function renderDaemonPlist(args: { tokentrailBin: string; repoRoot: strin
   </array>
   <key>WorkingDirectory</key>
   <string>${args.repoRoot}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>TRACKER_DB_PATH</key>
+    <string>${args.trackerDbPath}</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>

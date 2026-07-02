@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { SCHEMA_STATEMENTS } from './schema.js';
+import { healLocalRepoIdentities } from './repo-heal.js';
 
 export function runMigrations(db: Database.Database): void {
   db.pragma('journal_mode = WAL');
@@ -52,6 +53,11 @@ export function runMigrations(db: Database.Database): void {
       ON usage_events (inferred_feature_key)`);
   });
   tx();
+  try {
+    db.transaction(() => healLocalRepoIdentities(db))();
+  } catch (err) {
+    console.error(`Repo identity heal skipped: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 function addColumnIfMissing(

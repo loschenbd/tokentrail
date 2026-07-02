@@ -97,6 +97,28 @@ describe('healLocalRepoIdentities', () => {
     assert.equal(wus[0]!.repo, 'owner/mud');
   });
 
+  test('skips local/X when it appears on a dir with no slug sibling (multi-dir overreach guard)', () => {
+    const db = makeDb();
+    const dir1 = '/Users/ben/Projects/mud';
+    const dir2 = '/Users/ben/Unrelated/mud';
+    // dir1 has both local/mud and owner/mud — provable on this dir alone.
+    seedEvent(db, { id: 'e1', repo: 'local/mud', projectDir: dir1 });
+    seedEvent(db, { id: 'e2', repo: 'owner/mud', projectDir: dir1 });
+    // dir2 only has local/mud, no slug sibling — rewriting all local/mud rows
+    // would silently fold this unrelated project into owner/mud.
+    seedEvent(db, { id: 'e3', repo: 'local/mud', projectDir: dir2 });
+
+    const result = healLocalRepoIdentities(db);
+
+    assert.equal(result.healed.length, 0, 'should not heal when a dir has no slug sibling');
+    assert.deepEqual(result.ambiguous, ['local/mud']);
+    // Both local/mud rows must be untouched.
+    const rows = db.prepare(`SELECT repo FROM usage_events WHERE repo = 'local/mud' ORDER BY id`).all() as Array<{ repo: string }>;
+    assert.equal(rows.length, 2, 'both local/mud rows should remain');
+    const slugRow = db.prepare(`SELECT repo FROM usage_events WHERE id = 'e2'`).get() as { repo: string };
+    assert.equal(slugRow.repo, 'owner/mud', 'slug row should be untouched');
+  });
+
   test('is idempotent — second run heals nothing', () => {
     const db = makeDb();
     const dir = '/Users/ben/Projects/mud';

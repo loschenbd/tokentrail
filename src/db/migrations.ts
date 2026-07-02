@@ -54,7 +54,14 @@ export function runMigrations(db: Database.Database): void {
   });
   tx();
   try {
-    db.transaction(() => healLocalRepoIdentities(db))();
+    const healResult = db.transaction(() => healLocalRepoIdentities(db))();
+    if (healResult.healed.length > 0) {
+      const detail = healResult.healed.map((h) => `${h.from} -> ${h.to}`).join(', ');
+      console.log(`Merged ${healResult.healed.length} local repo identit${healResult.healed.length === 1 ? 'y' : 'ies'}: ${detail}`);
+    }
+    for (const a of healResult.ambiguous) {
+      console.log(`Skipped ${a}: could not prove a single remote identity; left as-is.`);
+    }
   } catch (err) {
     console.error(`Repo identity heal skipped: ${err instanceof Error ? err.message : String(err)}`);
   }

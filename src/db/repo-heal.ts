@@ -32,6 +32,22 @@ export function healLocalRepoIdentities(db: Database.Database): HealResult {
       AND ue2.repo NOT LIKE 'local/%'
   `);
 
+  // Counts directories where local/X appears but has no non-local sibling
+  // (includes NULL project_dir, which is inherently unprovable).
+  const countUnprovableDirs = db.prepare(`
+    SELECT COUNT(*) AS n FROM (
+      SELECT DISTINCT ue1.project_dir AS dir
+      FROM usage_events ue1
+      WHERE ue1.repo = ?
+        AND (ue1.project_dir IS NULL OR NOT EXISTS (
+          SELECT 1 FROM usage_events ue2
+          WHERE ue2.project_dir = ue1.project_dir
+            AND ue2.repo IS NOT NULL AND ue2.repo != ''
+            AND ue2.repo NOT LIKE 'local/%'
+        ))
+    )
+  `);
+
   for (const { repo: localRepo } of locals) {
     const slugs = findSlugs.all(localRepo) as Array<{ slug: string }>;
     if (slugs.length === 0) continue;           // genuinely local-only
@@ -39,17 +55,18 @@ export function healLocalRepoIdentities(db: Database.Database): HealResult {
       ambiguous.push(localRepo);
       continue;
     }
+    // Guard: if this local/X also appears on a dir with no slug sibling, the
+    // merge rule is not provable for all rows — skip to avoid folding an
+    // unrelated project's spend into the slug project.
+    const { n } = countUnprovableDirs.get(localRepo) as { n: number };
+    if (n > 0) {
+      ambiguous.push(localRepo);
+      continue;
+    }
     rewriteRepo(db, localRepo, slugs[0]!.slug);
     healed.push({ from: localRepo, to: slugs[0]!.slug });
   }
 
-  if (healed.length > 0) {
-    const detail = healed.map((h) => `${h.from} -> ${h.to}`).join(', ');
-    console.log(`Merged ${healed.length} local repo identit${healed.length === 1 ? 'y' : 'ies'}: ${detail}`);
-  }
-  for (const a of ambiguous) {
-    console.log(`Skipped ${a}: multiple remote repos share its directory; left as-is.`);
-  }
   return { healed, ambiguous };
 }
 

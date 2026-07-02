@@ -143,7 +143,7 @@ function renderTrendLegend(
   return rows.map((p) => {
     const clickable = p.clickable ? '1' : '0';
     const expandable = p.key === OTHER_KEY && otherProjects.length > 0;
-    const row = `<li class="trend-legend-row" data-project-key="${escapeHtml(p.key)}" data-project-color="${escapeHtml(p.color)}" data-clickable="${clickable}"${expandable ? ' data-expandable="1"' : ''}>
+    const row = `<li class="trend-legend-row" data-project-key="${escapeHtml(p.key)}" data-project-color="${escapeHtml(p.color)}" data-clickable="${clickable}"${expandable ? ' data-expandable="1" role="button" tabindex="0" aria-expanded="false"' : ''}>
       <span class="swatch" style="background:${escapeHtml(p.color)}"></span>
       <span class="name">${escapeHtml(p.name)}${expandable ? ' <span class="chevron">&#9656;</span>' : ''}</span>
       <span class="amt">$${p.totalUsd.toFixed(0)}</span>

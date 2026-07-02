@@ -132,7 +132,7 @@ function renderActiveWork(vm: ProjectDetailVM): string {
 
 function renderBranchSummary(bg: NonNullable<ProjectDetailVM['branchGraph']>): string {
   type BranchLike = { name: string; state?: string; totalUsd?: number };
-  const branches = (bg.branches ?? []) as BranchLike[];
+  const branches = (bg.branches ?? []) as unknown as BranchLike[];
   const bucket = (state: string) => branches.filter((b) => b.state === state);
   const rowFor = (label: string, state: string) => {
     const items = bucket(state);

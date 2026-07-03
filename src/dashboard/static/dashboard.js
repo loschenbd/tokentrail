@@ -703,9 +703,48 @@
       container.innerHTML = kept.map((f) => {
         const striped = f.color === '__striped__' ? ' subbar-segment--striped' : '';
         const bg = f.color === '__striped__' ? '' : `background:${escapeAttr(f.color)};`;
-        const title = escapeAttr(`${f.name}: $${f.totalUsd.toFixed(0)}`);
-        return `<div class="subbar-segment${striped}" style="${bg}width:${f.pct.toFixed(2)}%" title="${title}"></div>`;
+        const swatch = f.color === '__striped__' ? '#6B7280' : f.color;
+        return `<div class="subbar-segment${striped}" style="${bg}width:${f.pct.toFixed(2)}%" data-feature-name="${escapeAttr(f.name)}" data-usd="${f.totalUsd.toFixed(0)}" data-swatch="${escapeAttr(swatch)}"></div>`;
       }).join('');
+      container.querySelectorAll('.subbar-segment').forEach(attachSubbarSegmentTip);
+    });
+  }
+
+  // One shared tooltip for all subbar segments, appended to <body> so the
+  // subbar's overflow:hidden can't clip it. It sits directly above the
+  // hovered segment, so it must be pointer-events:none (set in CSS) or it
+  // would intercept the very hover that opened it.
+  let subbarTip = null;
+  function ensureSubbarTip() {
+    if (!subbarTip) {
+      subbarTip = document.createElement('div');
+      subbarTip.className = 'chart-tooltip subbar-tooltip';
+      subbarTip.style.display = 'none';
+      document.body.appendChild(subbarTip);
+    }
+    return subbarTip;
+  }
+
+  function attachSubbarSegmentTip(seg) {
+    seg.addEventListener('mouseenter', () => {
+      const tip = ensureSubbarTip();
+      tip.innerHTML = `<span class="swatch" style="background:${escapeAttr(seg.dataset.swatch || '#9CA3AF')}"></span>` +
+        `<span class="name">${esc(seg.dataset.featureName || '')}</span>` +
+        `<span class="amt">$${esc(seg.dataset.usd || '0')}</span>`;
+      // Display before measuring — offsetWidth is 0 while display:none.
+      // 'flex', not 'block': the inline style overrides the stylesheet's
+      // display:flex, and block layout drops the swatch/name/amt gap.
+      tip.style.display = 'flex';
+      const rect = seg.getBoundingClientRect();
+      const x = Math.max(8, Math.min(
+        rect.left + rect.width / 2 - tip.offsetWidth / 2,
+        window.innerWidth - tip.offsetWidth - 8,
+      ));
+      tip.style.left = x + 'px';
+      tip.style.top = (rect.top - tip.offsetHeight - 6) + 'px';
+    });
+    seg.addEventListener('mouseleave', () => {
+      if (subbarTip) subbarTip.style.display = 'none';
     });
   }
 

@@ -65,7 +65,8 @@ fi
 exec node - <<'NODE_PLUGIN'
 'use strict';
 
-const DASHBOARD_URL = 'http://127.0.0.1:4920';
+// TT_DASHBOARD_URL override exists for testing against a non-default port.
+const DASHBOARD_URL = process.env.TT_DASHBOARD_URL || 'http://127.0.0.1:4920';
 const ENDPOINT = `${DASHBOARD_URL}/api/today`;
 const REPO_URL = 'https://github.com/loschenbd/tokentrail#menu-bar-widget-swiftbar';
 const FETCH_TIMEOUT_MS = 2000;
@@ -127,10 +128,128 @@ function plural(n, singular, pluralForm) {
   return `${n} ${n === 1 ? singular : pluralForm}`;
 }
 
-// Block glyphs for the 14-day sparkline. Index 0 is '▁' (the smallest
-// visible block) rather than space — even a zero-spend day shows a
-// baseline tick so the chart has a continuous horizontal axis instead
-// of gaps that read like missing data.
+// --- Stacked-trend chart image ---------------------------------------
+// SwiftBar renders `image=<base64 PNG>` menu rows via NSImage, and NSImage
+// sizes a bitmap from its pHYs DPI metadata — so a 2x-pixel PNG stamped
+// 144dpi displays at half its pixel size, i.e. retina-crisp. No image
+// library is available in SwiftBar's stripped environment, so the PNG is
+// encoded by hand: 8-bit RGBA scanlines, filter 0, zlib from node core.
+
+const zlib = require('zlib');
+
+const CRC_TABLE = (() => {
+  const t = new Int32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c;
+  }
+  return t;
+})();
+
+function crc32(buf) {
+  let c = -1;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ -1) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const out = Buffer.alloc(8 + data.length + 4);
+  out.writeUInt32BE(data.length, 0);
+  out.write(type, 4, 'ascii');
+  data.copy(out, 8);
+  out.writeUInt32BE(crc32(out.subarray(4, 8 + data.length)), 8 + data.length);
+  return out;
+}
+
+function encodePng(width, height, rgba) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;  // bit depth
+  ihdr[9] = 6;  // color type: RGBA
+  // 144 dpi = 5669 pixels/metre — the retina half-scale signal.
+  const phys = Buffer.alloc(9);
+  phys.writeUInt32BE(5669, 0);
+  phys.writeUInt32BE(5669, 4);
+  phys[8] = 1;
+  const stride = width * 4 + 1;
+  const raw = Buffer.alloc(stride * height);
+  for (let y = 0; y < height; y++) {
+    raw[y * stride] = 0; // filter: none
+    rgba.copy(raw, y * stride + 1, y * width * 4, (y + 1) * width * 4);
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('pHYs', phys),
+    pngChunk('IDAT', zlib.deflateSync(raw, { level: 9 })),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]).toString('base64');
+}
+
+function hexToRgb(hex) {
+  const h = String(hex).replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+// Draw the 30-day stacked area chart, column by column. Mirrors the
+// dashboard trend chart: bands stack bottom-up in stackPosition order
+// with the same server-resolved project colors; values between day
+// points are linearly interpolated, which reproduces the area-polygon
+// look at pixel resolution. Background stays transparent so the chart
+// sits naturally on both light and dark menus.
+const TREND_W = 480;  // 2x pixels → 240pt wide in the menu
+const TREND_H = 120;  // → 60pt tall
+function renderTrendImage(trend) {
+  const days = (trend && trend.days) || [];
+  const order = ((trend && trend.projects) || []).slice().sort((a, b) => a.stackPosition - b.stackPosition);
+  if (days.length < 2 || order.length === 0) return null;
+  const sums = days.map((d) => order.reduce((s, p) => s + (d.bands[p.key] || 0), 0));
+  const yMax = Math.max.apply(null, sums);
+  if (yMax <= 0) return null;
+  const colors = order.map((p) => hexToRgb(p.color));
+  const rgba = Buffer.alloc(TREND_W * TREND_H * 4);
+  for (let x = 0; x < TREND_W; x++) {
+    const t = (x / (TREND_W - 1)) * (days.length - 1);
+    const i = Math.min(days.length - 2, Math.floor(t));
+    const f = t - i;
+    let cumA = 0;
+    let cumB = 0;
+    let floorPx = TREND_H;
+    for (let b = 0; b < order.length; b++) {
+      const key = order[b].key;
+      cumA += days[i].bands[key] || 0;
+      cumB += days[i + 1].bands[key] || 0;
+      const v = cumA + (cumB - cumA) * f;
+      const topPx = Math.max(0, Math.round(TREND_H - (v / yMax) * (TREND_H - 2)));
+      for (let y = topPx; y < floorPx; y++) {
+        const o = (y * TREND_W + x) * 4;
+        rgba[o] = colors[b][0];
+        rgba[o + 1] = colors[b][1];
+        rgba[o + 2] = colors[b][2];
+        rgba[o + 3] = 255;
+      }
+      floorPx = Math.min(floorPx, topPx);
+    }
+    // Baseline tick — 2px of dim ink wherever nothing was drawn, so
+    // zero-spend days keep a continuous axis (same rationale as the
+    // block sparkline's '▁' floor).
+    for (let y = TREND_H - 2; y < TREND_H; y++) {
+      const o = (y * TREND_W + x) * 4;
+      if (rgba[o + 3] === 0) {
+        rgba[o] = 139; rgba[o + 1] = 111; rgba[o + 2] = 71; rgba[o + 3] = 70;
+      }
+    }
+  }
+  return encodePng(TREND_W, TREND_H, rgba);
+}
+
+// Block glyphs for the 14-day sparkline — fallback when the server
+// predates menubar.trend or the 30d window is empty. Index 0 is '▁'
+// (the smallest visible block) rather than space — even a zero-spend
+// day shows a baseline tick so the chart has a continuous horizontal
+// axis instead of gaps that read like missing data.
 const BLOCKS = ['▁', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 function spark(values) {
   const max = Math.max.apply(null, values.concat(1));
@@ -230,13 +349,26 @@ function renderHappy(data) {
     }
   }
 
-  // Sparkline — 14-day spend trend, rendered chunky at size=22 so it
-  // reads as a real chart, not a footnote. Label below it (small dim).
-  const sparkText = menubar.sparkline && menubar.sparkline.length ? spark(menubar.sparkline) : '';
-  if (sparkText) {
+  // Trend — 30-day stacked area chart matching the dashboard (same bands,
+  // same project colors). Falls back to the block-glyph sparkline when the
+  // server predates menubar.trend or the image can't be built.
+  let trendImg = null;
+  try {
+    trendImg = menubar.trend ? renderTrendImage(menubar.trend) : null;
+  } catch {
+    trendImg = null;
+  }
+  if (trendImg) {
     if (projectCount > 0) lines.push('---');
-    lines.push(`${sparkText} | ${SPARK_FONT}`);
-    lines.push(`last 14 days | ${SPARK_LABEL}`);
+    lines.push(`| image=${trendImg} href=${DASHBOARD_URL}/`);
+    lines.push(`last 30 days | ${SPARK_LABEL}`);
+  } else {
+    const sparkText = menubar.sparkline && menubar.sparkline.length ? spark(menubar.sparkline) : '';
+    if (sparkText) {
+      if (projectCount > 0) lines.push('---');
+      lines.push(`${sparkText} | ${SPARK_FONT}`);
+      lines.push(`last 14 days | ${SPARK_LABEL}`);
+    }
   }
 
   lines.push('---');

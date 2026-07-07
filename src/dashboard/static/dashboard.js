@@ -155,10 +155,14 @@
     // uPlot series + bands wiring.
     // series[0] is the x-axis pseudo-series. Real series start at 1.
     // Trend chart uses solid hex fills only (no stripes — makeStripePattern lives on in Task 5/6).
+    // stroke/fill are FUNCTIONS so hover isolation re-resolves them per
+    // draw: when a project is active (legend hover or cursor inside its
+    // band), every other band ghosts to low opacity in place.
+    let activeKey = null;
     const series = [{}].concat(stackOrder.map((proj) => ({
       label: proj.name,
-      stroke: proj.color,
-      fill: hexToRgba(proj.color, 0.92),
+      stroke: () => (activeKey && proj.key !== activeKey ? hexToRgba(proj.color, 0.25) : proj.color),
+      fill: () => (activeKey && proj.key !== activeKey ? hexToRgba(proj.color, 0.15) : hexToRgba(proj.color, 0.92)),
       width: 1,
       points: { show: false },
     })));
@@ -174,7 +178,15 @@
     let chartCanvas;
     function setActiveKey(key) {
       if (!chartCanvas) return;
-      chartCanvas.classList.toggle('chart-dimmed', !!key);
+      // In-place band isolation: repaint with the per-series fill/stroke
+      // functions above (they read activeKey). Replaces the old whole-
+      // canvas .chart-dimmed opacity drop, which dimmed the hovered band
+      // along with everything else. Redraw only on real changes —
+      // setCursor calls this every mouse move.
+      if (key !== activeKey) {
+        activeKey = key;
+        if (node.__uplot) node.__uplot.redraw();
+      }
       if (legend) {
         legend.querySelectorAll('.trend-legend-row').forEach((li) => {
           li.classList.toggle('active', li.getAttribute('data-project-key') === key);

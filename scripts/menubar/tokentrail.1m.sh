@@ -229,7 +229,12 @@ function dotPng(hex, px) {
 // sits naturally on both light and dark menus.
 const TREND_W = 480;  // 2x pixels → 240pt wide in the menu
 const TREND_H = 120;  // → 60pt tall
-function renderTrendImage(trend) {
+// highlightKey (optional): draw that band at full strength and ghost the
+// rest at low alpha — the hover-isolation view served from a legend row's
+// submenu. Stack GEOMETRY is unchanged (same cumulative tops), only paint
+// differs, so the isolated band sits exactly where it does in the full
+// chart and the eye can map between the two.
+function renderTrendImage(trend, highlightKey) {
   const days = (trend && trend.days) || [];
   const order = ((trend && trend.projects) || []).slice().sort((a, b) => a.stackPosition - b.stackPosition);
   if (days.length < 2 || order.length === 0) return null;
@@ -251,12 +256,13 @@ function renderTrendImage(trend) {
       cumB += days[i + 1].bands[key] || 0;
       const v = cumA + (cumB - cumA) * f;
       const topPx = Math.max(0, Math.round(TREND_H - (v / yMax) * (TREND_H - 2)));
+      const alpha = !highlightKey || key === highlightKey ? 255 : 48;
       for (let y = topPx; y < floorPx; y++) {
         const o = (y * TREND_W + x) * 4;
         rgba[o] = colors[b][0];
         rgba[o + 1] = colors[b][1];
         rgba[o + 2] = colors[b][2];
-        rgba[o + 3] = 255;
+        rgba[o + 3] = alpha;
       }
       floorPx = Math.min(floorPx, topPx);
     }
@@ -480,16 +486,33 @@ function appendTrendBlock(lines, menubar) {
     ...tail.map((p) => projectDisplayName(p).length + 1)
   );
 
-  for (const p of top) lines.push(legendRow(p, p.total, p.color));
+  // Banded legend rows are submenu parents: hovering opens the isolated
+  // view — the same chart with this project's band at full strength and
+  // everything else ghosted — plus an explicit "Open <project>" link
+  // (an NSMenu row with children isn't itself clickable, so the click-
+  // through moves inside). depth = '' for inline rows, '--' inside the
+  // "+ N more" submenu (children then use '----').
+  const pushIsolated = (p, total, depth) => {
+    lines.push(depth + legendRow(p, total, p.color));
+    let iso = null;
+    try { iso = renderTrendImage(menubar.trend, p.key); } catch { iso = null; }
+    if (!iso) return;
+    const href = `${DASHBOARD_URL}/project/${encodeURIComponent(p.key)}`;
+    lines.push(`${depth}--| image=${iso} href=${href}`);
+    lines.push(`${depth}--Open ${sanitizeLabel(projectDisplayName(p))} → | href=${href} ${FEATURE_STYLE}`);
+  };
+
+  for (const p of top) pushIsolated(p, p.total, '');
 
   const moreCount = rest.length + tail.length;
   if (moreCount > 0) {
     lines.push(`+ ${moreCount} more | ${SPARK_LABEL}`);
-    // Submenu rows ('--' prefix): remaining banded projects keep their
-    // band colors; tail projects get the Other-band gray, matching how
-    // the chart actually draws them.
-    for (const p of rest) lines.push('--' + legendRow(p, p.total, p.color));
-    for (const p of tail) lines.push('--' + legendRow(p, p.totalUsd, '#9CA3AF'));
+    for (const p of rest) pushIsolated(p, p.total, '--');
+    // Tail rows: identity-colored dots (server sends the same color the
+    // dashboard burn-paths uses; pre-0.2.10 payloads lack it → gray).
+    // Straight links, no isolation — their spend draws inside the gray
+    // __other__ band, so there is no distinct band to isolate.
+    for (const p of tail) lines.push('--' + legendRow(p, p.totalUsd, p.color || '#9CA3AF'));
   }
 }
 

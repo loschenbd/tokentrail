@@ -274,6 +274,10 @@ describe('buildToday — menubar summary', () => {
     assert.equal(trend.others[0]!.name, 'proj6');   // $20 > $10 — sorted desc
     assert.equal(trend.others[0]!.totalUsd, 20);
     assert.equal(trend.others[1]!.name, 'proj7');
+    // Identity colors ride along so the menubar legend can match the
+    // dashboard burn-paths swatches instead of falling back to gray.
+    assert.match(trend.others[0]!.color, /^#[0-9a-f]{6}$/i);
+    assert.match(trend.others[1]!.color, /^#[0-9a-f]{6}$/i);
   });
 
   test('trend on an empty DB: 30 zeroed days, no projects', () => {

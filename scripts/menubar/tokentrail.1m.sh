@@ -100,7 +100,9 @@ const STAT_FONT = `font=Menlo size=12 color=${C_MEDIUM}`;
 const SPARK_FONT = `font=Menlo size=22 color=${C_SPARK}`;
 const SPARK_LABEL = `color=${C_MUTED} size=10`;
 const PROJECT_FONT = `font=Menlo-Bold size=13 color=${C_STRONG}`;
-const FEATURE_STYLE = `color=${C_MEDIUM} size=11`;
+// Menlo here too: feature/legend rows pad into columns with padEnd/
+// padStart, which only aligns in a true monospace face.
+const FEATURE_STYLE = `font=Menlo size=11 color=${C_MEDIUM}`;
 const META_STYLE = `color=${C_MEDIUM} size=11`;
 const SECTION_LABEL = `color=${C_MUTED} size=10`;
 const ACTION_STYLE = `color=${C_STRONG}`;
@@ -436,7 +438,10 @@ function appendTrendBlock(lines, menubar) {
       String(projectDisplayName(p)).padEnd(nameW) + ('$' + Math.round(p.total).toLocaleString('en-US')).padStart(10)
     );
     const href = p.key === '__other__' ? `${DASHBOARD_URL}/` : `${DASHBOARD_URL}/project/${encodeURIComponent(p.key)}`;
-    lines.push(`${label} | href=${href} sfimage=circle.fill sfcolor=${p.color} sfsize=9 ${FEATURE_STYLE}`);
+    // sfcolor as a light,dark PAIR — SwiftBar renders a single hex value
+    // as the default (black) template tint; every working sfcolor in this
+    // plugin is a pair. Project hues work on both appearances, so repeat.
+    lines.push(`${label} | href=${href} sfimage=circle.fill sfcolor=${p.color},${p.color} sfsize=9 ${FEATURE_STYLE}`);
   }
 }
 

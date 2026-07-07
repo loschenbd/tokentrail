@@ -561,7 +561,27 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   width: calc(var(--pct, 100) * 1%);
   min-width: 12px;
 }
-.subbar-segment { height: 100%; }
+/* min-width keeps every segment hoverable — on narrow bars the trailing
+   "other features" bucket can otherwise round below 1px and lose its
+   hit area entirely. */
+.subbar-segment { height: 100%; min-width: 2px; }
+.subbar-segment:hover { filter: brightness(0.85); }
+/*
+ * Shared hover tooltip for subbar segments. Lives on <body> (the subbar
+ * clips overflow), so position:fixed to match getBoundingClientRect's
+ * viewport coordinates. pointer-events:none — it renders directly above
+ * the hovered segment and must not steal the hover that opened it.
+ */
+.subbar-tooltip {
+  position: fixed;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.subbar-tooltip .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.subbar-tooltip .name { font-weight: 600; }
+.subbar-tooltip .amt { color: var(--color-ink-muted); font-variant-numeric: tabular-nums; }
 .subbar-segment--striped {
   background: repeating-linear-gradient(
     45deg,

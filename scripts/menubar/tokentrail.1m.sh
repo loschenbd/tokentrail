@@ -445,7 +445,10 @@ function appendTrendBlock(lines, menubar) {
     }
     return;
   }
-  lines.push(`| image=${trendImg} href=${DASHBOARD_URL}/`);
+  // No href: an enabled row gets macOS's blue selection highlight on
+  // hover, which paints over the whole chart. Static image instead —
+  // "Open dashboard" below carries the click-through.
+  lines.push(`| image=${trendImg}`);
   // Micro-legend: top 3 real projects inline (band-colored bitmap dots),
   // then a "+ N more" submenu itemizing the rest of the window — the
   // remaining banded projects in their band colors, and the tail projects

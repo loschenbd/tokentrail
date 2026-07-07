@@ -260,6 +260,22 @@ describe('buildToday — menubar summary', () => {
     assert.equal(today.bands['repo:loschenbd/alpha'], 7);
   });
 
+  test('trend.others itemizes tail projects (rank 7+) behind the Other band', () => {
+    const db = makeDb();
+    const today = (db.prepare(`SELECT date('now','localtime') AS d`).get() as { d: string }).d;
+    // 8 projects, descending spend — top 6 get bands, 2 land in the tail.
+    for (let i = 0; i < 8; i++) {
+      insertRollup(db, { date: today, featureKey: `p${i}-f`, featureName: `P${i} F`, repo: `loschenbd/proj${i}`, cost: 80 - i * 10, sessionIds: `s${i}`, sessions: 1 });
+    }
+    const trend = buildToday(db).menubar.trend;
+    assert.equal(trend.projects.length, 7); // top 6 + __other__
+    assert.ok(trend.projects.some((p) => p.key === '__other__'));
+    assert.equal(trend.others.length, 2);
+    assert.equal(trend.others[0]!.name, 'proj6');   // $20 > $10 — sorted desc
+    assert.equal(trend.others[0]!.totalUsd, 20);
+    assert.equal(trend.others[1]!.name, 'proj7');
+  });
+
   test('trend on an empty DB: 30 zeroed days, no projects', () => {
     const db = makeDb();
     const res = buildToday(db);

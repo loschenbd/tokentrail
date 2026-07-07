@@ -446,25 +446,50 @@ function appendTrendBlock(lines, menubar) {
     return;
   }
   lines.push(`| image=${trendImg} href=${DASHBOARD_URL}/`);
-  // Micro-legend: top 3 projects by 30d total, swatch in the project's
-  // band color. Names come from the server (trend.projects[].name); older
-  // 0.2.7 servers lack the field, so derive a readable name from the key.
+  // Micro-legend: top 3 real projects inline (band-colored bitmap dots),
+  // then a "+ N more" submenu itemizing the rest of the window — the
+  // remaining banded projects in their band colors, and the tail projects
+  // that live inside the gray __other__ band (trend.others; servers
+  // predating it fall back to the single gray Other aggregate). Names
+  // come from the server; older payloads derive them from the key.
   const totals = new Map();
   for (const d of menubar.trend.days) {
     for (const [k, v] of Object.entries(d.bands)) totals.set(k, (totals.get(k) || 0) + v);
   }
-  const top = menubar.trend.projects
+  const others = menubar.trend.others || null;
+  const ranked = menubar.trend.projects
     .map((p) => ({ ...p, total: totals.get(p.key) || 0 }))
-    .filter((p) => p.total > 0)
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 3);
-  const nameW = Math.max(LABEL_W, ...top.map((p) => projectDisplayName(p).length + 1));
-  for (const p of top) {
+    // When the tail is itemized, the gray aggregate would double-represent
+    // it — drop the __other__ band row in that case.
+    .filter((p) => p.total > 0 && !(others && p.key === '__other__'))
+    .sort((a, b) => b.total - a.total);
+  const top = ranked.slice(0, 3);
+  const rest = ranked.slice(3);
+  const tail = (others || []).filter((p) => p.totalUsd > 0);
+
+  const legendRow = (p, total, color) => {
     const label = sanitizeLabel(
-      String(projectDisplayName(p)).padEnd(nameW) + ('$' + Math.round(p.total).toLocaleString('en-US')).padStart(10)
+      String(projectDisplayName(p)).padEnd(legendNameW) + ('$' + Math.round(total).toLocaleString('en-US')).padStart(10)
     );
     const href = p.key === '__other__' ? `${DASHBOARD_URL}/` : `${DASHBOARD_URL}/project/${encodeURIComponent(p.key)}`;
-    lines.push(`${label} | href=${href} image=${dotPng(p.color, 18)} ${FEATURE_STYLE}`);
+    return `${label} | href=${href} image=${dotPng(color, 18)} ${FEATURE_STYLE}`;
+  };
+  const legendNameW = Math.max(
+    LABEL_W,
+    ...top.concat(rest).map((p) => projectDisplayName(p).length + 1),
+    ...tail.map((p) => projectDisplayName(p).length + 1)
+  );
+
+  for (const p of top) lines.push(legendRow(p, p.total, p.color));
+
+  const moreCount = rest.length + tail.length;
+  if (moreCount > 0) {
+    lines.push(`+ ${moreCount} more | ${SPARK_LABEL}`);
+    // Submenu rows ('--' prefix): remaining banded projects keep their
+    // band colors; tail projects get the Other-band gray, matching how
+    // the chart actually draws them.
+    for (const p of rest) lines.push('--' + legendRow(p, p.total, p.color));
+    for (const p of tail) lines.push('--' + legendRow(p, p.totalUsd, '#9CA3AF'));
   }
 }
 

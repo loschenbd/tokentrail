@@ -26,6 +26,10 @@ export type TodayProject = {
 export type MenubarTrend = {
   days: Array<{ date: string; bands: Record<string, number> }>;
   projects: Array<{ key: string; name: string; color: string; stackPosition: number }>;
+  // Tail projects (rank 7+) that live inside the __other__ band, so the
+  // legend's expander can itemize the full window instead of one gray
+  // aggregate. Sorted descending by spend, same as the dashboard legend.
+  others: Array<{ key: string; name: string; totalUsd: number }>;
 };
 
 export type MenubarSummary = {
@@ -123,6 +127,11 @@ function buildMenubarTrend(db: DatabaseType.Database): MenubarTrend {
       name: p.name,
       color: p.color,
       stackPosition: p.stackPosition,
+    })),
+    others: overview.otherProjects.map((p) => ({
+      key: p.key,
+      name: p.name,
+      totalUsd: p.totalUsd,
     })),
   };
 }

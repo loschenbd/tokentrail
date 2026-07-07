@@ -20,6 +20,14 @@ export type TodayProject = {
   features: TodayFeature[];
 };
 
+// Slim 30-day stacked-trend payload for the menubar plugin's chart image.
+// Mirrors the overview trend chart: same bands, same server-resolved project
+// colors, same stack order — so the dropdown chart matches the dashboard.
+export type MenubarTrend = {
+  days: Array<{ date: string; bands: Record<string, number> }>;
+  projects: Array<{ key: string; color: string; stackPosition: number }>;
+};
+
 export type MenubarSummary = {
   sparkline: number[];          // last 14 days, oldest first, today rightmost
   last7Usd: number;
@@ -27,6 +35,7 @@ export type MenubarSummary = {
   deltaVsYesterday: number;     // signed % vs yesterday; 0 when both 0;
                                 // Infinity when yesterday is 0 and today > 0
   yesterdayUsd: number;
+  trend: MenubarTrend;
 };
 
 export type TodayResponse = {
@@ -95,6 +104,18 @@ export function buildToday(db: DatabaseType.Database): TodayResponse {
   };
 }
 
+function buildMenubarTrend(db: DatabaseType.Database): MenubarTrend {
+  const overview = buildOverview({ db, days: 30 });
+  return {
+    days: overview.days.map((d) => ({ date: d.date, bands: d.bands })),
+    projects: overview.projects.map((p) => ({
+      key: p.key,
+      color: p.color,
+      stackPosition: p.stackPosition,
+    })),
+  };
+}
+
 function buildMenubarSummary(db: DatabaseType.Database, todayUsd: number): MenubarSummary {
   // Daily totals over the last 30 days, one query.
   const rows = db
@@ -130,6 +151,7 @@ function buildMenubarSummary(db: DatabaseType.Database, todayUsd: number): Menub
     last30Usd: round2(last30Usd),
     deltaVsYesterday,
     yesterdayUsd,
+    trend: buildMenubarTrend(db),
   };
 }
 

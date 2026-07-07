@@ -229,4 +229,40 @@ describe('buildToday — menubar summary', () => {
     assert.equal(res.menubar.yesterdayUsd, 0);
     assert.equal(res.menubar.deltaVsYesterday, 0);
   });
+
+  test('trend carries 30 days of per-project bands with colors and stack order', () => {
+    const db = makeDb();
+    const offsets: Array<[number, string, number]> = [
+      [-5, 'loschenbd/alpha', 12],
+      [-5, 'loschenbd/beta', 3],
+      [0, 'loschenbd/alpha', 7],
+    ];
+    offsets.forEach(([offset, repo, cost], i) => {
+      const date = (db.prepare(`SELECT date('now', '${offset} days', 'localtime') AS d`).get() as { d: string }).d;
+      insertRollup(db, { date, featureKey: `f-${i}`, featureName: `F ${i}`, repo, cost, sessionIds: `s-${i}`, sessions: 1 });
+    });
+    const res = buildToday(db);
+    const trend = res.menubar.trend;
+
+    assert.equal(trend.days.length, 30);
+    // alpha ($19) outspends beta ($3) → bottom of the stack.
+    assert.equal(trend.projects.length, 2);
+    const alpha = trend.projects.find((p) => p.key === 'repo:loschenbd/alpha')!;
+    const beta = trend.projects.find((p) => p.key === 'repo:loschenbd/beta')!;
+    assert.equal(alpha.stackPosition, 0);
+    assert.equal(beta.stackPosition, 1);
+    assert.match(alpha.color, /^#[0-9a-f]{6}$/i);
+
+    const day5 = trend.days.find((d) => d.bands['repo:loschenbd/beta'] === 3)!;
+    assert.equal(day5.bands['repo:loschenbd/alpha'], 12);
+    const today = trend.days[trend.days.length - 1]!;
+    assert.equal(today.bands['repo:loschenbd/alpha'], 7);
+  });
+
+  test('trend on an empty DB: 30 zeroed days, no projects', () => {
+    const db = makeDb();
+    const res = buildToday(db);
+    assert.equal(res.menubar.trend.days.length, 30);
+    assert.equal(res.menubar.trend.projects.length, 0);
+  });
 });

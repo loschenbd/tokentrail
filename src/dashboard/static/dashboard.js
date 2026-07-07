@@ -236,6 +236,9 @@
               const tw = tooltip.offsetWidth;
               let px = left + 12;
               if (px + tw > rect.width) px = left - tw - 12;
+              // Clamp inside the chart node: near the left edge the flip
+              // above goes negative and a wide tooltip flows out of view.
+              px = Math.max(8, Math.min(px, rect.width - tw - 8));
               tooltip.style.left = px + 'px';
               tooltip.style.top = '8px';
             };
@@ -452,6 +455,9 @@
         const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
         let px = cx + 12, py = cy - th - 8;
         if (px + tw > rect.width) px = cx - tw - 12;
+        // Same clamp as the trend tooltip — the flip can push a wide
+        // tooltip past the node's left edge for markers near x=0.
+        px = Math.max(8, Math.min(px, rect.width - tw - 8));
         if (py < 0) py = cy + 12;
         tooltip.style.left = px + 'px'; tooltip.style.top = py + 'px';
       });

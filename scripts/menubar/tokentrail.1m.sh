@@ -195,6 +195,32 @@ function hexToRgb(hex) {
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
+// Solid color dot as a bitmap. SF Symbols with sfcolor render as the
+// default black template tint whenever sfsize is also set (SwiftBar
+// appears to drop the color configuration when applying a size one), so
+// swatches that MUST be color-accurate are drawn as PNGs — a bitmap
+// can't be re-tinted. 1px anti-aliased edge; transparent background.
+const DOT_CACHE = {};
+function dotPng(hex, px) {
+  const cacheKey = hex + ':' + px;
+  if (DOT_CACHE[cacheKey]) return DOT_CACHE[cacheKey];
+  const [r, g, b] = hexToRgb(hex);
+  const rgba = Buffer.alloc(px * px * 4);
+  const c = (px - 1) / 2;
+  const rad = px / 2 - 0.5;
+  for (let y = 0; y < px; y++) {
+    for (let x = 0; x < px; x++) {
+      const d = Math.hypot(x - c, y - c);
+      const a = Math.max(0, Math.min(1, rad - d + 0.5));
+      if (a > 0) {
+        const o = (y * px + x) * 4;
+        rgba[o] = r; rgba[o + 1] = g; rgba[o + 2] = b; rgba[o + 3] = Math.round(a * 255);
+      }
+    }
+  }
+  return (DOT_CACHE[cacheKey] = encodePng(px, px, rgba));
+}
+
 // Draw the 30-day stacked area chart, column by column. Mirrors the
 // dashboard trend chart: bands stack bottom-up in stackPosition order
 // with the same server-resolved project colors; values between day
@@ -333,7 +359,7 @@ function renderHappy(data) {
   const live = isLiveNow(data.lastEventAt);
   const status = hot
     ? ` sfimage=flame.fill sfcolor=${C_AMBER}`
-    : (live ? ` sfimage=circle.fill sfcolor=${C_LIVE} sfsize=8` : '');
+    : (live ? ` image=${dotPng('#43A047', 12)}` : '');  // 6pt green dot; bitmap, see dotPng
   lines.push(`~${fmtUsd(data.todayUsd)} | font=Menlo size=12${status}`);
   lines.push('---');
 
@@ -438,10 +464,7 @@ function appendTrendBlock(lines, menubar) {
       String(projectDisplayName(p)).padEnd(nameW) + ('$' + Math.round(p.total).toLocaleString('en-US')).padStart(10)
     );
     const href = p.key === '__other__' ? `${DASHBOARD_URL}/` : `${DASHBOARD_URL}/project/${encodeURIComponent(p.key)}`;
-    // sfcolor as a light,dark PAIR — SwiftBar renders a single hex value
-    // as the default (black) template tint; every working sfcolor in this
-    // plugin is a pair. Project hues work on both appearances, so repeat.
-    lines.push(`${label} | href=${href} sfimage=circle.fill sfcolor=${p.color},${p.color} sfsize=9 ${FEATURE_STYLE}`);
+    lines.push(`${label} | href=${href} image=${dotPng(p.color, 18)} ${FEATURE_STYLE}`);
   }
 }
 

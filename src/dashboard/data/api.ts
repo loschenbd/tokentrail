@@ -1,5 +1,6 @@
 import type DatabaseType from 'better-sqlite3';
 import { buildOverview, bucketProject } from './overview.js';
+import { colorForProject } from '../lib/feature-colors.js';
 
 const DASHBOARD_BASE_URL = 'http://127.0.0.1:4920';
 const MAX_PROJECTS = 3;
@@ -29,7 +30,9 @@ export type MenubarTrend = {
   // Tail projects (rank 7+) that live inside the __other__ band, so the
   // legend's expander can itemize the full window instead of one gray
   // aggregate. Sorted descending by spend, same as the dashboard legend.
-  others: Array<{ key: string; name: string; totalUsd: number }>;
+  // color is the project's identity color (same map as the burn-paths
+  // swatches), NOT the band color — in the chart these all draw gray.
+  others: Array<{ key: string; name: string; totalUsd: number; color: string }>;
 };
 
 export type MenubarSummary = {
@@ -132,6 +135,9 @@ function buildMenubarTrend(db: DatabaseType.Database): MenubarTrend {
       key: p.key,
       name: p.name,
       totalUsd: p.totalUsd,
+      // projectColors spans the burn-paths top 12; deeper tail projects
+      // get the same hash-picked hue the dashboard would give them solo.
+      color: overview.projectColors[p.key] ?? colorForProject(p.key),
     })),
   };
 }

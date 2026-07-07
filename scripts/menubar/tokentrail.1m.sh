@@ -265,8 +265,34 @@ function fmtDelta(d) {
   if (d === Infinity || d === 'Infinity') return 'first day';
   const arrow = d > 0 ? '▲' : '▼';                 // ▲ / ▼
   const abs = Math.abs(d);
-  if (abs >= 50) return arrow + ' ' + (1 + abs / 100).toFixed(1) + 'x';
+  // Decreases are bounded at 100%, so percent always reads cleanly —
+  // the old ≥50% multiplier form produced "▼ 1.6x", which is ambiguous
+  // for drops. Increases ≥300% still switch to a multiplier
+  // ("▲ 4.2x" = 4.2× yesterday); huge percentages of a small yesterday
+  // are noise.
+  if (d > 0 && abs >= 300) return arrow + ' ' + (1 + abs / 100).toFixed(1) + 'x';
   return arrow + ' ' + abs + '%';
+}
+
+// Menubar title status glyph. Two states, hot wins over live:
+//   hot  — today is an unusual burn day: ≥2× the median non-zero prior
+//          day in the sparkline window, past a $25 floor (so a $4
+//          morning doesn't flag against a $1.50 median).
+//   live — a session wrote usage events within the last 5 minutes.
+const LIVE_WINDOW_MS = 5 * 60 * 1000;
+const HOT_FLOOR_USD = 25;
+const C_LIVE = '#2E7D32,#4CAF50';
+function isLiveNow(lastEventAt) {
+  if (!lastEventAt) return false;
+  const t = new Date(lastEventAt).getTime();
+  return Number.isFinite(t) && Date.now() - t < LIVE_WINDOW_MS;
+}
+function isHotDay(todayUsd, sparkline) {
+  if (!Array.isArray(sparkline) || todayUsd < HOT_FLOOR_USD) return false;
+  const prior = sparkline.slice(0, -1).filter((v) => v > 0).sort((a, b) => a - b);
+  if (prior.length < 3) return false;  // too little history to call anything unusual
+  const median = prior[Math.floor(prior.length / 2)];
+  return todayUsd >= 2 * median;
 }
 
 function fmtAgo(ms) {
@@ -296,8 +322,17 @@ function renderHappy(data) {
   const menubar = data.menubar || { sparkline: [], last7Usd: 0, last30Usd: 0, deltaVsYesterday: 0, yesterdayUsd: 0 };
   const projectCount = data.topProjects.length;
 
-  // Menubar title — single source of truth for today's number.
-  lines.push(`${fmtUsd(data.todayUsd)} | font=Menlo size=12`);
+  // Menubar title — single source of truth for today's number. The tilde
+  // carries "estimated" (rule: all costs are labeled estimated) at the
+  // cost of one character. A status SF Symbol precedes the number when
+  // something is worth a glance: flame = unusual burn day, dot = a
+  // session wrote events in the last 5 minutes. Hot wins over live.
+  const hot = isHotDay(data.todayUsd, menubar.sparkline);
+  const live = isLiveNow(data.lastEventAt);
+  const status = hot
+    ? ` sfimage=flame.fill sfcolor=${C_AMBER}`
+    : (live ? ` sfimage=circle.fill sfcolor=${C_LIVE} sfsize=8` : '');
+  lines.push(`~${fmtUsd(data.todayUsd)} | font=Menlo size=12${status}`);
   lines.push('---');
 
   // Freshness line — top of dropdown. Brand identity is already
@@ -306,20 +341,26 @@ function renderHappy(data) {
   appendFreshness(lines, projectCount, data.lastEventAt);
   lines.push('---');
 
-  // Stat block — three rows, right-aligned values via Menlo monospace.
-  // Today carries the delta inline so the headline number doesn't lose
-  // its context once it leaves the hero.
+  // Stat block — right-aligned values via Menlo monospace. Today carries
+  // the delta inline; Yesterday sits directly under it so the delta's
+  // baseline is visible instead of implied.
   const deltaText = fmtDelta(menubar.deltaVsYesterday);
   const todayValue = deltaText ? `${fmtUsd(data.todayUsd)} ${deltaText}` : fmtUsd(data.todayUsd);
   lines.push(`${padRow('Today', todayValue)} | ${STAT_HEADLINE_FONT}`);
+  lines.push(`${padRow('Yesterday', fmtUsd(menubar.yesterdayUsd))} | ${STAT_FONT}`);
   lines.push(`${padRow('Last 7d', fmtUsd(menubar.last7Usd))} | ${STAT_FONT}`);
   lines.push(`${padRow('Last 30d', fmtUsd(menubar.last30Usd))} | ${STAT_FONT}`);
+
+  // Trend chart directly under the stat block so "Last 30d" reads as its
+  // caption, followed by a micro-legend anchoring the band colors to
+  // project names (NSMenu has no hover, so the chart must explain itself).
+  appendTrendBlock(lines, menubar);
   lines.push('---');
 
   // Worth a look — SF Symbol warning triangle (yellow when active, dim
   // when none). Always present so the row isn't visually load-bearing
   // only some days.
-  appendWorthALook(lines, data.anomalyCount);
+  appendWorthALook(lines, data.anomalyCount, data.topAnomaly);
   lines.push('---');
 
   // Top projects (today). Suppressed entirely when there's no activity —
@@ -349,33 +390,64 @@ function renderHappy(data) {
     }
   }
 
-  // Trend — 30-day stacked area chart matching the dashboard (same bands,
-  // same project colors). Falls back to the block-glyph sparkline when the
-  // server predates menubar.trend or the image can't be built.
+  lines.push('---');
+  lines.push(`Open dashboard | href=${DASHBOARD_URL}/ sfimage=chart.line.uptrend.xyaxis ${ACTION_STYLE}`);
+  lines.push(`Settings… | href=${DASHBOARD_URL}/settings sfimage=gear ${ACTION_STYLE}`);
+  appendPowerOff(lines);
+  return lines.join('\n');
+}
+
+// Trend block — 30-day stacked area chart matching the dashboard (same
+// bands, same project colors), plus a micro-legend of the top 3 projects
+// by 30d spend so the band colors mean something without the dashboard
+// open. Falls back to the block-glyph sparkline when the server predates
+// menubar.trend or the image can't be built.
+function appendTrendBlock(lines, menubar) {
   let trendImg = null;
   try {
     trendImg = menubar.trend ? renderTrendImage(menubar.trend) : null;
   } catch {
     trendImg = null;
   }
-  if (trendImg) {
-    if (projectCount > 0) lines.push('---');
-    lines.push(`| image=${trendImg} href=${DASHBOARD_URL}/`);
-    lines.push(`last 30 days | ${SPARK_LABEL}`);
-  } else {
+  if (!trendImg) {
     const sparkText = menubar.sparkline && menubar.sparkline.length ? spark(menubar.sparkline) : '';
     if (sparkText) {
-      if (projectCount > 0) lines.push('---');
       lines.push(`${sparkText} | ${SPARK_FONT}`);
       lines.push(`last 14 days | ${SPARK_LABEL}`);
     }
+    return;
   }
+  lines.push(`| image=${trendImg} href=${DASHBOARD_URL}/`);
+  // Micro-legend: top 3 projects by 30d total, swatch in the project's
+  // band color. Names come from the server (trend.projects[].name); older
+  // 0.2.7 servers lack the field, so derive a readable name from the key.
+  const totals = new Map();
+  for (const d of menubar.trend.days) {
+    for (const [k, v] of Object.entries(d.bands)) totals.set(k, (totals.get(k) || 0) + v);
+  }
+  const top = menubar.trend.projects
+    .map((p) => ({ ...p, total: totals.get(p.key) || 0 }))
+    .filter((p) => p.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 3);
+  const nameW = Math.max(LABEL_W, ...top.map((p) => projectDisplayName(p).length + 1));
+  for (const p of top) {
+    const label = sanitizeLabel(
+      String(projectDisplayName(p)).padEnd(nameW) + ('$' + Math.round(p.total).toLocaleString('en-US')).padStart(10)
+    );
+    const href = p.key === '__other__' ? `${DASHBOARD_URL}/` : `${DASHBOARD_URL}/project/${encodeURIComponent(p.key)}`;
+    lines.push(`${label} | href=${href} sfimage=circle.fill sfcolor=${p.color} sfsize=9 ${FEATURE_STYLE}`);
+  }
+}
 
-  lines.push('---');
-  lines.push(`Open dashboard | href=${DASHBOARD_URL}/ sfimage=chart.line.uptrend.xyaxis ${ACTION_STYLE}`);
-  lines.push(`Settings… | href=${DASHBOARD_URL}/settings sfimage=gear ${ACTION_STYLE}`);
-  appendPowerOff(lines);
-  return lines.join('\n');
+function projectDisplayName(p) {
+  if (p.name) return p.name;
+  let k = String(p.key);
+  if (k === '__other__') return 'other';
+  const colon = k.indexOf(':');
+  if (colon >= 0) k = k.slice(colon + 1);
+  const slash = k.lastIndexOf('/');
+  return slash >= 0 ? k.slice(slash + 1) : k;
 }
 
 // Freshness row — dim "Updated Xs ago · N projects today" with clock
@@ -389,16 +461,30 @@ function appendFreshness(lines, projectCount, lastEventAt) {
   lines.push(`Updated ${ago} ago${projectsBit} | ${HERO_SUB}`);
 }
 
-// Worth a look — SF Symbol warning triangle with anomaly count as a
-// trailing badge-style number. Yellow when there's something to look at,
-// dim when there isn't.
-function appendWorthALook(lines, anomalyCount) {
+// Worth a look — SF Symbol warning triangle, amber when active. Leads
+// with the largest anomaly's dollar amount (one $400 spike matters more
+// than eight $12 ones); the remaining count trails as "+N". A dim
+// sub-row carries the reason and date. Falls back to the bare count
+// against servers that predate topAnomaly.
+function appendWorthALook(lines, anomalyCount, topAnomaly) {
   const url = `${DASHBOARD_URL}/worth-a-look`;
   if (anomalyCount > 0) {
+    const value = topAnomaly
+      ? `$${Math.round(topAnomaly.amount)}${anomalyCount > 1 ? ` +${anomalyCount - 1}` : ''}`
+      : `${anomalyCount} active`;
     // Amber warning — promoted to bold/13 (same weight as Today)
     // because this row is a callout, not background context.
-    const label = sanitizeLabel(padRow('Worth a look', `${anomalyCount} active`));
+    const label = sanitizeLabel(padRow('Worth a look', value));
     lines.push(`${label} | href=${url} sfimage=exclamationmark.triangle.fill sfcolor=${C_AMBER} ${STAT_HEADLINE_FONT}`);
+    if (topAnomaly) {
+      // Reasons are dashboard-length prose ("`6d1a9269…` · $804 in one
+      // session.") — strip markdown backticks and trailing punctuation,
+      // and truncate; the row is a teaser, the click has the detail.
+      let reason = String(topAnomaly.reason).replace(/`/g, '').replace(/[.\s]+$/, '');
+      if (reason.length > 40) reason = reason.slice(0, 39) + '…';
+      const detail = sanitizeLabel(`  ${TREE_LAST} ${reason} · ${topAnomaly.date}`);
+      lines.push(`${detail} | href=${url} ${FEATURE_STYLE}`);
+    }
   } else {
     const label = sanitizeLabel(padRow('Worth a look', '—'));
     lines.push(`${label} | href=${url} sfimage=checkmark.circle sfcolor=${C_MUTED} ${STAT_FONT}`);

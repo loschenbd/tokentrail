@@ -39,13 +39,13 @@ function insertRollup(db: Database.Database, params: {
   );
 }
 
-function insertAnomaly(db: Database.Database, opts: { date: string; dismissed: boolean; featureKey?: string }) {
+function insertAnomaly(db: Database.Database, opts: { date: string; dismissed: boolean; featureKey?: string; amount?: number }) {
   // Vary feature_key so the (kind, date, feature_key, session_id) dedupe
   // index in src/db/schema.ts doesn't reject the 2nd/3rd insert.
   db.prepare(
     `INSERT INTO anomalies (kind, date, feature_key, session_id, amount, baseline, multiplier, reason, dismissed_at)
-     VALUES ('feature_spike', ?, ?, NULL, 10, 1, 10, '10x baseline', ?)`
-  ).run(opts.date, opts.featureKey ?? 'feat-x', opts.dismissed ? "2026-06-16T00:00:00Z" : null);
+     VALUES ('feature_spike', ?, ?, NULL, ?, 1, 10, '10x baseline', ?)`
+  ).run(opts.date, opts.featureKey ?? 'feat-x', opts.amount ?? 10, opts.dismissed ? "2026-06-16T00:00:00Z" : null);
 }
 
 describe('buildToday', () => {
@@ -251,6 +251,7 @@ describe('buildToday — menubar summary', () => {
     const beta = trend.projects.find((p) => p.key === 'repo:loschenbd/beta')!;
     assert.equal(alpha.stackPosition, 0);
     assert.equal(beta.stackPosition, 1);
+    assert.equal(alpha.name, 'alpha');
     assert.match(alpha.color, /^#[0-9a-f]{6}$/i);
 
     const day5 = trend.days.find((d) => d.bands['repo:loschenbd/beta'] === 3)!;
@@ -264,5 +265,23 @@ describe('buildToday — menubar summary', () => {
     const res = buildToday(db);
     assert.equal(res.menubar.trend.days.length, 30);
     assert.equal(res.menubar.trend.projects.length, 0);
+  });
+
+  test('topAnomaly is the largest active anomaly; dismissed ones excluded', () => {
+    const db = makeDb();
+    const today = (db.prepare(`SELECT date('now','localtime') AS d`).get() as { d: string }).d;
+    insertAnomaly(db, { date: today, dismissed: false, featureKey: 'a1', amount: 12 });
+    insertAnomaly(db, { date: today, dismissed: false, featureKey: 'a2', amount: 399 });
+    insertAnomaly(db, { date: today, dismissed: true, featureKey: 'a3', amount: 900 }); // dismissed → ignored
+    const res = buildToday(db);
+    assert.equal(res.anomalyCount, 2);
+    assert.equal(res.topAnomaly!.amount, 399);
+    assert.equal(res.topAnomaly!.reason, '10x baseline');
+  });
+
+  test('topAnomaly is null when nothing is active', () => {
+    const db = makeDb();
+    const res = buildToday(db);
+    assert.equal(res.topAnomaly, null);
   });
 });

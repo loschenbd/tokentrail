@@ -25,7 +25,7 @@ export type TodayProject = {
 // colors, same stack order — so the dropdown chart matches the dashboard.
 export type MenubarTrend = {
   days: Array<{ date: string; bands: Record<string, number> }>;
-  projects: Array<{ key: string; color: string; stackPosition: number }>;
+  projects: Array<{ key: string; name: string; color: string; stackPosition: number }>;
 };
 
 export type MenubarSummary = {
@@ -42,6 +42,9 @@ export type TodayResponse = {
   todayUsd: number;
   topProjects: TodayProject[];
   anomalyCount: number;
+  // Largest active (undismissed) anomaly, so the menubar can lead with
+  // the dollar amount instead of a bare count. Null when none active.
+  topAnomaly: { amount: number; date: string; reason: string } | null;
   // ISO timestamp of the most recent usage event we've ingested. Reflects
   // data freshness, NOT response time — "asOf = now" would always print
   // "0s ago" in the menubar and tell the user nothing.
@@ -59,6 +62,12 @@ export function buildToday(db: DatabaseType.Database): TodayResponse {
   const lastEventAt = (db
     .prepare(`SELECT MAX(timestamp) AS t FROM usage_events`)
     .get() as { t: string | null }).t;
+
+  const topAnomaly = (db
+    .prepare(`SELECT amount, date, reason FROM anomalies
+              WHERE dismissed_at IS NULL
+              ORDER BY amount DESC LIMIT 1`)
+    .get() ?? null) as { amount: number; date: string; reason: string } | null;
 
   // Build per-project feature lists from today's feature_rollups.
   // topProjects no longer carries feature details (new project-first shape),
@@ -99,6 +108,7 @@ export function buildToday(db: DatabaseType.Database): TodayResponse {
       features: (projectFeaturesMap.get(p.key) ?? []).slice(0, MAX_FEATURES_PER_PROJECT),
     })),
     anomalyCount,
+    topAnomaly,
     lastEventAt,
     menubar: buildMenubarSummary(db, overview.totalUsd),
   };
@@ -110,6 +120,7 @@ function buildMenubarTrend(db: DatabaseType.Database): MenubarTrend {
     days: overview.days.map((d) => ({ date: d.date, bands: d.bands })),
     projects: overview.projects.map((p) => ({
       key: p.key,
+      name: p.name,
       color: p.color,
       stackPosition: p.stackPosition,
     })),

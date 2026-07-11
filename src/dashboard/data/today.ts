@@ -1,5 +1,5 @@
 import type DatabaseType from 'better-sqlite3';
-import { buildOverview, type OverviewVM } from './overview.js';
+import { buildOverview, bucketProject, type OverviewVM } from './overview.js';
 
 const TOP_PROJECTS_LIMIT = 5;
 const PACE_MIN_HISTORY_DAYS = 7;
@@ -25,7 +25,8 @@ export type TodayVM = {
   sessions: TodaySession[];
   topProjects: OverviewVM['topProjects'];
   anomalies: OverviewVM['anomalies'];
-  hourly: { hour: number; usd: number }[];
+  hourly: { hour: number; usd: number; projects: { name: string; usd: number; color: string }[] }[];
+  projectFeatureMix: OverviewVM['projectFeatureMix'];
   paceUsd: number | null;
   usualDayUsd: number;
   shipped: { prCount: number; commitCount: number; items: ShippedItem[] };
@@ -90,8 +91,11 @@ export function buildTodayVM(
         ? 100
         : 0;
 
+  // Step 3b: Re-map colors from the 30-day ranking (hoisted so it's in scope for the breakdown)
+  const colorRef = buildOverview({ db, days: 30 }).projectColors;
+
   // 24 zero-filled hourly buckets for today.
-  const hourly: { hour: number; usd: number }[] = Array.from({ length: 24 }, (_, hour) => ({ hour, usd: 0 }));
+  const hourly: TodayVM['hourly'] = Array.from({ length: 24 }, (_, hour) => ({ hour, usd: 0, projects: [] }));
   const hourRows = db
     .prepare(
       `SELECT CAST(strftime('%H', timestamp, 'localtime') AS INTEGER) AS hour,
@@ -102,6 +106,36 @@ export function buildTodayVM(
     )
     .all() as { hour: number; usd: number }[];
   for (const r of hourRows) hourly[r.hour]!.usd = round2(r.usd);
+
+  // Per-project hourly breakdown.
+  const hourProjectRows = db
+    .prepare(
+      `SELECT CAST(strftime('%H', timestamp, 'localtime') AS INTEGER) AS hour,
+              COALESCE(inferred_feature_key, 'unattributed') AS featureKey,
+              COALESCE(inferred_feature_name, 'Unattributed') AS featureName,
+              repo,
+              SUM(estimated_cost_usd) AS usd
+         FROM usage_events
+        WHERE date(timestamp, 'localtime') = date('now', 'localtime')
+        GROUP BY hour, featureKey, featureName, repo`
+    )
+    .all() as Array<{ hour: number; featureKey: string; featureName: string; repo: string | null; usd: number }>;
+
+  // Bucket TS-side (same as Overview), re-aggregate per (hour, projectKey).
+  const perHour = new Map<number, Map<string, { name: string; usd: number; color: string }>>();
+  for (const r of hourProjectRows) {
+    const { projectKey, projectName } = bucketProject(r);
+    let bucket = perHour.get(r.hour);
+    if (!bucket) { bucket = new Map(); perHour.set(r.hour, bucket); }
+    const cur = bucket.get(projectKey);
+    if (cur) cur.usd += r.usd;
+    else bucket.set(projectKey, { name: projectName, usd: r.usd, color: colorRef[projectKey] ?? '#9CA3AF' });
+  }
+  for (const [hour, bucket] of perHour) {
+    hourly[hour]!.projects = [...bucket.values()]
+      .map((p) => ({ ...p, usd: round2(p.usd) }))
+      .sort((a, b) => b.usd - a.usd);
+  }
 
   // Usual day: average daily rollup total over the last 30 completed days.
   const usualRow = db
@@ -184,8 +218,7 @@ export function buildTodayVM(
   const paceUsd =
     paceRow.days >= PACE_MIN_HISTORY_DAYS && share > 0 ? round2(todayUsd / share) : null;
 
-  // Step 3b: Re-map colors from the 30-day ranking
-  const colorRef = buildOverview({ db, days: 30 }).projectColors;
+  // Re-map colors from the 30-day ranking (colorRef already computed above).
   const topProjects = overview.topProjects
     .slice(0, TOP_PROJECTS_LIMIT)
     .map((p) => ({ ...p, color: colorRef[p.key] ?? p.color }));
@@ -199,6 +232,7 @@ export function buildTodayVM(
     topProjects,
     anomalies: overview.anomalies,
     hourly,
+    projectFeatureMix: overview.projectFeatureMix,
     paceUsd,
     usualDayUsd,
     shipped,

@@ -30,12 +30,12 @@ function daysAgoAtLocalHour(n: number, h: number): string {
 }
 function seedEvent(
   db: DatabaseType.Database,
-  { ts, usd, sessionId = 's1', projectDir = '/Users/b/Projects/demo' }: { ts: string; usd: number; sessionId?: string; projectDir?: string },
+  { ts, usd, sessionId = 's1', projectDir = '/Users/b/Projects/demo', repo = null }: { ts: string; usd: number; sessionId?: string; projectDir?: string; repo?: string | null },
 ): void {
   db.prepare(
-    `INSERT INTO usage_events (id, session_id, timestamp, model, estimated_cost_usd)
-     VALUES (?, ?, ?, 'claude-fable-5', ?)`
-  ).run(`e${++eventSeq}`, sessionId, ts, usd);
+    `INSERT INTO usage_events (id, session_id, timestamp, model, estimated_cost_usd, repo)
+     VALUES (?, ?, ?, 'claude-fable-5', ?, ?)`
+  ).run(`e${++eventSeq}`, sessionId, ts, usd, repo);
   // Ensure session has project_dir so bucketing produces a project
   db.prepare(
     `INSERT OR IGNORE INTO sessions (session_id, project_dir)
@@ -220,5 +220,46 @@ describe('buildTodayVM shipped', () => {
     assert.equal(vm.shipped.prCount, 0);
     assert.equal(vm.shipped.commitCount, 0);
     assert.equal(vm.shipped.items.length, 0);
+  });
+});
+
+describe('buildTodayVM hourly project breakdown', () => {
+  test('per-hour projects sum to the hour total, sorted desc', () => {
+    const db = makeDb();
+    seedEvent(db, { ts: todayAtLocalHour(9), usd: 1, repo: 'ben/alpha' });
+    seedEvent(db, { ts: todayAtLocalHour(9), usd: 4, repo: 'ben/beta' });
+    seedEvent(db, { ts: todayAtLocalHour(9), usd: 2, repo: 'ben/beta' });
+    const vm = buildTodayVM(db, { nowHour: 10 });
+    const h9 = vm.hourly[9]!;
+    assert.equal(h9.usd, 7);
+    assert.equal(h9.projects.length, 2);
+    assert.equal(h9.projects[0]!.name, 'beta');   // $6 first
+    assert.equal(h9.projects[0]!.usd, 6);
+    assert.equal(h9.projects[1]!.name, 'alpha');
+    const rowSum = h9.projects.reduce((s, p) => s + p.usd, 0);
+    assert.equal(Math.round(rowSum * 100) / 100, h9.usd);
+    assert.ok(h9.projects.every((p) => /^#|^rgb/.test(p.color)));
+  });
+
+  test('zero-spend hours have empty projects arrays', () => {
+    const db = makeDb();
+    seedEvent(db, { ts: todayAtLocalHour(9), usd: 1 });
+    const vm = buildTodayVM(db, { nowHour: 10 });
+    assert.deepEqual(vm.hourly[3]!.projects, []);
+  });
+
+  test('projectFeatureMix is passed through and keyed by topProjects keys', () => {
+    const db = makeDb();
+    seedEvent(db, { ts: todayAtLocalHour(9), usd: 5 });
+    // topProjects derive from feature_rollups — seed one row for today
+    // (match the existing color-palette test's fixture pattern in this file).
+    db.prepare(
+      `INSERT INTO feature_rollups (date, feature_key, feature_name, total_cost_usd, sessions_count)
+       VALUES (date('now','localtime'), 'f', 'F', 5, 1)`
+    ).run();
+    const vm = buildTodayVM(db, { nowHour: 10 });
+    assert.ok(Array.isArray(vm.projectFeatureMix));
+    const mixKeys = new Set(vm.projectFeatureMix.map((m) => m.projectKey));
+    for (const p of vm.topProjects) assert.ok(mixKeys.has(p.key), `mix missing ${p.key}`);
   });
 });

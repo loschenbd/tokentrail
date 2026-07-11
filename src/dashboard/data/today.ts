@@ -84,6 +84,7 @@ export function buildTodayVM(
             AND date(timestamp, 'localtime') < date('now', 'localtime')
           GROUP BY d, h
        )
+       -- h <= nowHour: "by now" includes the current, in-progress hour
        SELECT COALESCE(SUM(CASE WHEN h <= ? THEN usd END), 0) AS byNow,
               COALESCE(SUM(usd), 0) AS total,
               COUNT(DISTINCT d) AS days

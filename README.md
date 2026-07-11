@@ -26,7 +26,7 @@ and the dashboard will show a "no trail yet" hint instead of charts.
 brew install loschenbd/tokentrail/tokentrail && tokentrail init
 # Or run them separately and use the onboarding wizard:
 brew install loschenbd/tokentrail/tokentrail
-tokentrail dashboard               # opens onboarding wizard at /welcome
+tokentrail dashboard               # first run opens the onboarding wizard at /welcome
 ```
 
 **From source:**
@@ -44,7 +44,7 @@ walk through the onboarding checklist:
 
 ```bash
 tokentrail dashboard
-# opens http://127.0.0.1:4920/welcome
+# first run opens http://127.0.0.1:4920/welcome (later runs open the Overview)
 ```
 
 The checklist installs the SwiftBar plugin, registers the launchd daemon,

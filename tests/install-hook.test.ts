@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runInstallHook } from '../src/commands/install-hook.js';
+import { findGitRoot, runInstallHook } from '../src/commands/install-hook.js';
 
 const FAKE_HOOK = '/abs/path/to/tokentrail/src/hooks/session-end.sh';
 
@@ -98,5 +98,20 @@ describe('runInstallHook', () => {
     const r = runInstallHook({ repo, hookPath: FAKE_HOOK, dryRun: true });
     assert.equal(r.action, 'added');
     assert.equal(existsSync(join(repo, '.claude', 'settings.json')), false);
+  });
+});
+
+describe('findGitRoot', () => {
+  test('finds the repo root from a nested directory', () => {
+    const repo = makeRepo();
+    mkdirSync(join(repo, '.git'));
+    const nested = join(repo, 'src', 'deep');
+    mkdirSync(nested, { recursive: true });
+    assert.equal(findGitRoot(nested), repo);
+  });
+
+  test('returns null outside any git repo', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tokentrail-no-repo-'));
+    assert.equal(findGitRoot(dir), null);
   });
 });

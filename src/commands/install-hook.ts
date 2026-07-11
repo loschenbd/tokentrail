@@ -1,7 +1,22 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, parse, resolve } from 'node:path';
 
 import { pkgRoot } from '../lib/pkg-root.js';
+
+/**
+ * Walk upward from startDir to the nearest directory containing `.git`.
+ * Returns null when startDir is not inside a git repo — callers should
+ * skip repo-scoped work (like hook installation) rather than guess.
+ */
+export function findGitRoot(startDir: string): string | null {
+  let dir = resolve(startDir);
+  const { root } = parse(dir);
+  while (true) {
+    if (existsSync(join(dir, '.git'))) return dir;
+    if (dir === root) return null;
+    dir = dirname(dir);
+  }
+}
 
 export type InstallHookOptions = {
   /** Repo to patch — defaults to CWD. */

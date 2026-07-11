@@ -42,6 +42,7 @@ describe('renderToday project rows', () => {
       yesterdayUsd: 25,
       deltaPct: 13,
       sessionsToday: 4,
+      sessions: [],
       topProjects: [item],
       anomalies: [],
       hourly: [],

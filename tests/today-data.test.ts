@@ -43,6 +43,13 @@ function seedEvent(
   ).run(sessionId, projectDir);
 }
 
+function seedSession(
+  db: DatabaseType.Database,
+  { id, title = null, projectDir = null }: { id: string; title?: string | null; projectDir?: string | null }
+): void {
+  db.prepare(`INSERT INTO sessions (session_id, title, project_dir) VALUES (?, ?, ?)`).run(id, title, projectDir);
+}
+
 describe('buildTodayVM hourly + pace', () => {
   test('hourly is 24 zero-filled buckets summing todays events', () => {
     const db = makeDb();
@@ -124,5 +131,40 @@ describe('buildTodayVM hourly + pace', () => {
     for (const p of vm.topProjects) {
       assert.equal(p.color, ref[p.key]);
     }
+  });
+});
+
+describe('buildTodayVM sessions', () => {
+  test('aggregates per-session cost, time range, chronological order', () => {
+    const db = makeDb();
+    seedSession(db, { id: 'a', title: 'deep research', projectDir: '/Users/b/Research' });
+    seedSession(db, { id: 'b', title: 'cover letter', projectDir: '/Users/b/Projects/job-search' });
+    seedEvent(db, { ts: todayAtLocalHour(10), usd: 2, sessionId: 'b' });
+    seedEvent(db, { ts: todayAtLocalHour(9), usd: 3, sessionId: 'a' });
+    seedEvent(db, { ts: todayAtLocalHour(11), usd: 4, sessionId: 'a' });
+    const vm = buildTodayVM(db, { nowHour: 12 });
+    assert.equal(vm.sessions.length, 2);
+    assert.equal(vm.sessionsToday, 2);
+    assert.equal(vm.sessions[0]!.sessionId, 'a'); // earliest first event first
+    assert.equal(vm.sessions[0]!.usd, 7);
+    assert.equal(vm.sessions[0]!.projectName, 'Research');
+    assert.match(vm.sessions[0]!.startedAt, /^09:\d\d$/);
+    assert.match(vm.sessions[0]!.endedAt, /^11:\d\d$/);
+  });
+
+  test('title falls back: title → feature name → project dir basename → Untitled', () => {
+    const db = makeDb();
+    seedSession(db, { id: 'x', title: null, projectDir: null });
+    seedEvent(db, { ts: todayAtLocalHour(9), usd: 1, sessionId: 'x' });
+    const vm = buildTodayVM(db, { nowHour: 10 });
+    assert.equal(vm.sessions[0]!.title, 'Untitled session');
+  });
+
+  test('sessions with no events today are excluded', () => {
+    const db = makeDb();
+    seedSession(db, { id: 'old' });
+    seedEvent(db, { ts: daysAgoAtLocalHour(2, 9), usd: 9, sessionId: 'old' });
+    const vm = buildTodayVM(db, { nowHour: 10 });
+    assert.equal(vm.sessions.length, 0);
   });
 });

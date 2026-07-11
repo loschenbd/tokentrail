@@ -4,11 +4,22 @@ import { buildOverview, type OverviewVM } from './overview.js';
 const TOP_PROJECTS_LIMIT = 5;
 const PACE_MIN_HISTORY_DAYS = 7;
 
+export type TodaySession = {
+  sessionId: string;
+  title: string;            // never empty: title → inferred_feature_name → project_dir basename → 'Untitled session'
+  projectName: string;      // project_dir basename, '' if unknown
+  featureKey: string | null;
+  startedAt: string;        // 'HH:MM' local
+  endedAt: string;          // 'HH:MM' local
+  usd: number;
+};
+
 export type TodayVM = {
   todayUsd: number;
   yesterdayUsd: number;
   deltaPct: number;
   sessionsToday: number;
+  sessions: TodaySession[];
   topProjects: OverviewVM['topProjects'];
   anomalies: OverviewVM['anomalies'];
   hourly: { hour: number; usd: number }[];
@@ -32,13 +43,40 @@ export function buildTodayVM(
     .get() as { total: number };
   const yesterdayUsd = round2(yesterdayRow.total);
 
-  const sessionsRow = db
+  const sessionRows = db
     .prepare(
-      `SELECT COALESCE(SUM(sessions_count), 0) AS sessions
-         FROM feature_rollups
-        WHERE date = date('now', 'localtime')`
+      `SELECT ue.session_id AS sessionId,
+              MIN(ue.timestamp) AS startTs,
+              MAX(ue.timestamp) AS endTs,
+              SUM(ue.estimated_cost_usd) AS usd,
+              MAX(s.title) AS title,
+              COALESCE(MAX(s.project_dir), MAX(ue.project_dir)) AS projectDir,
+              MAX(ue.inferred_feature_name) AS featureName,
+              MAX(COALESCE(s.feature_override, ue.inferred_feature_key)) AS featureKey
+         FROM usage_events ue
+         LEFT JOIN sessions s ON s.session_id = ue.session_id
+        WHERE date(ue.timestamp, 'localtime') = date('now', 'localtime')
+        GROUP BY ue.session_id
+        ORDER BY MIN(ue.timestamp) ASC`
     )
-    .get() as { sessions: number };
+    .all() as Array<{
+      sessionId: string; startTs: string; endTs: string; usd: number;
+      title: string | null; projectDir: string | null;
+      featureName: string | null; featureKey: string | null;
+    }>;
+
+  const sessions: TodaySession[] = sessionRows.map((r) => {
+    const projectName = r.projectDir ? (r.projectDir.split('/').pop() ?? '') : '';
+    return {
+      sessionId: r.sessionId,
+      title: r.title?.trim() || r.featureName?.trim() || projectName || 'Untitled session',
+      projectName,
+      featureKey: r.featureKey,
+      startedAt: localHHMM(r.startTs),
+      endedAt: localHHMM(r.endTs),
+      usd: round2(r.usd),
+    };
+  });
 
   const todayUsd = overview.totalUsd;
   const deltaPct =
@@ -105,13 +143,19 @@ export function buildTodayVM(
     todayUsd,
     yesterdayUsd,
     deltaPct,
-    sessionsToday: sessionsRow.sessions,
+    sessionsToday: sessions.length,
+    sessions,
     topProjects,
     anomalies: overview.anomalies,
     hourly,
     paceUsd,
     usualDayUsd,
   };
+}
+
+function localHHMM(ts: string): string {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 function round2(n: number): number {

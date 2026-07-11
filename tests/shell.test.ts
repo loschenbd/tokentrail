@@ -37,3 +37,20 @@ describe('renderShell', () => {
     assert.match(html, /<title>&lt;script&gt;alert\(1\)&lt;\/script&gt;<\/title>/);
   });
 });
+
+describe('renderShell window selector visibility', () => {
+  test('shown on window-scoped views', () => {
+    for (const tab of ['overview', 'worth-a-look', 'feature', 'project'] as const) {
+      const html = renderShell({ title: 't', activeTab: tab, days: 30 }, '');
+      assert.match(html, /name="days"/, `window selector missing on ${tab}`);
+    }
+  });
+
+  test('hidden on Today and Settings — views with no time window', () => {
+    for (const tab of ['today', 'settings'] as const) {
+      const html = renderShell({ title: 't', activeTab: tab, days: 30 }, '');
+      assert.doesNotMatch(html, /name="days"/, `window selector leaked onto ${tab}`);
+      assert.doesNotMatch(html, />Window</, `Window label leaked onto ${tab}`);
+    }
+  });
+});

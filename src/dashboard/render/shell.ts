@@ -7,6 +7,9 @@ export type ShellOptions = {
 };
 
 export function renderShell(opts: ShellOptions, body: string): string {
+  // Today is always exactly one day and Settings has no time dimension —
+  // the Window selector only renders on views it actually scopes.
+  const showWindow = opts.activeTab !== 'today' && opts.activeTab !== 'settings';
   const dayOptions = [7, 30, 90, 365];
   const range = dayOptions
     .map((d) => `<option value="${d}"${d === opts.days ? ' selected' : ''}>${d === 365 ? 'all' : `${d}d`}</option>`)
@@ -44,10 +47,12 @@ export function renderShell(opts: ShellOptions, body: string): string {
   </div>
   <div class="header-center">${nav}</div>
   <div class="header-right">
-    <form method="get" class="range-form">
+    ${showWindow
+      ? `<form method="get" class="range-form">
       <label class="label" for="days">Window</label>
       <select id="days" name="days" onchange="this.form.submit()">${range}</select>
-    </form>
+    </form>`
+      : ''}
   </div>
 </header>
 <main>${body}</main>

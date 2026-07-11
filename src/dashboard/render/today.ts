@@ -1,5 +1,6 @@
 import type { TodayVM } from '../data/today.js';
 import { escapeHtml } from './shell.js';
+import { renderProjectRows } from './project-rows.js';
 
 export function renderToday(vm: TodayVM): string {
   if (isEmpty(vm)) return renderEmptyState();
@@ -8,7 +9,7 @@ export function renderToday(vm: TodayVM): string {
   <section class="main-col">
     <div class="card">
       <div class="label">Today's burn paths</div>
-      ${renderTopProjects(vm.topProjects)}
+      ${renderProjectRows(vm.topProjects, { staticFill: true, emptyMessage: 'No project activity today.' })}
     </div>
   </section>
 
@@ -50,24 +51,6 @@ function renderEmptyState(): string {
 </div>
 </div>
   `;
-}
-
-function renderTopProjects(items: TodayVM['topProjects']): string {
-  if (items.length === 0) return '<div class="muted">No project activity today.</div>';
-  return items
-    .map((p, i) => {
-      const barPct = Math.max(1, Math.round(p.pct));
-      const featuresLabel = p.featureCount > 1 ? `<span class="muted">· ${p.featureCount} features</span>` : '';
-      return `
-        <a class="project-row" href="/project/${encodeURIComponent(p.key)}">
-          <span class="mile">${i + 1}</span>
-          <span class="name">${escapeHtml(p.name)} ${featuresLabel}</span>
-          <span class="amt">$${p.totalUsd.toFixed(0)} <span class="muted share">· ${p.pct.toFixed(0)}%</span></span>
-        </a>
-        <div class="bar"><span style="width:${barPct}%"></span></div>
-      `;
-    })
-    .join('');
 }
 
 function renderAnomalies(items: TodayVM['anomalies']): string {

@@ -1,5 +1,5 @@
 import type { TodayVM } from '../data/today.js';
-import { escapeHtml } from './shell.js';
+import { escapeHtml, jsonForScriptTag } from './shell.js';
 import { renderProjectRows } from './project-rows.js';
 
 export function renderToday(vm: TodayVM): string {
@@ -39,6 +39,8 @@ ${renderStrip(vm)}
     </div>
   </aside>
 </div>
+<script type="application/json" id="burn-paths-data">${jsonForScriptTag(vm.projectFeatureMix)}</script>
+<script type="application/json" id="hour-burn-data">${jsonForScriptTag(vm.hourly.filter((h) => h.usd > 0))}</script>
   `;
 }
 
@@ -47,7 +49,7 @@ function renderStrip(vm: TodayVM): string {
   const bars = vm.hourly
     .map(
       (h) =>
-        `<div class="hour-bar" title="${String(h.hour).padStart(2, '0')}:00 — $${h.usd.toFixed(2)}"><span style="height:${Math.round((h.usd / max) * 100)}%"></span></div>`
+        `<div class="hour-bar" data-hour="${h.hour}"><span style="height:${Math.round((h.usd / max) * 100)}%"></span></div>`
     )
     .join('');
   const pace = vm.paceUsd !== null ? ` · pace ~$${vm.paceUsd.toFixed(0)}` : '';

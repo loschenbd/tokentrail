@@ -48,6 +48,7 @@ describe('renderToday project rows', () => {
       hourly: [],
       paceUsd: null,
       usualDayUsd: 0,
+      shipped: { prCount: 0, commitCount: 0, items: [] },
     };
     const html = renderToday(vm);
     for (const cls of ['rank', 'swatch', 'name-col', 'amt-col', 'subbar']) {

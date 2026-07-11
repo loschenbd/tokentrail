@@ -168,3 +168,57 @@ describe('buildTodayVM sessions', () => {
     assert.equal(vm.sessions.length, 0);
   });
 });
+
+describe('buildTodayVM shipped', () => {
+  function seedCommit(db: DatabaseType.Database, sessionId: string, sha: string, subject: string, at: string) {
+    db.prepare(
+      `INSERT INTO session_commits (session_id, commit_sha, subject, authored_at) VALUES (?, ?, ?, ?)`
+    ).run(sessionId, sha, subject, at);
+  }
+  function seedPr(
+    db: DatabaseType.Database, sessionId: string, n: number,
+    { state = 'open', mergedAt = null }: { state?: string; mergedAt?: string | null } = {}
+  ) {
+    db.prepare(
+      `INSERT INTO session_prs (session_id, repo, pr_number, pr_title, pr_state, merged_at)
+       VALUES (?, 'o/r', ?, ?, ?, ?)`
+    ).run(sessionId, n, `PR ${n}`, state, mergedAt);
+  }
+
+  test('counts today-authored commits and today-merged or open PRs on today-active sessions', () => {
+    const db = makeDb();
+    seedSession(db, { id: 's1' });
+    seedEvent(db, { ts: todayAtLocalHour(9), usd: 1, sessionId: 's1' });
+    seedCommit(db, 's1', 'sha1', 'fix: today page', todayAtLocalHour(10));
+    seedCommit(db, 's1', 'sha2', 'old work', daysAgoAtLocalHour(3, 10)); // resumed-session rider: excluded
+    seedPr(db, 's1', 12, { state: 'merged', mergedAt: todayAtLocalHour(11) });
+    seedPr(db, 's1', 13, { state: 'open' });
+    const vm = buildTodayVM(db, { nowHour: 12 });
+    assert.equal(vm.shipped.commitCount, 1);
+    assert.equal(vm.shipped.prCount, 2);
+    assert.equal(vm.shipped.items[0]!.kind, 'pr');
+    assert.ok(vm.shipped.items.some((i) => i.title === 'fix: today page'));
+  });
+
+  test('same commit attached to two sessions counts once', () => {
+    const db = makeDb();
+    seedSession(db, { id: 's1' });
+    seedSession(db, { id: 's2' });
+    seedEvent(db, { ts: todayAtLocalHour(9), usd: 1, sessionId: 's1' });
+    seedEvent(db, { ts: todayAtLocalHour(10), usd: 1, sessionId: 's2' });
+    seedCommit(db, 's1', 'shaX', 'shared commit', todayAtLocalHour(9));
+    seedCommit(db, 's2', 'shaX', 'shared commit', todayAtLocalHour(9));
+    const vm = buildTodayVM(db, { nowHour: 12 });
+    assert.equal(vm.shipped.commitCount, 1);
+  });
+
+  test('empty when nothing shipped', () => {
+    const db = makeDb();
+    seedSession(db, { id: 's1' });
+    seedEvent(db, { ts: todayAtLocalHour(9), usd: 1, sessionId: 's1' });
+    const vm = buildTodayVM(db, { nowHour: 10 });
+    assert.equal(vm.shipped.prCount, 0);
+    assert.equal(vm.shipped.commitCount, 0);
+    assert.equal(vm.shipped.items.length, 0);
+  });
+});

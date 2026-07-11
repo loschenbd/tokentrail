@@ -44,6 +44,9 @@ describe('renderToday project rows', () => {
       sessionsToday: 4,
       topProjects: [item],
       anomalies: [],
+      hourly: [],
+      paceUsd: null,
+      usualDayUsd: 0,
     };
     const html = renderToday(vm);
     for (const cls of ['rank', 'swatch', 'name-col', 'amt-col', 'subbar']) {

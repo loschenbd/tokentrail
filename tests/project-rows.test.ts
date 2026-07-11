@@ -62,8 +62,12 @@ describe('renderToday project rows', () => {
     const vm: TodayVM = {
       todayUsd: 28, yesterdayUsd: 25, deltaPct: 13, sessionsToday: 2,
       topProjects: [item], anomalies: [],
-      hourly: Array.from({ length: 24 }, (_, hour) => ({ hour, usd: hour === 9 ? 5 : 0, projects: [] })),
-      projectFeatureMix: [],
+      hourly: Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        usd: hour === 9 ? 5 : 0,
+        projects: hour === 9 ? [{ name: 'Research', usd: 5, color: '#8b6f47' }] : []
+      })),
+      projectFeatureMix: [{ projectKey: 'research', features: [{ key: 'f', name: 'F', color: '#8b6f47', totalUsd: 17 }] }],
       paceUsd: 41, usualDayUsd: 23,
       sessions: [{
         sessionId: 's1', title: 'deep research', projectName: 'Research',
@@ -91,6 +95,14 @@ describe('renderToday project rows', () => {
     assert.doesNotMatch(html, /href="[^"]*"[^>]*>no feature/); // unattributed → no link
     assert.match(html, /1 PR · 2 commits/);
     assert.match(html, /Today page redesign/);
+    assert.match(html, /id="burn-paths-data"/);
+    assert.match(html, /id="hour-burn-data"/);
+    assert.match(html, /"projectKey":"research"/);
+    assert.match(html, /"hour":9/);
+    assert.doesNotMatch(html, /"hour":3/);            // zero hours excluded from payload
+    assert.match(html, /class="hour-bar" data-hour="9"/);
+    assert.doesNotMatch(html, /hour-bar" title=/);    // native title gone
+    assert.doesNotMatch(html, /<div class="hour-bar" data-hour="\d+" title/);
   });
 
   test('pace omitted when null', () => {

@@ -108,8 +108,19 @@ describe('buildTodayVM hourly + pace', () => {
   test('project colors match the 30-day overview palette', () => {
     const db = makeDb();
     seedEvent(db, { ts: todayAtLocalHour(9), usd: 5 });
+    // Seed rollup for today so topProjects is populated
+    const day = (n: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() - n);
+      return d.toLocaleDateString('sv-SE');
+    };
+    db.prepare(
+      `INSERT INTO feature_rollups (id, date, feature_key, feature_name, total_cost_usd, sessions_count)
+       VALUES (?, ?, 'f', 'F', ?, 1)`
+    ).run('r-today', day(0), 5);
     const vm = buildTodayVM(db, { nowHour: 10 });
     const ref = buildOverview({ db, days: 30 }).projectColors;
+    assert.ok(vm.topProjects.length > 0, 'fixture must produce at least one project');
     for (const p of vm.topProjects) {
       assert.equal(p.color, ref[p.key]);
     }

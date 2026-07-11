@@ -47,6 +47,7 @@ describe('renderToday project rows', () => {
       topProjects: [item],
       anomalies: [],
       hourly: [],
+      projectFeatureMix: [],
       paceUsd: null,
       usualDayUsd: 0,
       shipped: { prCount: 0, commitCount: 0, items: [] },
@@ -61,7 +62,8 @@ describe('renderToday project rows', () => {
     const vm: TodayVM = {
       todayUsd: 28, yesterdayUsd: 25, deltaPct: 13, sessionsToday: 2,
       topProjects: [item], anomalies: [],
-      hourly: Array.from({ length: 24 }, (_, hour) => ({ hour, usd: hour === 9 ? 5 : 0 })),
+      hourly: Array.from({ length: 24 }, (_, hour) => ({ hour, usd: hour === 9 ? 5 : 0, projects: [] })),
+      projectFeatureMix: [],
       paceUsd: 41, usualDayUsd: 23,
       sessions: [{
         sessionId: 's1', title: 'deep research', projectName: 'Research',
@@ -95,7 +97,8 @@ describe('renderToday project rows', () => {
     const vm: TodayVM = {
       todayUsd: 28, yesterdayUsd: 25, deltaPct: 13, sessionsToday: 0,
       topProjects: [item], anomalies: [],
-      hourly: Array.from({ length: 24 }, (_, hour) => ({ hour, usd: 0 })),
+      hourly: Array.from({ length: 24 }, (_, hour) => ({ hour, usd: 0, projects: [] })),
+      projectFeatureMix: [],
       paceUsd: null, usualDayUsd: 23,
       sessions: [],
       shipped: { prCount: 0, commitCount: 0, items: [] },

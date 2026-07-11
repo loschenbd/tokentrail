@@ -1,5 +1,5 @@
 import type { OverviewVM } from '../data/overview.js';
-import { escapeHtml } from './shell.js';
+import { escapeHtml, jsonForScriptTag } from './shell.js';
 import { claudeProjectsDir } from '../../services/jsonl-reader.js';
 import { renderTrailMap } from './trail-map.js';
 import { colorFor, STRIPED_SENTINEL, OTHER_KEY } from '../lib/feature-colors.js';
@@ -110,15 +110,6 @@ function renderCommits(items: OverviewVM['recentCommits']): string {
       return `<div class="commit-row">${sha} <span class="subject">${escapeHtml(c.subject)}</span></div>`;
     })
     .join('');
-}
-
-// Serialize JSON for embedding inside a <script type="application/json"> tag.
-// The browser does NOT decode HTML entities inside <script> raw-text content,
-// so escapeHtml would produce literal "&quot;" that breaks JSON.parse. We
-// escape only "<" (preventing </script> breakout) by unicode-escaping it,
-// which JSON.parse accepts as a normal character.
-function jsonForScriptTag(data: unknown): string {
-  return JSON.stringify(data).replace(/</g, '\\u003c');
 }
 
 function renderTrendLegend(

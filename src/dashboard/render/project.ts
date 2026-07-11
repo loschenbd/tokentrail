@@ -1,6 +1,6 @@
 import type { ProjectDetailVM } from '../data/project.js';
 import type { BranchLifecycle } from '../data/branches.js';
-import { escapeHtml } from './shell.js';
+import { escapeHtml, jsonForScriptTag } from './shell.js';
 import { resolveProjectColors, shadeForFeature } from '../lib/feature-colors.js';
 import { renderSparkline } from './sparkline.js';
 import { renderVelocityChart } from './velocity.js';
@@ -86,11 +86,6 @@ function formatMonDay(iso: string): string {
   const [_, m, dRaw] = iso.split('-').map(Number);
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return `${MONTHS[(m ?? 1) - 1]} ${dRaw ?? 1}`;
-}
-
-// See feature.ts for why we don't escapeHtml() JSON inside a <script> tag.
-function jsonForScriptTag(data: unknown): string {
-  return JSON.stringify(data).replace(/</g, '\\u003c');
 }
 
 function renderActiveWork(vm: ProjectDetailVM): string {

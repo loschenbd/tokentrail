@@ -70,3 +70,9 @@ export function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+// One canonical copy — inline <script type="application/json"> payloads
+// must escape '<' so user data can never close the tag.
+export function jsonForScriptTag(data: unknown): string {
+  return JSON.stringify(data).replace(/</g, '\\u003c');
+}

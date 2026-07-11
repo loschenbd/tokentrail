@@ -3,6 +3,7 @@ import { buildOverview, type OverviewVM } from './overview.js';
 
 const TOP_PROJECTS_LIMIT = 5;
 const PACE_MIN_HISTORY_DAYS = 7;
+const SHIPPED_ITEMS_LIMIT = 5;
 
 export type TodaySession = {
   sessionId: string;
@@ -13,6 +14,8 @@ export type TodaySession = {
   endedAt: string;          // 'HH:MM' local
   usd: number;
 };
+
+export type ShippedItem = { kind: 'pr' | 'commit'; title: string; state?: string; at: string };
 
 export type TodayVM = {
   todayUsd: number;
@@ -25,6 +28,7 @@ export type TodayVM = {
   hourly: { hour: number; usd: number }[];
   paceUsd: number | null;
   usualDayUsd: number;
+  shipped: { prCount: number; commitCount: number; items: ShippedItem[] };
 };
 
 export function buildTodayVM(
@@ -110,6 +114,53 @@ export function buildTodayVM(
     .get() as { total: number; days: number };
   const usualDayUsd = usualRow.days > 0 ? round2(usualRow.total / usualRow.days) : 0;
 
+  // Shipped: commits and PRs from today-active sessions, deduped by sha/pr_number
+  const commitRows = db
+    .prepare(
+      `WITH today_sessions AS (
+         SELECT DISTINCT session_id FROM usage_events
+          WHERE date(timestamp, 'localtime') = date('now', 'localtime')
+       )
+       SELECT sc.commit_sha AS sha, MAX(sc.subject) AS subject, MAX(sc.authored_at) AS at
+         FROM session_commits sc
+         JOIN today_sessions ts ON ts.session_id = sc.session_id
+        WHERE date(sc.authored_at, 'localtime') = date('now', 'localtime')
+        GROUP BY sc.commit_sha
+        ORDER BY at DESC`
+    )
+    .all() as { sha: string; subject: string | null; at: string }[];
+
+  const prRows = db
+    .prepare(
+      `WITH today_sessions AS (
+         SELECT DISTINCT session_id FROM usage_events
+          WHERE date(timestamp, 'localtime') = date('now', 'localtime')
+       )
+       SELECT sp.repo AS repo, sp.pr_number AS n, MAX(sp.pr_title) AS title,
+              MAX(sp.pr_state) AS state, MAX(sp.merged_at) AS mergedAt
+         FROM session_prs sp
+         JOIN today_sessions ts ON ts.session_id = sp.session_id
+        WHERE date(sp.merged_at, 'localtime') = date('now', 'localtime')
+           OR sp.pr_state = 'open'
+        GROUP BY sp.repo, sp.pr_number
+        ORDER BY COALESCE(mergedAt, '9999') DESC`
+    )
+    .all() as { repo: string; n: number; title: string | null; state: string | null; mergedAt: string | null }[];
+
+  const shipped = {
+    prCount: prRows.length,
+    commitCount: commitRows.length,
+    items: [
+      ...prRows.map((p) => ({
+        kind: 'pr' as const,
+        title: p.title ?? `PR #${p.n}`,
+        state: p.state ?? undefined,
+        at: p.mergedAt ?? '',
+      })),
+      ...commitRows.map((c) => ({ kind: 'commit' as const, title: c.subject ?? c.sha.slice(0, 8), at: c.at })),
+    ].slice(0, SHIPPED_ITEMS_LIMIT),
+  };
+
   // Pace: today ÷ (historical share of a day's spend that lands by nowHour).
   const paceRow = db
     .prepare(
@@ -150,6 +201,7 @@ export function buildTodayVM(
     hourly,
     paceUsd,
     usualDayUsd,
+    shipped,
   };
 }
 

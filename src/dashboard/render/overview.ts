@@ -3,6 +3,7 @@ import { escapeHtml } from './shell.js';
 import { claudeProjectsDir } from '../../services/jsonl-reader.js';
 import { renderTrailMap } from './trail-map.js';
 import { colorFor, STRIPED_SENTINEL, OTHER_KEY } from '../lib/feature-colors.js';
+import { renderProjectRows } from './project-rows.js';
 
 export function renderOverview(vm: OverviewVM): string {
   if (isEmpty(vm)) return renderEmptyState();
@@ -87,20 +88,7 @@ ${renderTrailMap({ mode: 'onboarding' })}
 }
 
 function renderTopProjects(items: OverviewVM['topProjects']): string {
-  if (items.length === 0) return '<div class="muted">No project activity yet.</div>';
-  return items
-    .map((p, i) => {
-      const rank = i + 1;
-      const color = escapeHtml(p.color);
-      return `<div class="project-row" data-project-key="${escapeHtml(p.key)}" data-project-color="${color}">
-          <div class="rank">${rank}</div>
-          <span class="swatch" style="background:${color}"></span>
-          <div class="name-col"><a href="/project/${encodeURIComponent(p.key)}">${escapeHtml(p.name)}</a> <span class="muted">· ${p.featureCount} features</span></div>
-          <div class="amt-col">$${p.totalUsd.toFixed(0)} · ${p.pct.toFixed(0)}%</div>
-          <div class="subbar" data-project-key="${escapeHtml(p.key)}" style="--pct:${p.pct}"></div>
-        </div>`;
-    })
-    .join('');
+  return renderProjectRows(items);
 }
 
 function renderAnomalies(items: OverviewVM['anomalies']): string {

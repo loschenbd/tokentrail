@@ -5,11 +5,17 @@ import { renderProjectRows } from './project-rows.js';
 export function renderToday(vm: TodayVM): string {
   if (isEmpty(vm)) return renderEmptyState();
   return `
+${renderStrip(vm)}
 <div class="layout">
   <section class="main-col">
     <div class="card">
       <div class="label">Today's burn paths</div>
       ${renderProjectRows(vm.topProjects, { staticFill: true, emptyMessage: 'No project activity today.' })}
+    </div>
+
+    <div class="card">
+      <div class="label">Sessions today · ${vm.sessions.length}</div>
+      ${renderSessions(vm.sessions)}
     </div>
   </section>
 
@@ -22,9 +28,8 @@ export function renderToday(vm: TodayVM): string {
     </div>
 
     <div class="card">
-      <div class="label">Sessions today</div>
-      <div class="kicker">${vm.sessionsToday}</div>
-      <div class="muted">${vm.sessionsToday === 1 ? 'session' : 'sessions'} so far</div>
+      <div class="label">Shipped today</div>
+      ${renderShipped(vm.shipped)}
     </div>
 
     <div class="card">
@@ -35,6 +40,58 @@ export function renderToday(vm: TodayVM): string {
   </aside>
 </div>
   `;
+}
+
+function renderStrip(vm: TodayVM): string {
+  const max = Math.max(...vm.hourly.map((h) => h.usd), 0.01);
+  const bars = vm.hourly
+    .map(
+      (h) =>
+        `<div class="hour-bar" title="${String(h.hour).padStart(2, '0')}:00 — $${h.usd.toFixed(2)}"><span style="height:${Math.round((h.usd / max) * 100)}%"></span></div>`
+    )
+    .join('');
+  const pace = vm.paceUsd !== null ? ` · pace ~$${vm.paceUsd.toFixed(0)}` : '';
+  const usual = vm.usualDayUsd > 0 ? ` · usual day $${vm.usualDayUsd.toFixed(0)}` : '';
+  return `
+<div class="card strip">
+  <div class="strip-head">
+    <span class="label">Burn by hour</span>
+    <span class="strip-stat">$${vm.todayUsd.toFixed(0)} so far${pace}${usual}</span>
+  </div>
+  <div class="hour-bars">${bars}</div>
+  <div class="hour-labels"><span>12a</span><span>3a</span><span>6a</span><span>9a</span><span>12p</span><span>3p</span><span>6p</span><span>9p</span></div>
+</div>`;
+}
+
+function renderSessions(items: TodayVM['sessions']): string {
+  if (items.length === 0) return '<div class="muted">No sessions yet today.</div>';
+  return items
+    .map((s) => {
+      const title = s.featureKey
+        ? `<a href="/feature/${encodeURIComponent(s.featureKey)}">${escapeHtml(s.title)}</a>`
+        : escapeHtml(s.title);
+      return `<div class="session-row">
+        <span class="session-time">${s.startedAt}–${s.endedAt}</span>
+        <span class="session-title">${title} <span class="muted">· ${escapeHtml(s.projectName)}</span></span>
+        <span class="session-amt">$${s.usd.toFixed(s.usd < 1 ? 2 : 0)}</span>
+      </div>`;
+    })
+    .join('');
+}
+
+function renderShipped(shipped: TodayVM['shipped']): string {
+  if (shipped.prCount === 0 && shipped.commitCount === 0) {
+    return '<div class="muted">Nothing shipped yet — the trail\'s still being walked.</div>';
+  }
+  const head = `<div class="kicker">${shipped.prCount} PR${shipped.prCount === 1 ? '' : 's'} · ${shipped.commitCount} commit${shipped.commitCount === 1 ? '' : 's'}</div>`;
+  const rows = shipped.items
+    .map((i) =>
+      i.kind === 'pr'
+        ? `<div class="pr-row"><span class="muted">${escapeHtml(i.state ?? 'pr')}</span> <span class="subject">${escapeHtml(i.title)}</span></div>`
+        : `<div class="commit-row"><span class="subject">${escapeHtml(i.title)}</span></div>`
+    )
+    .join('');
+  return head + rows;
 }
 
 function isEmpty(vm: TodayVM): boolean {

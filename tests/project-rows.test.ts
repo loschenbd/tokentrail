@@ -55,4 +55,52 @@ describe('renderToday project rows', () => {
       assert.match(html, new RegExp(`class="${cls}`), `Today drifted: missing .${cls}`);
     }
   });
+
+  test('renders strip, sessions, and shipped modules', () => {
+    const vm: TodayVM = {
+      todayUsd: 28, yesterdayUsd: 25, deltaPct: 13, sessionsToday: 2,
+      topProjects: [item], anomalies: [],
+      hourly: Array.from({ length: 24 }, (_, hour) => ({ hour, usd: hour === 9 ? 5 : 0 })),
+      paceUsd: 41, usualDayUsd: 23,
+      sessions: [{
+        sessionId: 's1', title: 'deep research', projectName: 'Research',
+        featureKey: 'research', startedAt: '09:02', endedAt: '10:14', usd: 11,
+      }, {
+        sessionId: 's2', title: 'no feature', projectName: 'misc',
+        featureKey: null, startedAt: '11:00', endedAt: '11:30', usd: 2,
+      }],
+      shipped: {
+        prCount: 1, commitCount: 2,
+        items: [
+          { kind: 'pr', title: 'Today page redesign', state: 'merged', at: '' },
+          { kind: 'commit', title: 'fix: today page markup', at: '' },
+        ],
+      },
+    };
+    const html = renderToday(vm);
+    assert.match(html, /class="strip/);
+    assert.match(html, /Burn by hour/i);
+    assert.match(html, /pace ~\$41/);
+    assert.match(html, /usual day \$23/);
+    assert.match(html, /Sessions today · 2/);
+    assert.match(html, /09:02–10:14/);
+    assert.match(html, /href="\/feature\/research"/);       // attributed → link
+    assert.doesNotMatch(html, /href="[^"]*"[^>]*>no feature/); // unattributed → no link
+    assert.match(html, /1 PR · 2 commits/);
+    assert.match(html, /Today page redesign/);
+  });
+
+  test('pace omitted when null', () => {
+    const vm: TodayVM = {
+      todayUsd: 28, yesterdayUsd: 25, deltaPct: 13, sessionsToday: 0,
+      topProjects: [item], anomalies: [],
+      hourly: Array.from({ length: 24 }, (_, hour) => ({ hour, usd: 0 })),
+      paceUsd: null, usualDayUsd: 23,
+      sessions: [],
+      shipped: { prCount: 0, commitCount: 0, items: [] },
+    };
+    const html = renderToday(vm);
+    assert.doesNotMatch(html, /pace ~/);
+    assert.match(html, /usual day \$23/);
+  });
 });

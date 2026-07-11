@@ -743,6 +743,19 @@
     return subbarTip;
   }
 
+  // Position a body-appended fixed tip near its target rect: centered
+  // horizontally (viewport-clamped), above the target — flipped below it
+  // when the viewport top would clip the tip. Measure after display:flex.
+  function positionChartTip(tip, rect) {
+    const x = Math.max(8, Math.min(
+      rect.left + rect.width / 2 - tip.offsetWidth / 2,
+      window.innerWidth - tip.offsetWidth - 8,
+    ));
+    const above = rect.top - tip.offsetHeight - 6;
+    tip.style.left = x + 'px';
+    tip.style.top = (above >= 8 ? above : rect.bottom + 6) + 'px';
+  }
+
   function attachSubbarSegmentTip(seg) {
     seg.addEventListener('mouseenter', () => {
       const tip = ensureSubbarTip();
@@ -753,13 +766,7 @@
       // 'flex', not 'block': the inline style overrides the stylesheet's
       // display:flex, and block layout drops the swatch/name/amt gap.
       tip.style.display = 'flex';
-      const rect = seg.getBoundingClientRect();
-      const x = Math.max(8, Math.min(
-        rect.left + rect.width / 2 - tip.offsetWidth / 2,
-        window.innerWidth - tip.offsetWidth - 8,
-      ));
-      tip.style.left = x + 'px';
-      tip.style.top = (rect.top - tip.offsetHeight - 6) + 'px';
+      positionChartTip(tip, seg.getBoundingClientRect());
     });
     seg.addEventListener('mouseleave', () => {
       if (subbarTip) subbarTip.style.display = 'none';
@@ -814,13 +821,7 @@
           `<div class="hour-tip-head">${hh}:00–${next}:00 · $${entry.usd.toFixed(2)}</div>` + rows.join('');
         // Display before measuring — offsetWidth is 0 while display:none.
         tip.style.display = 'flex';
-        const rect = bar.getBoundingClientRect();
-        const x = Math.max(8, Math.min(
-          rect.left + rect.width / 2 - tip.offsetWidth / 2,
-          window.innerWidth - tip.offsetWidth - 8,
-        ));
-        tip.style.left = x + 'px';
-        tip.style.top = (rect.top - tip.offsetHeight - 6) + 'px';
+        positionChartTip(tip, bar.getBoundingClientRect());
       });
       bar.addEventListener('mouseleave', () => {
         if (hourTip) hourTip.style.display = 'none';

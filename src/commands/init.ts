@@ -11,9 +11,10 @@ import {
 import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
-import { runInstallHook } from './install-hook.js';
+import { findGitRoot, runInstallHook } from './install-hook.js';
 import { runInstallSkills } from './install-skills.js';
 import { pkgRoot } from '../lib/pkg-root.js';
+import { resolveTrackerDbPath } from '../lib/tracker-db-path.js';
 
 export type InitOptions = {
   dryRun?: boolean;
@@ -58,7 +59,7 @@ export function runInit(opts: InitOptions = {}): void {
   if (!opts.skipSwiftbar) installSwiftBarPlugin(opts, repoRoot);
   if (!opts.skipDaemon) installDaemon(opts, repoRoot);
   installSkills(opts);
-  if (!opts.skipHook) installRepoHook(opts, repoRoot);
+  if (!opts.skipHook) installRepoHook(opts);
   if (!opts.skipApp) installApp(opts, repoRoot);
 
   printNextSteps(opts);
@@ -138,30 +139,12 @@ export function resolveTokentrailBin(argv1: string = process.argv[1] ?? ''): str
   return argv1;
 }
 
-/**
- * Pick the tracker DB path to pin into the launchd plist's environment.
- *
- * The daemon's WorkingDirectory is pkgRoot() — on brew installs that's the
- * Cellar libexec, where a cwd-relative `data/tracker.db` would spawn a fresh
- * empty DB that gets wiped on every upgrade. Mirror the candidate search in
- * scripts/macos-app/launch.sh so both launchers agree on which DB is "the"
- * DB; keep the two lists in sync when editing either.
- */
-export function resolveTrackerDbPath(
-  env: NodeJS.ProcessEnv = process.env,
-  home: string = homedir()
-): string {
-  if (env.TRACKER_DB_PATH) return env.TRACKER_DB_PATH;
-  const candidates = [
-    join(home, 'Projects', 'tokentrail', 'data', 'tracker.db'),
-    join(home, 'tokentrail', 'data', 'tracker.db'),
-    join(home, 'Library', 'Application Support', 'tokentrail', 'tracker.db'),
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate;
-  }
-  return candidates[candidates.length - 1]!;
-}
+// The daemon's WorkingDirectory is pkgRoot() — on brew installs that's the
+// Cellar libexec, where a cwd-relative `data/tracker.db` would spawn a fresh
+// empty DB that gets wiped on every upgrade. The plist therefore pins an
+// absolute TRACKER_DB_PATH, resolved by the same shared search every other
+// entry point uses.
+export { resolveTrackerDbPath };
 
 export function installDaemon(opts: InitOptions, repoRoot: string): void {
   console.log('• Dashboard daemon (launchd)');
@@ -212,9 +195,20 @@ function installSkills(opts: InitOptions): void {
   runInstallSkills({ dryRun: opts.dryRun, force: opts.force });
 }
 
-function installRepoHook(opts: InitOptions, repoRoot: string): void {
+function installRepoHook(opts: InitOptions): void {
   console.log('• Session-end hook (this repo)');
-  runInstallHook({ repo: repoRoot, dryRun: opts.dryRun });
+  // "This repo" is the git repo init was run from — NOT pkgRoot(), which on
+  // brew installs is the Cellar libexec: a settings.json written there is
+  // not the user's repo and gets wiped on every upgrade.
+  const repo = findGitRoot(process.cwd());
+  if (!repo) {
+    console.log(
+      '    (skipped — not inside a git repo. Run `tokentrail init` from a repo\n' +
+      '    you use Claude Code in, or `tokentrail install-hook` there later.)'
+    );
+    return;
+  }
+  runInstallHook({ repo, dryRun: opts.dryRun });
 }
 
 /**

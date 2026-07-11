@@ -33,11 +33,26 @@ describe('renderDaemonPlist', () => {
 });
 
 describe('resolveTrackerDbPath', () => {
+  // Explicit neutral cwd: the test process's real cwd is the repo checkout,
+  // whose data/tracker.db would otherwise win the candidate search.
+  const neutralCwd = () => mkdtempSync(join(tmpdir(), 'tt-cwd-'));
+
   test('an explicit TRACKER_DB_PATH env always wins', () => {
     assert.equal(
-      resolveTrackerDbPath({ TRACKER_DB_PATH: '/custom/tracker.db' }, '/home/none'),
+      resolveTrackerDbPath({ TRACKER_DB_PATH: '/custom/tracker.db' }, '/home/none', neutralCwd()),
       '/custom/tracker.db'
     );
+  });
+
+  test('an existing DB under the working directory wins over home candidates', () => {
+    const home = mkdtempSync(join(tmpdir(), 'tt-home-'));
+    const cwd = neutralCwd();
+    mkdirSync(join(cwd, 'data'), { recursive: true });
+    writeFileSync(join(cwd, 'data', 'tracker.db'), '');
+    const homeDbDir = join(home, 'Projects', 'tokentrail', 'data');
+    mkdirSync(homeDbDir, { recursive: true });
+    writeFileSync(join(homeDbDir, 'tracker.db'), '');
+    assert.equal(resolveTrackerDbPath({}, home, cwd), join(cwd, 'data', 'tracker.db'));
   });
 
   test('picks the first existing candidate under the given home', () => {
@@ -45,13 +60,13 @@ describe('resolveTrackerDbPath', () => {
     const dbDir = join(home, 'Projects', 'tokentrail', 'data');
     mkdirSync(dbDir, { recursive: true });
     writeFileSync(join(dbDir, 'tracker.db'), '');
-    assert.equal(resolveTrackerDbPath({}, home), join(dbDir, 'tracker.db'));
+    assert.equal(resolveTrackerDbPath({}, home, neutralCwd()), join(dbDir, 'tracker.db'));
   });
 
   test('falls back to Application Support when no candidate exists', () => {
     const home = mkdtempSync(join(tmpdir(), 'tt-home-'));
     assert.equal(
-      resolveTrackerDbPath({}, home),
+      resolveTrackerDbPath({}, home, neutralCwd()),
       join(home, 'Library', 'Application Support', 'tokentrail', 'tracker.db')
     );
   });

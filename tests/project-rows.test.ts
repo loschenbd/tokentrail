@@ -10,6 +10,7 @@ const item = {
   totalUsd: 17,
   pct: 60,
   featureCount: 2,
+  sessionCount: 1,
   color: '#8b6f47',
 };
 

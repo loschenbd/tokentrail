@@ -54,3 +54,13 @@ describe('renderShell window selector visibility', () => {
     }
   });
 });
+
+describe('jsonForScriptTag', () => {
+  test('escapes < so payloads cannot close the script tag', async () => {
+    const { jsonForScriptTag } = await import('../src/dashboard/render/shell.js');
+    const out = jsonForScriptTag({ name: '</script><script>alert(1)' });
+    assert.equal(out.includes('</script>'), false);
+    assert.match(out, /\\u003c\/script>/);
+    assert.deepEqual(JSON.parse(out), { name: '</script><script>alert(1)' });
+  });
+});

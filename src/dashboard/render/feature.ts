@@ -1,5 +1,5 @@
 import type { FeatureDetailVM } from '../data/feature.js';
-import { escapeHtml } from './shell.js';
+import { escapeHtml, jsonForScriptTag } from './shell.js';
 import { colorFor, STRIPED_SENTINEL } from '../lib/feature-colors.js';
 
 export function renderFeature(vm: FeatureDetailVM): string {
@@ -118,7 +118,3 @@ function renderPrsBlock(prs: FeatureDetailVM['sessions'][number]['prs']): string
     .join('');
 }
 
-// See overview.ts for why we don't escapeHtml() JSON inside a <script> tag.
-function jsonForScriptTag(data: unknown): string {
-  return JSON.stringify(data).replace(/</g, '\\u003c');
-}

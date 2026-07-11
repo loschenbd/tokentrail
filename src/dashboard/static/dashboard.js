@@ -799,13 +799,14 @@
         const hh = String(entry.hour).padStart(2, '0');
         const next = String((entry.hour + 1) % 24).padStart(2, '0');
         const projects = Array.isArray(entry.projects) ? entry.projects : [];
-        const rows = projects.slice(0, MAX_ROWS).map((p) =>
-          `<div class="hour-tip-row">` +
-          `<span class="swatch" style="background:${escapeAttr(p.color || '#9CA3AF')}"></span>` +
-          `<span class="name">${esc(p.name || '')}</span>` +
-          `<span class="amt">$${p.usd < 1 ? p.usd.toFixed(2) : p.usd.toFixed(0)}</span>` +
-          `</div>`
-        );
+        const rows = projects.slice(0, MAX_ROWS).map((p) => {
+          const usd = Number(p.usd) || 0;
+          return `<div class="hour-tip-row">` +
+            `<span class="swatch" style="background:${escapeAttr(p.color || '#9CA3AF')}"></span>` +
+            `<span class="name">${esc(p.name || '')}</span>` +
+            `<span class="amt">$${usd < 1 ? usd.toFixed(2) : usd.toFixed(0)}</span>` +
+            `</div>`;
+        });
         if (projects.length > MAX_ROWS) {
           rows.push(`<div class="hour-tip-row hour-tip-more">+${projects.length - MAX_ROWS} more</div>`);
         }

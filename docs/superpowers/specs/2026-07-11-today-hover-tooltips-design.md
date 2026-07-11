@@ -86,7 +86,9 @@ unchanged.
 
 ## Testing
 
-- Data: per-hour breakdown rows sum to that hour's `usd`; ordering desc;
+- Data: per-hour breakdown rows sum to that hour's `usd` within rounding
+  (each row independently round2'd; sub-cent divergence acceptable on this
+  estimated-cost display surface); ordering desc;
   empty hours have `projects: []`; `projectFeatureMix` present and keyed
   by `topProjects.key`.
 - Render: both script tags emitted with expected JSON content; `data-hour`

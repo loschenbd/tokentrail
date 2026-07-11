@@ -766,6 +766,67 @@
     });
   }
 
+  // Hour-bar tooltips (Today page). Payload: [{hour, usd, projects:[{name,usd,color}]}].
+  // Same conventions as the subbar tip: shared body-level singleton,
+  // pointer-events:none via .chart-tooltip, display-before-measure,
+  // viewport-clamped. Zero-spend hours are absent from the payload and
+  // get no listeners.
+  let hourTip = null;
+  function ensureHourTip() {
+    if (!hourTip) {
+      hourTip = document.createElement('div');
+      hourTip.className = 'chart-tooltip hour-tooltip';
+      hourTip.style.display = 'none';
+      document.body.appendChild(hourTip);
+    }
+    return hourTip;
+  }
+
+  function renderHourBarTips() {
+    const dataNode = document.getElementById('hour-burn-data');
+    if (!dataNode) return;
+    let payload;
+    try { payload = JSON.parse(dataNode.textContent || 'null'); } catch (e) { return; }
+    if (!Array.isArray(payload)) return;
+    const byHour = new Map(payload.map((h) => [h.hour, h]));
+    const MAX_ROWS = 6;
+
+    document.querySelectorAll('.hour-bar[data-hour]').forEach((bar) => {
+      const entry = byHour.get(Number(bar.dataset.hour));
+      if (!entry || !(entry.usd > 0)) return;
+      bar.addEventListener('mouseenter', () => {
+        const tip = ensureHourTip();
+        const hh = String(entry.hour).padStart(2, '0');
+        const next = String((entry.hour + 1) % 24).padStart(2, '0');
+        const projects = Array.isArray(entry.projects) ? entry.projects : [];
+        const rows = projects.slice(0, MAX_ROWS).map((p) =>
+          `<div class="hour-tip-row">` +
+          `<span class="swatch" style="background:${escapeAttr(p.color || '#9CA3AF')}"></span>` +
+          `<span class="name">${esc(p.name || '')}</span>` +
+          `<span class="amt">$${p.usd < 1 ? p.usd.toFixed(2) : p.usd.toFixed(0)}</span>` +
+          `</div>`
+        );
+        if (projects.length > MAX_ROWS) {
+          rows.push(`<div class="hour-tip-row hour-tip-more">+${projects.length - MAX_ROWS} more</div>`);
+        }
+        tip.innerHTML =
+          `<div class="hour-tip-head">${hh}:00–${next}:00 · $${entry.usd.toFixed(2)}</div>` + rows.join('');
+        // Display before measuring — offsetWidth is 0 while display:none.
+        tip.style.display = 'flex';
+        const rect = bar.getBoundingClientRect();
+        const x = Math.max(8, Math.min(
+          rect.left + rect.width / 2 - tip.offsetWidth / 2,
+          window.innerWidth - tip.offsetWidth - 8,
+        ));
+        tip.style.left = x + 'px';
+        tip.style.top = (rect.top - tip.offsetHeight - 6) + 'px';
+      });
+      bar.addEventListener('mouseleave', () => {
+        if (hourTip) hourTip.style.display = 'none';
+      });
+    });
+  }
+
   function fmtUsd(n) {
     return '$' + (typeof n === 'number' ? n.toFixed(2) : n);
   }
@@ -956,6 +1017,7 @@
     renderTrailElevation();
     renderBranchGraph();
     renderBurnPathsSubBars();
+    renderHourBarTips();
     renderUnattributedCard();
     setupRowExpanders();
     setupClusterJumps();

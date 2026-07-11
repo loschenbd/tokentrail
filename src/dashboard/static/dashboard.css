@@ -573,7 +573,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
  * the hovered segment and must not steal the hover that opened it.
  */
 .subbar-tooltip {
-  position: fixed;
+  position: fixed; /* body-appended + viewport coords from getBoundingClientRect — fixed, not absolute, or scroll offsets the tip */
   pointer-events: none;
   display: flex;
   align-items: center;
@@ -802,6 +802,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 
 /* --- Hour-bar tooltip (Today strip): column variant of the shared tip --- */
 .hour-tooltip {
+  position: fixed; /* viewport coords — see .subbar-tooltip */
   flex-direction: column;
   align-items: stretch;
   gap: 3px;

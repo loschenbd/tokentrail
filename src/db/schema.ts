@@ -174,7 +174,10 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     feature_key      TEXT PRIMARY KEY,
     session_count    INTEGER NOT NULL,
     session_id_hash  TEXT NOT NULL,
-    computed_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    computed_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    failed_hash      TEXT,
+    fail_count       INTEGER NOT NULL DEFAULT 0,
+    last_failed_at   TEXT
   )`,
 
   // Per-branch git-history merge detection. Populated by

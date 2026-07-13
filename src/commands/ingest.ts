@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs';
 import { getDb } from '../db/db.js';
 import {
   listSessionFiles,
@@ -17,13 +18,19 @@ export type IngestSummary = {
   newEvents: number;
   sessionsTouched: number;
   filesScanned: number;
+  filesSkipped: number;
   workUnitsInserted: number;
   workUnitsUpdated: number;
 };
 
+// Bump to force a full re-read of files whose (size, mtime) watermark is
+// unchanged — needed when parsing improves in place (e.g. better title
+// extraction or project-dir decoding) and should re-stamp old sessions.
+const INGEST_SCAN_VERSION = 1;
+
 export async function runIngest(): Promise<IngestSummary> {
-  const files = listSessionFiles();
-  if (files.length === 0) {
+  const allFiles = listSessionFiles();
+  if (allFiles.length === 0) {
     console.log(
       'No Claude session logs found. Trail is empty — nothing to ingest.'
     );
@@ -31,12 +38,44 @@ export async function runIngest(): Promise<IngestSummary> {
       newEvents: 0,
       sessionsTouched: 0,
       filesScanned: 0,
+      filesSkipped: 0,
       workUnitsInserted: 0,
       workUnitsUpdated: 0,
     };
   }
 
   const db = getDb();
+
+  // Skip files whose (size, mtime) match the last successful scan.
+  // Transcripts are append-only and event inserts are OR IGNORE, so
+  // re-reading a changed file from byte 0 is safe — the watermark only
+  // decides whether the file is opened at all. Stats are captured before
+  // reading: a file that grows mid-read gets re-read next cycle.
+  const stateStmt = db.prepare(
+    `SELECT size, mtime_ms FROM ingest_file_state
+     WHERE path = ? AND scan_version = ?`
+  );
+  const files: string[] = [];
+  const scannedStats = new Map<string, { size: number; mtimeMs: number }>();
+  let filesSkipped = 0;
+  for (const file of allFiles) {
+    let st;
+    try {
+      st = statSync(file);
+    } catch {
+      continue;
+    }
+    const mtimeMs = Math.trunc(st.mtimeMs);
+    const prev = stateStmt.get(file, INGEST_SCAN_VERSION) as
+      | { size: number; mtime_ms: number }
+      | undefined;
+    if (prev && prev.size === st.size && prev.mtime_ms === mtimeMs) {
+      filesSkipped++;
+      continue;
+    }
+    files.push(file);
+    scannedStats.set(file, { size: st.size, mtimeMs });
+  }
   const insert = db.prepare(`
     INSERT OR IGNORE INTO usage_events (
       id, session_id, timestamp, repo, branch, commit_sha,
@@ -200,6 +239,22 @@ export async function runIngest(): Promise<IngestSummary> {
   }
   if (metaBatch.length > 0) sessionTx(metaBatch);
 
+  // Record watermarks only after both passes over the changed files
+  // completed, so a crash mid-ingest re-reads them next cycle.
+  const upsertState = db.prepare(`
+    INSERT INTO ingest_file_state (path, size, mtime_ms, scan_version)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(path) DO UPDATE SET
+      size = excluded.size,
+      mtime_ms = excluded.mtime_ms,
+      scan_version = excluded.scan_version
+  `);
+  db.transaction(() => {
+    for (const [path, st] of scannedStats) {
+      upsertState.run(path, st.size, st.mtimeMs, INGEST_SCAN_VERSION);
+    }
+  })();
+
   // Merge Stop-hook snapshots before computing work_units. Hook data is
   // a stronger branch signal than ingest-time HEAD, so apply it first.
   const snapshots = await loadLatestHookSnapshots();
@@ -210,7 +265,9 @@ export async function runIngest(): Promise<IngestSummary> {
   console.log(
     `Trail updated: ${newEvents} new usage event${newEvents === 1 ? '' : 's'} ` +
       `from ${sessions.size} session${sessions.size === 1 ? '' : 's'} ` +
-      `across ${files.length} file${files.length === 1 ? '' : 's'}.`
+      `across ${files.length} changed file${files.length === 1 ? '' : 's'}` +
+      (filesSkipped > 0 ? ` (${filesSkipped} unchanged skipped)` : '') +
+      `.`
   );
   if (hookResult.sessionsCovered > 0) {
     console.log(
@@ -236,6 +293,7 @@ export async function runIngest(): Promise<IngestSummary> {
     newEvents,
     sessionsTouched: sessions.size,
     filesScanned: files.length,
+    filesSkipped,
     workUnitsInserted: inserted,
     workUnitsUpdated: updated,
   };

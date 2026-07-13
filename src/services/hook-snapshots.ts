@@ -71,6 +71,10 @@ export function applyHookSnapshots(
 ): { updated: number; sessionsCovered: number } {
   if (snapshots.size === 0) return { updated: 0, sessionsCovered: 0 };
 
+  // The trailing IS NOT clause skips rows the SET would leave unchanged.
+  // Without it, sessions whose hook branch is itself a mainline name match
+  // the WHERE forever and re-write identical values every ingest cycle —
+  // SQLite counts those as changes and flushes them to the WAL.
   const update = db.prepare(`
     UPDATE usage_events
     SET repo = COALESCE(@repo, repo),
@@ -81,6 +85,11 @@ export function applyHookSnapshots(
         branch IS NULL
         OR branch = ''
         OR LOWER(branch) IN ('main','master','develop','staging')
+      )
+      AND (
+        branch IS NOT @branch
+        OR repo IS NOT COALESCE(@repo, repo)
+        OR commit_sha IS NOT COALESCE(@commit_sha, commit_sha)
       )
   `);
 

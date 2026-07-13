@@ -207,4 +207,14 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     llm_calls         INTEGER NOT NULL DEFAULT 0,
     commit_set_hash   TEXT NOT NULL
   )`,
+
+  // Per-file ingest watermarks. Ingest skips JSONL files whose (size,
+  // mtime) match the last successful scan; scan_version lets a parser
+  // change force a full re-read (bump INGEST_SCAN_VERSION in ingest.ts).
+  `CREATE TABLE IF NOT EXISTS ingest_file_state (
+    path          TEXT PRIMARY KEY,
+    size          INTEGER NOT NULL,
+    mtime_ms      INTEGER NOT NULL,
+    scan_version  INTEGER NOT NULL
+  )`,
 ];

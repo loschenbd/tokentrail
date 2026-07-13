@@ -71,7 +71,19 @@ export function refreshWorkUnits(db: DatabaseType.Database): {
           WHEN feature_key GLOB 'mainline-*' AND feature_key NOT GLOB 'mainline-*-*' THEN @feature_name
           ELSE feature_name
         END
+    -- The WHERE guard skips rows the SET would leave byte-identical.
+    -- Without it every (repo, branch) pair re-writes its row on every
+    -- ingest cycle ("0 new, 74 updated" forever), churning the WAL.
     WHERE id = @id
+      AND (
+        @first_seen_at < first_seen_at
+        OR @last_seen_at > last_seen_at
+        OR (
+          (github_enriched_at IS NULL
+           OR (feature_key GLOB 'mainline-*' AND feature_key NOT GLOB 'mainline-*-*'))
+          AND (feature_key IS NOT @feature_key OR feature_name IS NOT @feature_name)
+        )
+      )
   `);
 
   let inserted = 0;
@@ -84,14 +96,14 @@ export function refreshWorkUnits(db: DatabaseType.Database): {
         | { id: string }
         | undefined;
       if (row) {
-        updateStmt.run({
+        const result = updateStmt.run({
           id: row.id,
           first_seen_at: p.first_seen,
           last_seen_at: p.last_seen,
           feature_key: attr.featureKey,
           feature_name: attr.featureName,
         });
-        updated++;
+        if (result.changes > 0) updated++;
       } else {
         insertStmt.run({
           id: randomUUID(),

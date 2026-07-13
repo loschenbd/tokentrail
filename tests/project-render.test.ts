@@ -14,6 +14,7 @@ function baseVm(overrides: Partial<ProjectDetailVM> = {}): ProjectDetailVM {
   return {
     projectKey: 'repo:loschenbd/archi',
     projectName: 'archi',
+    color: '#835a49',
     totalUsd: 2203,
     priorUsd: 288,
     deltaPct: 649,

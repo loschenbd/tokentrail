@@ -195,10 +195,10 @@ export function buildOverview(
     .sort((a, b) => b.totalUsd - a.totalUsd)
     .slice(0, 12);
 
-  // Rank-based collision-free color map, keyed by projectKey. Both the trend
-  // chart bands and the burn-paths swatches read from this so a project's
-  // color is identical everywhere on the page.
-  const projectColors = resolveProjectColors(topProjectsRaw.map((p) => p.key));
+  // Canonical collision-free color map, keyed by projectKey. Resolved over
+  // EVERY project in the ledger (not the windowed top 12) so a project keeps
+  // one color across windows, pages, the API, and the menubar plugin.
+  const projectColors = canonicalProjectColors(db);
 
   const topProjects: OverviewVM['topProjects'] = topProjectsRaw.map((p) => ({
     ...p,
@@ -464,6 +464,36 @@ export function buildOverview(
     anomalies,
     recentCommits,
   };
+}
+
+// One color per project for the WHOLE ledger, independent of any time
+// window. Keys are handed to resolveProjectColors in ALL-TIME-SPEND order
+// (ties broken by key), so the projects that actually appear on screens
+// claim well-separated hues first and low-spend noise buckets absorb any
+// crowding — the ledger can hold more projects than 360°/MIN_SEP slots.
+// All-time order is view-independent, so every surface that colors a
+// project — overview chart bands, burn-path bars, project detail, /api
+// (menubar) — gets the same map. Never resolve colors from a windowed
+// ranking or a view-local subset.
+export function canonicalProjectColors(db: DatabaseType.Database): Record<string, string> {
+  const rows = db
+    .prepare(`
+      SELECT feature_key AS featureKey,
+             MAX(feature_name) AS featureName,
+             MAX(repo) AS repo,
+             SUM(total_cost_usd) AS totalUsd
+      FROM feature_rollups
+      GROUP BY feature_key
+    `)
+    .all() as Array<{ featureKey: string; featureName: string; repo: string | null; totalUsd: number }>;
+  const spend = new Map<string, number>();
+  for (const r of rows) {
+    const { projectKey } = bucketProject(r);
+    spend.set(projectKey, (spend.get(projectKey) ?? 0) + (r.totalUsd ?? 0));
+  }
+  const keys = [...spend.keys()].sort((a, b) =>
+    (spend.get(b)! - spend.get(a)!) || (a < b ? -1 : a > b ? 1 : 0));
+  return resolveProjectColors(keys);
 }
 
 export function bucketProject(r: { featureKey: string; featureName: string; repo: string | null }): {

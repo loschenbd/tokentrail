@@ -32,7 +32,7 @@ export function renderTrailMap(opts: { mode: TrailMapMode; setupStatus?: SetupSt
         <div class="leg"><span class="leg-g path" style="letter-spacing:-1px">────</span> Trail</div>
         <div class="leg"><span class="leg-g branch">─┬─</span> Branch</div>
         <div class="leg"><span class="leg-g merged">✕</span> Merged PR</div>
-        <div class="leg"><span class="leg-g anom" style="animation:none;color:#cc3333">!</span> Anomaly</div>
+        <div class="leg"><span class="leg-g anom" style="animation:none;color:#a05252">!</span> Anomaly</div>
         <div class="leg"><span class="leg-g trophy" style="font-family:serif">⚑</span> Feature complete</div>
       </div>
       <div class="stats">

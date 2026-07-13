@@ -11,9 +11,12 @@ matter more than any individual prompt.
 
 Tokentrail is a **trail-map and ledger for AI spend**. The voice is calm,
 precise, and lightly fantasy-coded. The visual identity is the
-**cartographer theme**: aged parchment, sepia ink, hand-drawn map cues.
-Restrained, confident, clarity-first. Fantasy flavor belongs in microcopy
-and small visual cues — never overpowering, never kitsch.
+**Midori paper theme** (as of v0.3.7): warm cream MD-notebook paper, soft
+ink, a mint dot grid, muted sage as the accent, and data rendered as
+Midori "Color Dot" hues. Restrained, confident, clarity-first. Fantasy
+flavor belongs in microcopy and small visual cues — never overpowering,
+never kitsch. (The earlier cartographer/parchment look survives only in
+`marketing/index.html`, which has not yet been migrated.)
 
 If you find yourself reaching for pirate skulls, treasure chests, dragons,
 neon, glow effects, or saturated brand colors, you are off-brand. Pull back.
@@ -29,20 +32,21 @@ guide is stale. Update this guide rather than diverging.
 
 | Role | Hex | Use |
 |---|---|---|
-| Parchment top | `#f8f3e7` | Background top of gradient |
-| Parchment bottom | `#f0e5d0` | Background bottom of gradient |
-| Ink | `#3d2f1f` | Primary structure, rims, text-equivalent strokes |
-| Ink muted | `#6b563d` | Secondary structure |
-| Ink subtle | `#8b6f47` | Tertiary structure, rules, map contour lines |
-| Light sepia | `#c9b48d` | Coin/token faces, light fills, card borders |
-| Accent green (sage olive) | `#5d7a3e` | Accent only — used sparingly. Trail blazes, highlights, hover states |
+| Paper | `#f3f1eb` | Background — flat warm cream, no gradient |
+| Card | `#faf9f6` | Card / panel fills |
+| Ink | `#2a2825` | Primary structure, text-equivalent strokes |
+| Ink muted | `#524d46` | Secondary structure |
+| Ink subtle | `#6b5f52` | Eyebrow labels, tertiary structure |
+| Mint dot | `#9ebfb4` | The Midori dot grid — texture only, never a fill |
+| Sage (accent) | `#5f6f5e` | Accent only — used sparingly. Highlights, hover states, "good" signals |
+| Terracotta / clay | `#c9916b` / `#8f4f38` | Warm counterpoint; coins, warnings, "down" deltas |
+| Color dots (data) | `#3a5572` `#b88a3a` `#6c7d52` `#7a4a4a` | Midori Color-Dot series hues for charts |
 
-**Backgrounds are always a subtle vertical gradient from parchment-top to
-parchment-bottom**, never a flat color, never white, never cream from
-outside the palette.
+**Backgrounds are flat cream `#f3f1eb`** (optionally with the mint dot
+grid at 24px pitch), never white, never a saturated color, never cream
+from outside the palette.
 
-**Accent green is the rarest color.** Use it like punctuation, not paint.
-A logo can omit it entirely (as the current `docs/logo.png` does).
+**Sage is punctuation, not paint.** A logo can omit it entirely.
 
 ## Typography
 
@@ -60,9 +64,9 @@ sans-serif tech wordmark. Never a script or display font.
 
 **Always:**
 - Flat vector aesthetic. Crisp edges. Geometric.
-- Parchment-tone backgrounds (subtle gradient).
-- Cartography motifs when they help: dashed trails, contour lines, compass
-  hints, hand-drawn-map warmth. Used sparingly.
+- Warm cream paper backgrounds (flat `#f3f1eb`; mint dot grid optional).
+- Notebook-and-trail motifs when they help: a trail of coin-dots, hairline
+  rules, dot-grid texture, stationery warmth. Used sparingly.
 - One concept per image. Calm composition. Generous whitespace.
 
 **Never:**
@@ -80,10 +84,12 @@ sans-serif tech wordmark. Never a script or display font.
 
 ## The mark
 
-`docs/logo.png` is the current canonical logo. It depicts a **pile of
-spent tokens dispersing into an arcing trail of individual coins**. The
-metaphor: tokens spent leaving a trail behind — the product's story in
-one mark.
+`docs/logo.png` is the current canonical logo (rendered from
+`docs/logo.svg` — edit the SVG, not the PNG). It depicts a **pile of
+spent tokens dispersing into an arcing trail**, each token a flat Midori
+Color-Dot hue on cream paper. The metaphor: tokens spent leaving a trail
+behind — the product's story in one mark. No rims, no shadows, no
+gradients; the dots are the same hues the dashboard uses for data.
 
 When creating supporting imagery (blog headers, social cards, dashboard
 hero art), the trail-of-tokens motif is the visual anchor. Don't reinvent
@@ -115,12 +121,13 @@ bevels. No realistic textures. No noise. No wood grain. Confident
 restrained polish, hand-drawn-map warmth. One concept per image.
 
 EXACT PALETTE (use only these colors):
-- Parchment background: vertical gradient from #f8f3e7 (top) to #f0e5d0 (bottom)
-- Ink / structure / rims: #3d2f1f
-- Ink muted / secondary: #6b563d
-- Ink subtle / map contours: #8b6f47
-- Light sepia / coin faces / fills: #c9b48d
-- Accent green / trail blazes (use sparingly, can be omitted): #5d7a3e
+- Paper background: flat warm cream #f3f1eb (card fills #faf9f6)
+- Ink / structure / rims: #2a2825
+- Ink muted / secondary: #524d46
+- Ink subtle / tertiary: #6b5f52
+- Mint dot grid (texture only, 24px pitch, optional): #9ebfb4
+- Clay / coin faces: #c9916b (deep terracotta rims: #8f4f38)
+- Sage accent (use sparingly, can be omitted): #5f6f5e
 
 TYPOGRAPHY (if any text):
 Georgia serif. Never sans-serif. Never script.
@@ -140,8 +147,11 @@ specific count, layout, or text requirements.
 
 ## Worked example
 
-The current `docs/logo.png` was produced by `generate_image` with this
-prompt (abbreviated; the actual call is in conversation history):
+The current `docs/logo.png` is deterministic SVG (`docs/logo.svg`)
+rendered via headless Chrome — flat marks with exact hexes are better
+authored than generated. The prompt below produced the *previous*
+(parchment-era) mark and is kept as a composition reference for
+generated imagery like blog headers:
 
 > Spend-pile-dispersing-into-trail concept. 5 overlapping coins in
 > lower-left forming a pile, 5 individual coins arcing up to upper-right

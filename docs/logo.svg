@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Tokentrail">
+  <!--
+    Tokentrail mark, Midori paper edition: a pile of spent tokens dispersing
+    into an arcing trail — each token a flat Midori Color-Dot hue on warm
+    cream paper. Flat vector, no rims, no shadows (docs/brand-images.md).
+    Source of truth for docs/logo.png, src/dashboard/static/logo.png and
+    marketing/static/logo.png.
+  -->
+  <rect width="1024" height="1024" fill="#f3f1eb"/>
+  <!-- Pile: five overlapping tokens, lower-left -->
+  <circle cx="248" cy="762" r="122" fill="#5f6f5e"/>
+  <circle cx="396" cy="792" r="110" fill="#3a5572"/>
+  <circle cx="322" cy="654" r="104" fill="#6c7d52"/>
+  <circle cx="196" cy="636" r="92"  fill="#7a4a4a"/>
+  <circle cx="452" cy="688" r="94"  fill="#b88a3a"/>
+  <!-- Trail: five tokens arcing to the upper-right; the heading steepens
+       and the gaps grow so the trail reads as motion, not a dotted line -->
+  <circle cx="572" cy="562" r="62" fill="#b06d4a"/>
+  <circle cx="668" cy="458" r="50" fill="#b88a3a"/>
+  <circle cx="760" cy="342" r="41" fill="#5f6f5e"/>
+  <circle cx="844" cy="216" r="33" fill="#3a5572"/>
+  <circle cx="912" cy="104" r="26" fill="#6c7d52"/>
+</svg>

@@ -61,7 +61,7 @@
       return `#${to(r)}${to(g)}${to(b)}`;
     }
     function colorForFeatureInProject(projectKey, featureKey) {
-      const base = projectColors[projectKey] || '#9CA3AF';
+      const base = projectColors[projectKey] || '#a8a29a';
       const [h, s, l] = hexToHsl(base);
       const shifts = [-18, -9, 0, 9, 18];
       const shift = shifts[hashFeat(featureKey) % shifts.length];
@@ -121,7 +121,7 @@
         .sort((a, b) => b[1] - a[1])
         .map(([key, usd]) => {
           const proj = stackOrder.find((p) => p.key === key);
-          const color = proj ? proj.color : '#9CA3AF';
+          const color = proj ? proj.color : '#a8a29a';
           const name = proj ? proj.name : key;
           const activeCls = key === activeProjectKey ? ' chart-tooltip-row--active' : '';
           return `<div class="chart-tooltip-row${activeCls}"><span class="swatch" style="background:${esc(color)}"></span>${esc(name)}<span class="amt">${fmtUsd(usd)}</span></div>`;
@@ -204,8 +204,8 @@
       series: series,
       bands: bands,
       axes: [
-        { stroke: '#6b563d', grid: { stroke: 'rgba(139,111,71,0.15)' } },
-        { stroke: '#6b563d', grid: { stroke: 'rgba(139,111,71,0.15)' }, values: (_s, ticks) => ticks.map((t) => '$' + Math.round(t)) },
+        { stroke: '#524d46', grid: { stroke: 'rgba(60,58,54,0.09)' } },
+        { stroke: '#524d46', grid: { stroke: 'rgba(60,58,54,0.09)' }, values: (_s, ticks) => ticks.map((t) => '$' + Math.round(t)) },
       ],
       hooks: {
         setCursor: [
@@ -715,13 +715,13 @@
         else otherUsd += f.totalUsd;
       });
       if (otherUsd > 0) {
-        kept.push({ key: '__other_features__', name: 'other features', color: '#9CA3AF', totalUsd: otherUsd, pct: (otherUsd / total) * 100 });
+        kept.push({ key: '__other_features__', name: 'other features', color: '#a8a29a', totalUsd: otherUsd, pct: (otherUsd / total) * 100 });
       }
 
       container.innerHTML = kept.map((f) => {
         const striped = f.color === '__striped__' ? ' subbar-segment--striped' : '';
         const bg = f.color === '__striped__' ? '' : `background:${escapeAttr(f.color)};`;
-        const swatch = f.color === '__striped__' ? '#6B7280' : f.color;
+        const swatch = f.color === '__striped__' ? '#78716a' : f.color;
         return `<div class="subbar-segment${striped}" style="${bg}width:${f.pct.toFixed(2)}%" data-feature-name="${escapeAttr(f.name)}" data-usd="${f.totalUsd.toFixed(0)}" data-swatch="${escapeAttr(swatch)}"></div>`;
       }).join('');
       container.querySelectorAll('.subbar-segment').forEach(attachSubbarSegmentTip);
@@ -759,7 +759,7 @@
   function attachSubbarSegmentTip(seg) {
     seg.addEventListener('mouseenter', () => {
       const tip = ensureSubbarTip();
-      tip.innerHTML = `<span class="swatch" style="background:${escapeAttr(seg.dataset.swatch || '#9CA3AF')}"></span>` +
+      tip.innerHTML = `<span class="swatch" style="background:${escapeAttr(seg.dataset.swatch || '#a8a29a')}"></span>` +
         `<span class="name">${esc(seg.dataset.featureName || '')}</span>` +
         `<span class="amt">$${esc(seg.dataset.usd || '0')}</span>`;
       // Display before measuring — offsetWidth is 0 while display:none.
@@ -809,7 +809,7 @@
         const rows = projects.slice(0, MAX_ROWS).map((p) => {
           const usd = Number(p.usd) || 0;
           return `<div class="hour-tip-row">` +
-            `<span class="swatch" style="background:${escapeAttr(p.color || '#9CA3AF')}"></span>` +
+            `<span class="swatch" style="background:${escapeAttr(p.color || '#a8a29a')}"></span>` +
             `<span class="name">${esc(p.name || '')}</span>` +
             `<span class="amt">$${usd < 1 ? usd.toFixed(2) : usd.toFixed(0)}</span>` +
             `</div>`;
@@ -1002,7 +1002,7 @@
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
     return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
-      <polyline points="${pts}" fill="none" stroke="#6B7280" stroke-width="1.5" />
+      <polyline points="${pts}" fill="none" stroke="#78716a" stroke-width="1.5" />
     </svg>`;
   }
 

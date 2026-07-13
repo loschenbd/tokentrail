@@ -1,5 +1,7 @@
 import type DatabaseType from 'better-sqlite3';
 import { buildBranchGraph, type BranchGraphVM } from './branches.js';
+import { canonicalProjectColors } from './overview.js';
+import { colorForProject } from '../lib/feature-colors.js';
 
 // A "project" is a higher-level grouping than a feature. There are three
 // kinds of project key:
@@ -15,6 +17,9 @@ import { buildBranchGraph, type BranchGraphVM } from './branches.js';
 export type ProjectDetailVM = {
   projectKey: string;
   projectName: string;
+  // Canonical project color (see canonicalProjectColors) — identical to the
+  // overview chart bands, burn-path swatches, and menubar dots.
+  color: string;
   totalUsd: number;
   priorUsd: number;
   deltaPct: number;
@@ -380,6 +385,7 @@ export function buildProjectDetail(
   return {
     projectKey: opts.projectKey,
     projectName,
+    color: canonicalProjectColors(db)[opts.projectKey] ?? colorForProject(opts.projectKey),
     totalUsd: round2(head.totalUsd),
     priorUsd: round2(prior),
     deltaPct,

@@ -15,12 +15,18 @@ import { getLLMClient } from '../lib/llm.js';
 //     list itself, no value in renaming.
 //   - Each session contributes its title + up to 3 commit subjects as signal.
 //   - Cost-defensive: Haiku is cheap, but a missing OPENROUTER_API_KEY or
-//     a network failure must not crash the rollup. Errors are logged and the
-//     run record is NOT written, so the next rollup retries.
+//     a network failure must not crash the rollup. Errors are logged, and a
+//     feature that keeps failing on the SAME session-set fingerprint backs
+//     off exponentially (2 min doubling to a 24 h cap) instead of retrying
+//     every rollup — a per-minute pipeline retrying a doomed call kept the
+//     local Ollama model resident around the clock. A changed fingerprint
+//     (new sessions) resets the backoff and retries immediately.
 
 const MIN_SESSIONS_FOR_CLUSTERING = 5;
 const MAX_TITLES_PER_FEATURE = 80;
 const MAX_COMMITS_PER_SESSION = 3;
+const FAIL_BACKOFF_BASE_MIN = 2;
+const FAIL_BACKOFF_CAP_MIN = 24 * 60;
 
 type SessionForClustering = {
   sessionId: string;
@@ -39,6 +45,9 @@ export type ClusterSummary = {
   featuresClustered: number;
   featuresSkipped: number;
   featuresFailed: number;
+  // Features skipped this run because a previous failure on the same
+  // fingerprint is still inside its backoff window.
+  featuresBackedOff: number;
   llmCalls: number;
 };
 
@@ -50,6 +59,7 @@ export async function recomputeClusters(
     featuresClustered: 0,
     featuresSkipped: 0,
     featuresFailed: 0,
+    featuresBackedOff: 0,
     llmCalls: 0,
   };
 
@@ -83,16 +93,38 @@ export async function recomputeClusters(
 
   if (features.length === 0) return summary;
 
+  // Success clears any failure state so a later failure starts backoff fresh.
   const upsertRun = db.prepare(
     `INSERT INTO feature_cluster_runs (feature_key, session_count, session_id_hash, computed_at)
      VALUES (@feature_key, @session_count, @session_id_hash, datetime('now'))
      ON CONFLICT(feature_key) DO UPDATE SET
        session_count   = excluded.session_count,
        session_id_hash = excluded.session_id_hash,
-       computed_at     = excluded.computed_at`
+       computed_at     = excluded.computed_at,
+       failed_hash     = NULL,
+       fail_count      = 0,
+       last_failed_at  = NULL`
+  );
+  // Failure keeps the last successful session_id_hash intact (session_id_hash
+  // '' on first-ever insert can never match a real fingerprint) and counts
+  // consecutive failures of the SAME fingerprint; a different fingerprint
+  // restarts the count at 1.
+  const upsertFailure = db.prepare(
+    `INSERT INTO feature_cluster_runs
+       (feature_key, session_count, session_id_hash, computed_at, failed_hash, fail_count, last_failed_at)
+     VALUES (@feature_key, @session_count, '', datetime('now'), @failed_hash, 1, datetime('now'))
+     ON CONFLICT(feature_key) DO UPDATE SET
+       failed_hash    = excluded.failed_hash,
+       fail_count     = CASE
+         WHEN feature_cluster_runs.failed_hash = excluded.failed_hash
+           THEN feature_cluster_runs.fail_count + 1
+         ELSE 1
+       END,
+       last_failed_at = excluded.last_failed_at`
   );
   const lastRun = db.prepare(
-    `SELECT session_count, session_id_hash FROM feature_cluster_runs WHERE feature_key = ?`
+    `SELECT session_count, session_id_hash, failed_hash, fail_count, last_failed_at
+     FROM feature_cluster_runs WHERE feature_key = ?`
   );
   const clearClusters = db.prepare(
     `DELETE FROM feature_clusters WHERE feature_key = ?`
@@ -114,10 +146,26 @@ export async function recomputeClusters(
 
     const fingerprint = fingerprintFor(sessionIds);
     const prev = lastRun.get(f.feature_key) as
-      | { session_count: number; session_id_hash: string }
+      | {
+          session_count: number;
+          session_id_hash: string;
+          failed_hash: string | null;
+          fail_count: number;
+          last_failed_at: string | null;
+        }
       | undefined;
     if (prev && prev.session_id_hash === fingerprint) {
       summary.featuresSkipped++;
+      continue;
+    }
+    if (
+      prev &&
+      prev.failed_hash === fingerprint &&
+      prev.fail_count > 0 &&
+      prev.last_failed_at &&
+      !backoffElapsed(prev.last_failed_at, prev.fail_count)
+    ) {
+      summary.featuresBackedOff++;
       continue;
     }
 
@@ -128,6 +176,11 @@ export async function recomputeClusters(
       summary.llmCalls++;
     } catch (err) {
       summary.featuresFailed++;
+      upsertFailure.run({
+        feature_key: f.feature_key,
+        session_count: sessionIds.length,
+        failed_hash: fingerprint,
+      });
       console.error(
         `Cluster: failed to cluster feature "${f.feature_key}":`,
         err instanceof Error ? err.message : err
@@ -161,6 +214,20 @@ export async function recomputeClusters(
   }
 
   return summary;
+}
+
+// True when the retry window for the given consecutive-failure count has
+// passed. Delay doubles per failure from FAIL_BACKOFF_BASE_MIN, capped at
+// FAIL_BACKOFF_CAP_MIN (2, 4, 8, … minutes → 24 h). last_failed_at is
+// SQLite's UTC "YYYY-MM-DD HH:MM:SS".
+function backoffElapsed(lastFailedAt: string, failCount: number): boolean {
+  const failedMs = Date.parse(lastFailedAt.replace(' ', 'T') + 'Z');
+  if (!Number.isFinite(failedMs)) return true;
+  const delayMin = Math.min(
+    FAIL_BACKOFF_BASE_MIN * 2 ** (failCount - 1),
+    FAIL_BACKOFF_CAP_MIN
+  );
+  return Date.now() - failedMs >= delayMin * 60_000;
 }
 
 function uniqueSessionIds(csv: string | null): string[] {

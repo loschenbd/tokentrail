@@ -248,6 +248,7 @@ export async function runRollup(): Promise<RollupSummary> {
         `Clusters: ${clusters.featuresClustered} feature${clusters.featuresClustered === 1 ? '' : 's'} re-clustered, ` +
           `${clusters.featuresSkipped} unchanged` +
           (clusters.featuresFailed > 0 ? `, ${clusters.featuresFailed} failed` : '') +
+          (clusters.featuresBackedOff > 0 ? `, ${clusters.featuresBackedOff} backing off` : '') +
           ` (${clusters.llmCalls} LLM call${clusters.llmCalls === 1 ? '' : 's'}).`
       );
     }

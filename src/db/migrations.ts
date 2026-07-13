@@ -52,6 +52,12 @@ export function runMigrations(db: Database.Database): void {
             AND ue.repo IS NOT NULL
         )
     `);
+    // Cluster failure backoff: a feature whose LLM call keeps failing on
+    // the same session-set fingerprint retries on an exponential schedule
+    // instead of every rollup (which kept the local model loaded 24/7).
+    addColumnIfMissing(db, 'feature_cluster_runs', 'failed_hash', 'TEXT');
+    addColumnIfMissing(db, 'feature_cluster_runs', 'fail_count', 'INTEGER NOT NULL DEFAULT 0');
+    addColumnIfMissing(db, 'feature_cluster_runs', 'last_failed_at', 'TEXT');
     // Mainline feature inference columns (2026-06-29 spec)
     addColumnIfMissing(db, 'usage_events', 'inferred_feature_key', 'TEXT');
     addColumnIfMissing(db, 'usage_events', 'inferred_feature_name', 'TEXT');

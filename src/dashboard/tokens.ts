@@ -1,21 +1,24 @@
-// Single source of truth for the cartographer theme. Imported by both
-// the CSS generator and any rendering code that needs an inline color.
+// Single source of truth for the Midori paper theme (ported from
+// benjaminloschen.com). Imported by both the CSS generator and any
+// rendering code that needs an inline color.
 
 export const TOKENS = {
   color: {
-    parchmentTop:    '#f8f3e7',
-    parchmentBottom: '#f0e5d0',
-    ink:             '#3d2f1f',
-    inkMuted:        '#6b563d',
-    inkSubtle:       '#8b6f47',
-    rule:            '#8b6f47',
-    accentGreen:     '#5d7a3e',
-    accentBar:       '#8b6f47',
-    cardBg:          'rgba(255,255,255,0.5)',
-    cardBorder:      '#c9b48d',
+    paper:        '#f3f1eb',            // warm cream page background (flat, no gradient)
+    ink:          '#2a2825',            // primary text / structure
+    inkMuted:     '#524d46',            // secondary text
+    inkSubtle:    '#6b5f52',            // eyebrows, tertiary structure
+    border:       'rgba(60,58,54,0.1)', // hairline rules
+    accent:       '#5f6f5e',            // muted sage — used like punctuation
+    accentHover:  '#4a5749',
+    warm:         '#c9916b',            // muted terracotta / clay
+    warmDeep:     '#8f4f38',            // negative deltas, alerts
+    dot:          '#9ebfb4',            // mint dot-grid on cream
+    cardBg:       '#faf9f6',
+    cardBorder:   'rgba(60,58,54,0.08)',
   },
   font: {
-    serif:  'Georgia, "Times New Roman", serif',
+    serif:  'Georgia, "Iowan Old Style", ui-serif, serif',
     sans:   '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
     mono:   'ui-monospace, "SF Mono", Menlo, monospace',
   },
@@ -38,14 +41,16 @@ export const TOKENS = {
 // Emits the tokens as :root custom properties. Called from the CSS endpoint.
 export function tokensCss(): string {
   return `:root {
-    --color-parchment-top: ${TOKENS.color.parchmentTop};
-    --color-parchment-bottom: ${TOKENS.color.parchmentBottom};
+    --color-paper: ${TOKENS.color.paper};
     --color-ink: ${TOKENS.color.ink};
     --color-ink-muted: ${TOKENS.color.inkMuted};
     --color-ink-subtle: ${TOKENS.color.inkSubtle};
-    --color-rule: ${TOKENS.color.rule};
-    --color-accent-green: ${TOKENS.color.accentGreen};
-    --color-accent-bar: ${TOKENS.color.accentBar};
+    --color-border: ${TOKENS.color.border};
+    --color-accent: ${TOKENS.color.accent};
+    --color-accent-hover: ${TOKENS.color.accentHover};
+    --color-warm: ${TOKENS.color.warm};
+    --color-warm-deep: ${TOKENS.color.warmDeep};
+    --color-dot: ${TOKENS.color.dot};
     --color-card-bg: ${TOKENS.color.cardBg};
     --color-card-border: ${TOKENS.color.cardBorder};
     --font-serif: ${TOKENS.font.serif};

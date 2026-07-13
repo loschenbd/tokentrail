@@ -1,14 +1,22 @@
+// Midori MD "Color Dot" palette — series read as notebook color dots on
+// cream paper. Low chroma on purpose; distinguish by hue, not saturation.
 export const PALETTE: readonly string[] = [
-  '#0072B2', '#E69F00', '#009E73', '#CC79A7',
-  '#56B4E9', '#D55E00', '#F0E442', '#000000',
+  '#3a5572', // indigo
+  '#b88a3a', // ochre
+  '#6c7d52', // olive
+  '#7a4a4a', // wine
+  '#5f6f5e', // sage
+  '#b06d4a', // terracotta
+  '#4a6a6b', // teal-slate
+  '#8a6a8c', // plum
 ] as const;
 
 export const OTHER_KEY = '__other__' as const;
 export const OTHER_NAME = 'Other' as const;
-export const OTHER_COLOR = '#9CA3AF' as const;
+export const OTHER_COLOR = '#a8a29a' as const;
 
 export const UNCATEGORIZED_KEY = 'uncategorized-mainline' as const;
-export const UNCATEGORIZED_BASE_COLOR = '#6B7280' as const;
+export const UNCATEGORIZED_BASE_COLOR = '#78716a' as const;
 export const STRIPED_SENTINEL = '__striped__' as const;
 
 function hash(s: string): number {
@@ -45,14 +53,22 @@ export function colorFor(featureKey: string): string {
 export function colorForProject(projectKey: string): string {
   if (projectKey === OTHER_KEY) return OTHER_COLOR;
   const hue = hashProject(projectKey) % 360;
-  return hslToHex(hue, 62, 46);
+  return hslToHex(hue, PROJECT_SAT, PROJECT_LIGHT);
 }
 
-// Given the full set of projects visible on a view, return {key: hex} with
-// no two projects sharing a similar hue. First pass hashes each key to a
-// hue; subsequent collisions (within MIN_SEP degrees) get rotated forward
-// until they fit. Order of projectKeys is meaningful: earlier keys keep
-// their hash-picked hue when a collision occurs.
+// Muted "color dot" chroma for hashed project hues — matches the Midori
+// palette above (s ≈ 20–50, l ≈ 34–47) instead of full-saturation rainbow.
+const PROJECT_SAT = 28;
+const PROJECT_LIGHT = 40;
+
+// Given a set of project keys, return {key: hex} with no two projects
+// sharing a similar hue. First pass hashes each key to a hue; subsequent
+// collisions (within MIN_SEP degrees) get rotated forward until they fit.
+// Earlier keys win hue fights, so ORDER IS PRIORITY. Callers must pass a
+// canonical, view-independent order (see canonicalProjectColors — all-time
+// spend), never a windowed ranking: if per-view rank drove rotation, the
+// same project could land on different hues per view, and bars/swatches/
+// menubar dots would disagree.
 export function resolveProjectColors(projectKeys: readonly string[]): Record<string, string> {
   const MIN_SEP = 22;
   const out: Record<string, string> = {};
@@ -71,14 +87,16 @@ export function resolveProjectColors(projectKeys: readonly string[]): Record<str
       h = (h + 17) % 360;
     }
     used.push(h);
-    out[key] = hslToHex(h, 62, 46);
+    out[key] = hslToHex(h, PROJECT_SAT, PROJECT_LIGHT);
   }
   return out;
 }
 
 export function shadeForFeature(baseHex: string, featureKey: string): string {
   const [h, s, l] = hexToHsl(baseHex);
-  const shifts = [-18, -9, 0, 9, 18];
+  // Tight spread: segments must still read as the project's color, so the
+  // subbar visibly matches the project's swatch/legend dot at a glance.
+  const shifts = [-10, -5, 0, 5, 10];
   const shift = shifts[hash(featureKey) % shifts.length]!;
   const nl = Math.max(22, Math.min(78, l + shift));
   return hslToHex(h, s, nl);

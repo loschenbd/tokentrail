@@ -251,8 +251,33 @@
   });
 
   // ─── ANIMATION ────────────────────────────────────────────────────────
-  let step = 0, phase = 'reveal';
+  // The loop is bounded and visibility-aware: it pauses while the tab is
+  // hidden and settles on the final frame after MAX_CYCLES reveals, so a
+  // tab left open doesn't rebuild 80×22 spans every 100ms forever.
+  let step = 0, phase = 'reveal', cycles = 0;
+  let mapTimer = null, statsTimer = null, settled = false;
   const STEP_MS = 100, HOLD_MS = 2400, FLASH_MS = 220, RESET_MS = 1100;
+  const MAX_CYCLES = 3;
+
+  function renderFinalFrame() {
+    const { html, mergedCount, anomCount } = buildFrame(TRAIL.length, false);
+    el.innerHTML = html;
+    prsEl.textContent = mergedCount;
+    anomEl.textContent = anomCount;
+    anomSubEl.textContent = '1 hot_session · 1 spike_day';
+  }
+
+  function settle() {
+    settled = true;
+    if (mapTimer) { clearTimeout(mapTimer); mapTimer = null; }
+    if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
+    renderFinalFrame();
+    costTodayEl.textContent = '$74.30';
+    costSubEl.textContent = 'of $429 total · all time';
+    // Stops the infinite CSS pulses (.anom, .trophy-flash) too.
+    root.classList.add('settled');
+  }
+
   function tick() {
     let delay;
     if (phase === 'reveal') {
@@ -265,6 +290,8 @@
       if (step > TRAIL.length) { phase = 'hold'; delay = HOLD_MS; }
       else delay = STEP_MS;
     } else if (phase === 'hold') {
+      cycles++;
+      if (cycles >= MAX_CYCLES) { settle(); return; }
       const { html, mergedCount, anomCount } = buildFrame(TRAIL.length, true);
       el.innerHTML = html; prsEl.textContent = mergedCount;
       anomEl.textContent = anomCount;
@@ -283,17 +310,7 @@
       anomEl.textContent = '—'; anomSubEl.textContent = 'active';
       step = 0; phase = 'reveal'; delay = RESET_MS;
     }
-    setTimeout(tick, delay);
-  }
-
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduced) {
-    const { html, mergedCount, anomCount } = buildFrame(TRAIL.length, false);
-    el.innerHTML = html;
-    prsEl.textContent = mergedCount;
-    anomEl.textContent = anomCount;
-  } else {
-    tick();
+    mapTimer = setTimeout(tick, delay);
   }
 
   // ─── STATS animation ──────────────────────────────────────────────────
@@ -307,7 +324,28 @@
     costSubEl.textContent = 'of $429 total · all time';
     sessCountEl.textContent = sessToday;
   }
-  if (!reduced) setTimeout(() => setInterval(tickStats, 700), 500);
+
+  function pause() {
+    if (mapTimer) { clearTimeout(mapTimer); mapTimer = null; }
+    if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
+  }
+  function resume() {
+    if (!mapTimer) mapTimer = setTimeout(tick, STEP_MS);
+    if (!statsTimer) statsTimer = setInterval(tickStats, 700);
+  }
+
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) {
+    settle();
+  } else {
+    tick();
+    statsTimer = setInterval(tickStats, 700);
+    document.addEventListener('visibilitychange', () => {
+      if (settled) return;
+      if (document.hidden) pause();
+      else resume();
+    });
+  }
 })();
 
 (function setupChecklist() {

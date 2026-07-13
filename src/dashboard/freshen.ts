@@ -12,11 +12,16 @@ let inFlight: Promise<void> | null = null;
 
 // Kick off ingest + rollup in the background so the next today-scoped
 // request reads fresh data. Returns synchronously — never blocks the
-// caller. We can't await this on the request thread: ingest scans every
-// JSONL file under ~/.claude/projects and rollup rewrites today's
-// feature_rollups rows, which together take ~5s even when nothing is
-// new. The SwiftBar plugin gives up after 2s, so awaiting here makes
-// the menubar look broken.
+// caller. We can't await this on the request thread: a no-op cycle is
+// ~50ms (stat + watermark check per file), but a cycle with active
+// sessions reads their appended tails and re-runs the rollup, which can
+// take a second or two. The SwiftBar plugin gives up after 2s, so
+// awaiting here makes the menubar look broken.
+//
+// runRollup deliberately recomputes ALL history (~60ms at 35k events):
+// hook backfills and work-unit refreshes inside ingest can reattribute
+// events on old dates, so scoping the rollup to "dates with new events"
+// would leave stale rows behind.
 //
 // Tradeoff: the first request after a long quiet period sees the
 // previous freshen's data (potentially one menubar tick stale). The

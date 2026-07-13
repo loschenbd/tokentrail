@@ -65,6 +65,12 @@ export function runMigrations(db: Database.Database): void {
     // Create index after columns exist
     db.exec(`CREATE INDEX IF NOT EXISTS idx_usage_events_inferred_feature
       ON usage_events (inferred_feature_key)`);
+    // The repo-identity heal (below) self-joins usage_events on
+    // project_dir, and knownSlugForDir filters on it during ingest.
+    // Without this index the heal is a full-table scan per local/* repo —
+    // ~10s of CPU on EVERY process startup at 35k events.
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_usage_events_project_dir
+      ON usage_events (project_dir)`);
   });
   tx();
   try {

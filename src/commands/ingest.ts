@@ -2,9 +2,9 @@ import { statSync } from 'node:fs';
 import { getDb } from '../db/db.js';
 import {
   listSessionFiles,
-  readSessionMetas,
-  readUsageEvents,
+  scanSessionFile,
 } from '../services/jsonl-reader.js';
+import type { AssistantUsage } from '../services/jsonl-reader.js';
 import { decodeProjectDir, repoContextFor } from '../services/git.js';
 import { knownSlugForDir } from '../db/repo-heal.js';
 import { estimateCostUsd } from '../lib/cost.js';
@@ -26,7 +26,13 @@ export type IngestSummary = {
 // Bump to force a full re-read of files whose (size, mtime) watermark is
 // unchanged — needed when parsing improves in place (e.g. better title
 // extraction or project-dir decoding) and should re-stamp old sessions.
-const INGEST_SCAN_VERSION = 1;
+//
+// v2: `size` now records the byte offset after the last line the scan
+// actually parsed (== file size when the file ends with a newline), and
+// a grown file is re-read from that offset instead of byte 0. v1 stored
+// the raw stat size, which could sit past an unparsed mid-write line
+// fragment — unsafe to resume from, hence the bump.
+const INGEST_SCAN_VERSION = 2;
 
 export async function runIngest(): Promise<IngestSummary> {
   const allFiles = listSessionFiles();
@@ -47,16 +53,18 @@ export async function runIngest(): Promise<IngestSummary> {
   const db = getDb();
 
   // Skip files whose (size, mtime) match the last successful scan.
-  // Transcripts are append-only and event inserts are OR IGNORE, so
-  // re-reading a changed file from byte 0 is safe — the watermark only
-  // decides whether the file is opened at all. Stats are captured before
-  // reading: a file that grows mid-read gets re-read next cycle.
+  // Transcripts are append-only, so a file that merely GREW is resumed
+  // from the stored offset — only the appended tail is read and parsed.
+  // Anything else (new file, shrunk file, same-size mtime change, scan
+  // version bump) is read from byte 0. Event inserts are OR IGNORE, so
+  // overlapping re-reads are safe. Stats are captured before reading:
+  // a file that grows mid-read gets re-scanned next cycle.
   const stateStmt = db.prepare(
     `SELECT size, mtime_ms FROM ingest_file_state
      WHERE path = ? AND scan_version = ?`
   );
-  const files: string[] = [];
-  const scannedStats = new Map<string, { size: number; mtimeMs: number }>();
+  const files: Array<{ path: string; offset: number }> = [];
+  const scannedStats = new Map<string, { mtimeMs: number }>();
   let filesSkipped = 0;
   for (const file of allFiles) {
     let st;
@@ -73,8 +81,9 @@ export async function runIngest(): Promise<IngestSummary> {
       filesSkipped++;
       continue;
     }
-    files.push(file);
-    scannedStats.set(file, { size: st.size, mtimeMs });
+    const offset = prev && st.size > prev.size ? prev.size : 0;
+    files.push({ path: file, offset });
+    scannedStats.set(file, { mtimeMs });
   }
   const insert = db.prepare(`
     INSERT OR IGNORE INTO usage_events (
@@ -149,7 +158,7 @@ export async function runIngest(): Promise<IngestSummary> {
   // Decoded paths cached alongside ctx so we don't re-resolve per event.
   const dirCache = new Map<string, string>();
 
-  for await (const event of readUsageEvents(files)) {
+  const onUsage = (event: AssistantUsage): void => {
     let ctx = repoCache.get(event.projectDirEncoded);
     let projectDir = dirCache.get(event.projectDirEncoded);
     if (!ctx) {
@@ -194,22 +203,26 @@ export async function runIngest(): Promise<IngestSummary> {
       tx(batch);
       batch.length = 0;
     }
-  }
-  if (batch.length > 0) tx(batch);
+  };
 
-  // Walk JSONL once more for session metadata (title, time bounds).
-  // Cheap: each file is reopened but parsing is local; no cross-file state.
   const upsertSession = db.prepare(`
     INSERT INTO sessions (session_id, title, project_dir, first_seen_at, last_seen_at)
     VALUES (@session_id, @title, @project_dir, @first_seen_at, @last_seen_at)
     ON CONFLICT(session_id) DO UPDATE SET
-      -- Always rewrite title from the JSONL on re-ingest so improved
-      -- title extraction (e.g. stripping noise wrappers) takes effect.
-      -- Falls back to the prior value only if extraction returned NULL.
+      -- Rewrite title from the JSONL on re-ingest so improved title
+      -- extraction (e.g. stripping noise wrappers) takes effect. Falls
+      -- back to the prior value when extraction returned NULL — which is
+      -- also the normal case for a tail scan that never saw the session's
+      -- opening lines.
       title = COALESCE(excluded.title, sessions.title),
       project_dir = COALESCE(excluded.project_dir, sessions.project_dir),
-      first_seen_at = MIN(sessions.first_seen_at, excluded.first_seen_at),
-      last_seen_at  = MAX(sessions.last_seen_at, excluded.last_seen_at)
+      -- Scalar MIN/MAX return NULL if either side is NULL, which would
+      -- wipe stored bounds when a scan saw no timestamps; COALESCE each
+      -- side against the other so a NULL never wins.
+      first_seen_at = MIN(COALESCE(sessions.first_seen_at, excluded.first_seen_at),
+                          COALESCE(excluded.first_seen_at, sessions.first_seen_at)),
+      last_seen_at  = MAX(COALESCE(sessions.last_seen_at, excluded.last_seen_at),
+                          COALESCE(excluded.last_seen_at, sessions.last_seen_at))
   `);
   let sessionsIndexed = 0;
   const sessionTx = db.transaction(
@@ -220,15 +233,21 @@ export async function runIngest(): Promise<IngestSummary> {
       }
     }
   );
+
+  // Single pass per changed file: usage events and session metadata come
+  // out of one read of (only) the bytes appended since the last scan.
   const metaBatch: Array<Record<string, unknown>> = [];
-  for await (const m of readSessionMetas(files)) {
-    const dir = m.projectDirEncoded
-      ? decodeProjectDir(m.projectDirEncoded)
-      : null;
+  const consumedBytes = new Map<string, number>();
+  for (const { path: file, offset } of files) {
+    const scan = await scanSessionFile(file, offset, onUsage);
+    consumedBytes.set(file, scan.consumedBytes);
+    const m = scan.meta;
     metaBatch.push({
       session_id: m.sessionId,
       title: m.title,
-      project_dir: dir,
+      project_dir: m.projectDirEncoded
+        ? decodeProjectDir(m.projectDirEncoded)
+        : null,
       first_seen_at: m.firstSeenAt,
       last_seen_at: m.lastSeenAt,
     });
@@ -237,10 +256,13 @@ export async function runIngest(): Promise<IngestSummary> {
       metaBatch.length = 0;
     }
   }
+  if (batch.length > 0) tx(batch);
   if (metaBatch.length > 0) sessionTx(metaBatch);
 
-  // Record watermarks only after both passes over the changed files
-  // completed, so a crash mid-ingest re-reads them next cycle.
+  // Record watermarks only after the scan over the changed files
+  // completed, so a crash mid-ingest re-reads them next cycle. `size`
+  // stores the offset the scan actually consumed (not the stat size):
+  // the next cycle resumes exactly where parsing stopped.
   const upsertState = db.prepare(`
     INSERT INTO ingest_file_state (path, size, mtime_ms, scan_version)
     VALUES (?, ?, ?, ?)
@@ -251,7 +273,9 @@ export async function runIngest(): Promise<IngestSummary> {
   `);
   db.transaction(() => {
     for (const [path, st] of scannedStats) {
-      upsertState.run(path, st.size, st.mtimeMs, INGEST_SCAN_VERSION);
+      const consumed = consumedBytes.get(path);
+      if (consumed === undefined) continue;
+      upsertState.run(path, consumed, st.mtimeMs, INGEST_SCAN_VERSION);
     }
   })();
 

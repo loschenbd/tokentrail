@@ -1,6 +1,5 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { createReadStream } from 'node:fs';
-import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 
@@ -26,50 +25,94 @@ export type SessionMeta = {
   lastSeenAt: string | null;
 };
 
-// Walk session JSONL files and extract one SessionMeta per file. Title is
-// the first non-empty user text message, truncated. Cheap second pass —
-// reads each file separately from the usage-event stream so memory is
-// bounded per file rather than across the whole project.
-export async function* readSessionMetas(
-  files: string[]
-): AsyncGenerator<SessionMeta> {
-  for (const file of files) {
-    const projectDirEncoded = basename(dirname(file));
-    const sessionId = basename(file, '.jsonl');
-    let title: string | null = null;
-    let firstSeenAt: string | null = null;
-    let lastSeenAt: string | null = null;
+export type SessionScan = {
+  meta: SessionMeta;
+  // Absolute byte offset just past the last line this scan parsed. Feed it
+  // back as `start` next time to read only what was appended since.
+  consumedBytes: number;
+};
 
-    const stream = createReadStream(file, { encoding: 'utf8' });
-    const lines = createInterface({ input: stream, crlfDelay: Infinity });
-    for await (const raw of lines) {
-      if (!raw.trim()) continue;
-      let row: unknown;
-      try {
-        row = JSON.parse(raw);
-      } catch {
-        continue;
-      }
-      if (!isRecord(row)) continue;
-      const ts = asString(row.timestamp);
-      if (ts) {
-        if (!firstSeenAt || ts < firstSeenAt) firstSeenAt = ts;
-        if (!lastSeenAt || ts > lastSeenAt) lastSeenAt = ts;
-      }
-      if (!title && row.type === 'user') {
-        const t = extractFirstUserText(row.message);
-        if (t) title = truncate(t, 200);
-      }
+// Scan one session transcript in a single pass, starting at byte `start`.
+// Emits every assistant usage event through `onUsage` and collects the
+// per-file SessionMeta (title, time bounds) from the same parse — the
+// file is read and JSON-parsed exactly once.
+//
+// Byte accounting makes tail reads safe on append-only transcripts:
+// lines are split on raw \n bytes (never a UTF-8 continuation byte), and
+// consumedBytes only advances past lines that were actually parsed. A
+// trailing fragment with no newline is parsed only if it is valid JSON
+// (a complete line the writer just hadn't newline-terminated yet); an
+// unparseable fragment is a mid-write line, so consumedBytes stops before
+// it and the next scan re-reads the whole line once it's complete.
+//
+// A tail scan (start > 0) can't see the session's opening lines, so
+// meta.title may be null and firstSeenAt reflects only the tail; callers
+// must merge against previously stored values rather than overwrite.
+export async function scanSessionFile(
+  file: string,
+  start: number,
+  onUsage: (usage: AssistantUsage) => void
+): Promise<SessionScan> {
+  const projectDirEncoded = basename(dirname(file));
+  const sessionId = basename(file, '.jsonl');
+  let title: string | null = null;
+  let firstSeenAt: string | null = null;
+  let lastSeenAt: string | null = null;
+  let consumedBytes = start;
+
+  const processLine = (raw: string): void => {
+    if (!raw.trim()) return;
+    let row: unknown;
+    try {
+      row = JSON.parse(raw);
+    } catch {
+      return;
     }
+    const usage = extractAssistantUsage(row, sessionId, projectDirEncoded);
+    if (usage) onUsage(usage);
+    if (!isRecord(row)) return;
+    const ts = asString(row.timestamp);
+    if (ts) {
+      if (!firstSeenAt || ts < firstSeenAt) firstSeenAt = ts;
+      if (!lastSeenAt || ts > lastSeenAt) lastSeenAt = ts;
+    }
+    if (!title && row.type === 'user') {
+      const t = extractFirstUserText(row.message);
+      if (t) title = truncate(t, 200);
+    }
+  };
 
-    yield {
-      sessionId,
-      title,
-      projectDirEncoded,
-      firstSeenAt,
-      lastSeenAt,
-    };
+  const stream = createReadStream(file, { start });
+  let leftover: Buffer = Buffer.alloc(0);
+  for await (const chunk of stream as AsyncIterable<Buffer>) {
+    let data = leftover.length > 0 ? Buffer.concat([leftover, chunk]) : chunk;
+    let nl: number;
+    while ((nl = data.indexOf(0x0a)) !== -1) {
+      const lineEnd = nl > 0 && data[nl - 1] === 0x0d ? nl - 1 : nl;
+      processLine(data.subarray(0, lineEnd).toString('utf8'));
+      consumedBytes += nl + 1;
+      data = data.subarray(nl + 1);
+    }
+    leftover = data;
   }
+  if (leftover.length > 0) {
+    // No trailing newline. Parse the remainder only if it's a complete
+    // JSON line; JSON.parse of a truncated object always throws, so a
+    // mid-write fragment never advances the watermark.
+    const raw = leftover.toString('utf8');
+    try {
+      JSON.parse(raw);
+      processLine(raw);
+      consumedBytes += leftover.length;
+    } catch {
+      // fragment — leave for the next scan
+    }
+  }
+
+  return {
+    meta: { sessionId, title, projectDirEncoded, firstSeenAt, lastSeenAt },
+    consumedBytes,
+  };
 }
 
 function extractFirstUserText(msg: unknown): string | null {
@@ -151,28 +194,6 @@ export function listSessionFiles(root = claudeProjectsDir()): string[] {
     }
   }
   return out;
-}
-
-export async function* readUsageEvents(
-  files: string[]
-): AsyncGenerator<AssistantUsage> {
-  for (const file of files) {
-    const projectDirEncoded = basename(dirname(file));
-    const sessionIdFromName = basename(file, '.jsonl');
-    const stream = createReadStream(file, { encoding: 'utf8' });
-    const lines = createInterface({ input: stream, crlfDelay: Infinity });
-    for await (const raw of lines) {
-      if (!raw.trim()) continue;
-      let row: unknown;
-      try {
-        row = JSON.parse(raw);
-      } catch {
-        continue;
-      }
-      const usage = extractAssistantUsage(row, sessionIdFromName, projectDirEncoded);
-      if (usage) yield usage;
-    }
-  }
 }
 
 function extractAssistantUsage(

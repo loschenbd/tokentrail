@@ -17,8 +17,10 @@ export type RollupSummary = {
 //   - Events without a work_units row fall back to a synthetic attribution
 //     derived from (repo|null, branch|null) so usage never silently disappears.
 //
-// Re-running is safe: rollups are upserted by (date, feature_key) and
-// updated_at is stamped each run.
+// Re-running is safe: rollups are upserted by (date, feature_key). The
+// upsert's WHERE clause skips rows whose values are unchanged, so
+// updated_at moves only when the numbers actually moved — which is also
+// what keeps `sync` from re-pushing untouched rows to Notion.
 export async function runRollup(): Promise<RollupSummary> {
   const db = getDb();
 
@@ -155,6 +157,15 @@ export async function runRollup(): Promise<RollupSummary> {
       commit_summary      = excluded.commit_summary,
       session_ids         = excluded.session_ids,
       updated_at          = datetime('now')
+    WHERE feature_rollups.feature_name        IS NOT excluded.feature_name
+       OR feature_rollups.repo                IS NOT excluded.repo
+       OR feature_rollups.branches            IS NOT excluded.branches
+       OR feature_rollups.total_input_tokens  IS NOT excluded.total_input_tokens
+       OR feature_rollups.total_output_tokens IS NOT excluded.total_output_tokens
+       OR feature_rollups.total_cost_usd      IS NOT excluded.total_cost_usd
+       OR feature_rollups.sessions_count      IS NOT excluded.sessions_count
+       OR feature_rollups.commit_summary      IS NOT excluded.commit_summary
+       OR feature_rollups.session_ids         IS NOT excluded.session_ids
   `);
 
   const commitsForSessions = db.prepare(
@@ -171,20 +182,17 @@ export async function runRollup(): Promise<RollupSummary> {
   const aliveKeys = new Set<string>();
   for (const b of buckets.values()) aliveKeys.add(`${b.date}::${b.featureKey}`);
 
-  const allExisting = db
-    .prepare(`SELECT id, date, feature_key FROM feature_rollups`)
-    .all() as Array<{ id: string; date: string; feature_key: string }>;
-  const deleteStmt = db.prepare(`DELETE FROM feature_rollups WHERE id = ?`);
+  // Single SQL anti-join instead of loading the whole table into JS and
+  // issuing per-row DELETEs.
+  const deleteStale = db.prepare(`
+    DELETE FROM feature_rollups
+    WHERE (date || '::' || feature_key) NOT IN (SELECT value FROM json_each(?))
+  `);
 
   let rowsUpserted = 0;
   let rowsDeleted = 0;
   const tx = db.transaction(() => {
-    for (const existing of allExisting) {
-      if (!aliveKeys.has(`${existing.date}::${existing.feature_key}`)) {
-        deleteStmt.run(existing.id);
-        rowsDeleted++;
-      }
-    }
+    rowsDeleted = deleteStale.run(JSON.stringify([...aliveKeys])).changes;
     for (const b of buckets.values()) {
       const reposCsv = [...b.repos].sort().join(',');
       const branchesCsv = [...b.branches].sort().join(',');
@@ -194,7 +202,7 @@ export async function runRollup(): Promise<RollupSummary> {
           authored_at: string;
         }>
       );
-      upsert.run({
+      const result = upsert.run({
         id: randomUUID(),
         date: b.date,
         feature_key: b.featureKey,
@@ -208,7 +216,7 @@ export async function runRollup(): Promise<RollupSummary> {
         commit_summary: commitSummary,
         session_ids: [...b.sessionIds].sort().join(','),
       });
-      rowsUpserted++;
+      if (result.changes > 0) rowsUpserted++;
     }
   });
   tx();

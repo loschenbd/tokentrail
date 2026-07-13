@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs';
 import type DatabaseType from 'better-sqlite3';
 import { buildOverview, bucketProject } from './overview.js';
 import { colorForProject } from '../lib/feature-colors.js';
@@ -59,7 +60,37 @@ export type TodayResponse = {
   menubar: MenubarSummary;
 };
 
+// Cache the full payload between menubar polls (every 60 s). Between
+// pipeline runs nothing in the DB changes, so rebuilding two
+// buildOverview() aggregations per poll is wasted work. The key captures
+// every way the answer can change: (size, mtime) of the DB file and its
+// WAL — every commit from any process touches the WAL, and this stays
+// true across processes where PRAGMA data_version proved unreliable —
+// plus total_changes() for this connection's own writes (e.g. anomaly
+// dismissals), and the local date, which rolls "today" over at midnight
+// with no write at all. WeakMap so tests with several in-process DBs
+// don't cross-contaminate.
+const todayCache = new WeakMap<DatabaseType.Database, { key: string; value: TodayResponse }>();
+
+function todayCacheKey(db: DatabaseType.Database): string {
+  const fileSig = (path: string): string => {
+    try {
+      const st = statSync(path);
+      return `${st.size}:${st.mtimeMs}`;
+    } catch {
+      return 'absent';
+    }
+  };
+  const tc = (db.prepare(`SELECT total_changes() AS c`).get() as { c: number }).c;
+  const today = (db.prepare(`SELECT date('now', 'localtime') AS d`).get() as { d: string }).d;
+  return `${fileSig(db.name)};${fileSig(db.name + '-wal')};${tc};${today}`;
+}
+
 export function buildToday(db: DatabaseType.Database): TodayResponse {
+  const cacheKey = todayCacheKey(db);
+  const cached = todayCache.get(db);
+  if (cached && cached.key === cacheKey) return cached.value;
+
   const overview = buildOverview({ db, days: 1 });
 
   const anomalyCount = (db
@@ -105,7 +136,7 @@ export function buildToday(db: DatabaseType.Database): TodayResponse {
     });
   }
 
-  return {
+  const value: TodayResponse = {
     todayUsd: overview.totalUsd,
     topProjects: overview.topProjects.slice(0, MAX_PROJECTS).map((p) => ({
       key: p.key,
@@ -119,6 +150,8 @@ export function buildToday(db: DatabaseType.Database): TodayResponse {
     lastEventAt,
     menubar: buildMenubarSummary(db, overview.totalUsd),
   };
+  todayCache.set(db, { key: cacheKey, value });
+  return value;
 }
 
 function buildMenubarTrend(db: DatabaseType.Database): MenubarTrend {

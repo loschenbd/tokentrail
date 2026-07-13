@@ -5,6 +5,14 @@ import { healLocalRepoIdentities } from './repo-heal.js';
 export function runMigrations(db: Database.Database): void {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+  // The dashboard daemon and the scheduled pipeline share this DB from
+  // separate processes — wait out short write locks instead of throwing
+  // SQLITE_BUSY immediately.
+  db.pragma('busy_timeout = 5000');
+  // Default autocheckpoint (1000 pages ≈ 4 MB) let the WAL sit near 5 MB
+  // under the per-minute pipeline. Checkpoint more eagerly; writes are
+  // small and bursty, so the extra fsyncs are cheap.
+  db.pragma('wal_autocheckpoint = 256');
   const tx = db.transaction(() => {
     for (const stmt of SCHEMA_STATEMENTS) {
       db.exec(stmt);

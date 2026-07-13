@@ -1,12 +1,14 @@
 import type { ProjectDetailVM } from '../data/project.js';
 import type { BranchLifecycle } from '../data/branches.js';
 import { escapeHtml, jsonForScriptTag } from './shell.js';
-import { resolveProjectColors, shadeForFeature } from '../lib/feature-colors.js';
+import { shadeForFeature } from '../lib/feature-colors.js';
 import { renderSparkline } from './sparkline.js';
 import { renderVelocityChart } from './velocity.js';
 
 export function renderProject(vm: ProjectDetailVM): string {
-  const color = resolveProjectColors([vm.projectKey])[vm.projectKey]!;
+  // Canonical color from the VM — never re-resolve locally, or this page
+  // could disagree with the overview/menubar when hue rotation kicks in.
+  const color = vm.color;
   return `
 <div class="project-page single-col" data-project-key="${escapeHtml(vm.projectKey)}" data-project-color="${escapeHtml(color)}">
   ${renderHero(vm)}
@@ -183,7 +185,7 @@ function renderUnattSubblock(vm: ProjectDetailVM, u: NonNullable<ProjectDetailVM
   // the project's hue — visually distinguishes "reconcile" from "spend".
   const svg = renderSparkline({
     points: u.sparkline.map((p) => ({ date: p.date, totalUsd: p.usd })),
-    color: '#6b7280',
+    color: '#78716a',
     width: 220,
     height: 40,
     ariaLabel: 'Unattributed sparkline',

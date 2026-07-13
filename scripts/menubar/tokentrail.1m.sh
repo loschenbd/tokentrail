@@ -52,9 +52,9 @@ fi
 
 if ! command -v node >/dev/null 2>&1; then
   cat <<'EOF'
-$— | color=#8b6f47
+$— | color=#6b5f52
 ---
-Tokentrail: node not found | color=#8b6f47
+Tokentrail: node not found | color=#6b5f52
 Install Node.js | href=https://nodejs.org/
 Refresh | refresh=true
 EOF
@@ -77,19 +77,19 @@ const TREE_LAST = '└';
 
 // Brand palette as semantic tokens, with light/dark mode pairs on
 // every color so the plugin reads cleanly in both appearances.
-//   strong   — body / headline text (4.5:1 on parchment / dark)
+//   strong   — body / headline text (4.5:1 on cream paper / dark)
 //   medium   — secondary stat values, sparkline data ink
 //   muted    — section labels, freshness / "ago" text (large-text 3:1)
-//   amber    — warning / "Worth a look" SF Symbol (burnt amber light,
-//              bright amber dark; both ≥4.5:1 against expected bg)
-//   red      — destructive (Power off) — warm terracotta light, Apple
-//              systemRed dark variant
-const C_STRONG = '#3a2f1f,#e5d3a7';
-const C_MEDIUM = '#6b563d,#c4a373';
-const C_MUTED  = '#8b6f47,#c4a373';
-const C_AMBER  = '#B85C00,#F5B547';
-const C_RED    = '#C0392B,#FF453A';
-const C_SPARK  = '#5a4630,#c4a373';
+//   amber    — warning / "Worth a look" SF Symbol (Midori ochre light,
+//              lifted ochre dark; both ≥4.5:1 against expected bg)
+//   red      — destructive (Power off) — muted wine light,
+//              lifted wine dark (Midori Color-Dot family)
+const C_STRONG = '#2a2825,#ebe8e2';
+const C_MEDIUM = '#524d46,#9c958a';
+const C_MUTED  = '#6b5f52,#9c958a';
+const C_AMBER  = '#b88a3a,#d8b06a';
+const C_RED    = '#7a4a4a,#b8868a';
+const C_SPARK  = '#5f6f5e,#9aab97';
 
 const HERO_SUB = `sfimage=clock sfcolor=${C_MUTED} color=${C_MUTED} size=12`;
 // Today is the headline — promoted to bold/13 (same weight as project
@@ -309,7 +309,7 @@ function fmtDelta(d) {
 //   live — a session wrote usage events within the last 5 minutes.
 const LIVE_WINDOW_MS = 5 * 60 * 1000;
 const HOT_FLOOR_USD = 25;
-const C_LIVE = '#2E7D32,#4CAF50';
+const C_LIVE = '#4a5749,#9aab97';
 function isLiveNow(lastEventAt) {
   if (!lastEventAt) return false;
   const t = new Date(lastEventAt).getTime();
@@ -359,7 +359,7 @@ function renderHappy(data) {
   const live = isLiveNow(data.lastEventAt);
   const status = hot
     ? ` sfimage=flame.fill sfcolor=${C_AMBER}`
-    : (live ? ` image=${dotPng('#43A047', 12)}` : '');  // 6pt green dot; bitmap, see dotPng
+    : (live ? ` image=${dotPng('#5f6f5e', 12)}` : '');  // 6pt sage dot; bitmap, see dotPng
   lines.push(`~${fmtUsd(data.todayUsd)} | font=Menlo size=12${status}`);
   lines.push('---');
 

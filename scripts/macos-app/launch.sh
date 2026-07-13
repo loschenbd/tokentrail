@@ -40,6 +40,16 @@ probe() {
   curl -fsS --max-time 0.4 "$URL" -o /dev/null 2>&1
 }
 
+# A failed probe doesn't mean nothing is running: the daemon is a
+# single-threaded Node process, and a synchronous pipeline pass (startup
+# migrations, a big ingest) can hold the event loop past the probe
+# timeout while the port stays bound. Spawning a second instance then
+# dies with EADDRINUSE and a scary "didn't start" alert for a dashboard
+# that was fine. Distinguish "port held, just busy" from "not running".
+port_held() {
+  lsof -nP -iTCP:4920 -sTCP:LISTEN -t >/dev/null 2>&1
+}
+
 # Start SwiftBar (which runs the tokentrail.1m.sh menubar plugin) if it's
 # installed and not already running. Optional — silently skip otherwise.
 # `-g` keeps SwiftBar from stealing focus from the browser tab we open below.
@@ -47,7 +57,9 @@ if [ -d "/Applications/SwiftBar.app" ] && ! pgrep -x SwiftBar >/dev/null 2>&1; t
   open -g -a SwiftBar 2>/dev/null || true
 fi
 
-if probe; then
+if probe || port_held; then
+  # Running (or busy mid-pipeline) — the browser can wait out a busy
+  # event loop; a second spawn can't.
   open "$URL"
   exit 0
 fi
@@ -96,14 +108,22 @@ fi
 nohup "$TT" dashboard --no-open >"$LOG" 2>&1 </dev/null &
 disown
 
-# Wait up to ~4 s for the server to bind
-for _ in 1 2 3 4 5 6 7 8 9 10; do
+# Wait up to ~12 s for the server to bind. First boot after an upgrade
+# can rescan every transcript before the pipeline settles, so give it
+# room; probe() returns fast once the port answers.
+for _ in $(seq 1 30); do
   sleep 0.4
   if probe; then
     open "$URL"
     exit 0
   fi
 done
+
+# Port bound but not answering yet — it started, it's just busy.
+if port_held; then
+  open "$URL"
+  exit 0
+fi
 
 osascript -e "display alert \"Tokentrail dashboard didn't start\" message \"See $LOG\" as critical"
 exit 1

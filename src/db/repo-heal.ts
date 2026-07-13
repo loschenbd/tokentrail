@@ -22,13 +22,19 @@ export function healLocalRepoIdentities(db: Database.Database): HealResult {
     .all() as Array<{ repo: string }>;
   if (locals.length === 0) return { healed, ambiguous };
 
+  // Both queries dedupe to DISTINCT project_dir BEFORE joining back to
+  // usage_events. Joining event-rows first explodes the intermediate to
+  // (events of local/X) × (events per dir) — measured 1.2s for a single
+  // busy local repo at 35k events, run on every process startup. A local
+  // repo spans a handful of dirs, so dedupe-first is ~ms.
   const findSlugs = db.prepare(`
     SELECT DISTINCT ue2.repo AS slug
-    FROM usage_events ue1
-    JOIN usage_events ue2 ON ue2.project_dir = ue1.project_dir
-    WHERE ue1.repo = ?
-      AND ue1.project_dir IS NOT NULL
-      AND ue2.repo IS NOT NULL AND ue2.repo != ''
+    FROM (
+      SELECT DISTINCT project_dir AS dir FROM usage_events
+      WHERE repo = ? AND project_dir IS NOT NULL
+    ) d
+    JOIN usage_events ue2 ON ue2.project_dir = d.dir
+    WHERE ue2.repo IS NOT NULL AND ue2.repo != ''
       AND ue2.repo NOT LIKE 'local/%'
   `);
 
@@ -36,15 +42,13 @@ export function healLocalRepoIdentities(db: Database.Database): HealResult {
   // (includes NULL project_dir, which is inherently unprovable).
   const countUnprovableDirs = db.prepare(`
     SELECT COUNT(*) AS n FROM (
-      SELECT DISTINCT ue1.project_dir AS dir
-      FROM usage_events ue1
-      WHERE ue1.repo = ?
-        AND (ue1.project_dir IS NULL OR NOT EXISTS (
-          SELECT 1 FROM usage_events ue2
-          WHERE ue2.project_dir = ue1.project_dir
-            AND ue2.repo IS NOT NULL AND ue2.repo != ''
-            AND ue2.repo NOT LIKE 'local/%'
-        ))
+      SELECT DISTINCT project_dir AS dir FROM usage_events WHERE repo = ?
+    ) d
+    WHERE d.dir IS NULL OR NOT EXISTS (
+      SELECT 1 FROM usage_events ue2
+      WHERE ue2.project_dir = d.dir
+        AND ue2.repo IS NOT NULL AND ue2.repo != ''
+        AND ue2.repo NOT LIKE 'local/%'
     )
   `);
 

@@ -119,6 +119,10 @@
   0%,100% { opacity: 1; text-shadow: 0 0 8px rgba(184,134,11,0.9), 0 0 14px rgba(196,154,58,0.5); }
   50%     { opacity: 0.75; text-shadow: 0 0 3px rgba(184,134,11,0.4); }
 }
+/* Once the JS animation settles on its final frame, the infinite pulses
+   stop too — otherwise a backgrounded tab keeps the compositor awake. */
+.trail-map.settled .anom { animation: none; }
+.trail-map.settled .trophy-flash { animation: none; }
 .trail-map .legend { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: 10px; color: var(--tm-ink-muted); margin-bottom: 14px; letter-spacing: 0.02em; }
 .trail-map .leg { display: flex; align-items: center; gap: 4px; }
 .trail-map .leg-g { font-family: var(--tm-font-mono); font-size: 11px; min-width: 14px; text-align: center; }

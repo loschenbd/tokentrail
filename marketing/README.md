@@ -6,16 +6,15 @@ Live at <https://tokentrail.benjaminloschen.com>.
 
 ## Deploy (Vercel)
 
-From this directory:
+From the **repo root** (the Vercel project's Root Directory setting is
+`marketing`, so deploying from inside `marketing/` fails looking for
+`marketing/marketing`):
 
 ```bash
-cd marketing/
-vercel              # first time: creates project, links it
 vercel --prod       # deploy to production
 ```
 
-When prompted for the project's root directory, accept the default
-(`./`). Custom domain (`tokentrail.benjaminloschen.com`) is configured
+The project link lives in `.vercel/` at the repo root (gitignored). Custom domain (`tokentrail.benjaminloschen.com`) is configured
 in the Vercel dashboard → Project → Settings → Domains. Vercel will
 print the CNAME target to add at Namecheap.
 

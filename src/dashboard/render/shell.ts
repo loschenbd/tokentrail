@@ -32,6 +32,7 @@ export function renderShell(opts: ShellOptions, body: string): string {
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="icon" type="image/png" href="/static/logo.png">
 <link rel="apple-touch-icon" href="/static/logo.png">
+<link rel="stylesheet" href="/static/fonts.css">
 <link rel="stylesheet" href="/static/uPlot.min.css">
 <link rel="stylesheet" href="/static/dashboard.css">
 </head>

@@ -579,7 +579,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   color: var(--color-ink-muted);
   font-size: 13px;
 }
-.chart-hint code { background: rgba(60,58,54,0.09); padding: 1px 5px; border-radius: 2px; font-family: var(--font-mono); }
+.chart-hint code { background: rgba(60,58,54,0.09); padding: 1px 5px; border-radius: 2px; font-family: var(--font-code); }
 
 /* Burn-paths inline feature sub-bars */
 /*

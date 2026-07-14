@@ -284,7 +284,22 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     'trail-map.css',
     'trail-map.js',
     'settings.js',
+    'fonts.css',
   ]);
+
+  app.get('/static/fonts/:name', async (req, reply) => {
+    const name = (req.params as { name: string }).name;
+    // Same no-traversal rule as /static/:name — a single flat basename.
+    if (!/^[a-z0-9-]+\.woff2$/.test(name)) return reply.code(404).send('not found');
+    try {
+      const data = await readFile(join(STATIC_DIR, 'fonts', name));
+      reply.type('font/woff2');
+      reply.header('cache-control', 'public, max-age=86400');
+      return data;
+    } catch {
+      return reply.code(404).send('not found');
+    }
+  });
 
   app.get('/static/tokens.css', async (_req, reply) => {
     reply.type('text/css; charset=utf-8');

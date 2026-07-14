@@ -18,8 +18,9 @@
   --tm-red:         #7a4a4a;
   --tm-red-bright:  #a05252;
   --tm-gold:        #b88a3a;
-  --tm-font-serif:  Georgia, "Iowan Old Style", ui-serif, serif;
-  --tm-font-mono:   ui-monospace, "SF Mono", Menlo, monospace;
+  --tm-font-serif:  Spectral, Georgia, "Iowan Old Style", ui-serif, serif;
+  --tm-font-mono:   "M PLUS 1 Code", ui-monospace, "SF Mono", Menlo, monospace;
+  --tm-font-code:   "PT Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   font-family: var(--tm-font-serif);
   color: var(--tm-ink);
@@ -190,6 +191,7 @@
   margin-top: 4px;
   padding: 4px 8px;
   background: var(--tm-parch-mid);
+  font-family: var(--tm-font-code);
   font-size: 0.75rem;
   white-space: pre-wrap;
   user-select: all;

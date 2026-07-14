@@ -18,9 +18,13 @@ export const TOKENS = {
     cardBorder:   'rgba(60,58,54,0.08)',
   },
   font: {
-    serif:  'Georgia, "Iowan Old Style", ui-serif, serif',
-    sans:   '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
-    mono:   'ui-monospace, "SF Mono", Menlo, monospace',
+    // Same faces as benjaminloschen.com, self-hosted via /static/fonts.css:
+    // Spectral for headings, M PLUS 1p for UI text, M PLUS 1 Code for
+    // numerals/labels, PT Mono for code and commands.
+    serif:  'Spectral, Georgia, "Iowan Old Style", ui-serif, serif',
+    sans:   '"M PLUS 1p", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+    mono:   '"M PLUS 1 Code", ui-monospace, "SF Mono", Menlo, monospace',
+    code:   '"PT Mono", ui-monospace, "SF Mono", Menlo, monospace',
   },
   size: {
     hero:   '32px',
@@ -56,6 +60,7 @@ export function tokensCss(): string {
     --font-serif: ${TOKENS.font.serif};
     --font-sans: ${TOKENS.font.sans};
     --font-mono: ${TOKENS.font.mono};
+    --font-code: ${TOKENS.font.code};
     --size-hero: ${TOKENS.size.hero};
     --size-h1: ${TOKENS.size.h1};
     --size-h2: ${TOKENS.size.h2};

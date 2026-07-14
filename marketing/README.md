@@ -21,8 +21,9 @@ print the CNAME target to add at Namecheap.
 
 `vercel.json` only configures cache headers for `/static/*`. The site
 is otherwise a plain static drop — `index.html` is self-contained and
-its only external requests are to `./static/logo.png` and
-`./static/favicon.svg`.
+its only external requests are to `./static/logo.png`,
+`./static/favicon.svg`, and Google Fonts (Spectral, M PLUS 1 Code,
+PT Mono — the same faces the dashboard self-hosts).
 
 ## Editing the trail visual
 

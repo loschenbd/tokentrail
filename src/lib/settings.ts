@@ -17,6 +17,10 @@ export type Settings = {
     openrouter: { apiKey: string | null; model: string };
     ollama: { baseUrl: string; model: string };
   };
+  // Project name/repo/path substrings to hide from the dashboard and
+  // menubar. Display-only: ingest, rollups, and detail-page deep links
+  // are untouched, so removing an entry restores the project everywhere.
+  hiddenProjects: string[];
 };
 
 const DEFAULTS: Settings = {
@@ -25,6 +29,7 @@ const DEFAULTS: Settings = {
     openrouter: { apiKey: null, model: 'anthropic/claude-haiku-4.5' },
     ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:3b' },
   },
+  hiddenProjects: [],
 };
 
 let testDir: string | null = null;
@@ -95,6 +100,12 @@ function mergeWithDefaults(parsed: unknown): Settings {
       if (typeof o['baseUrl'] === 'string') merged.llm.ollama.baseUrl = o['baseUrl'];
       if (typeof o['model'] === 'string') merged.llm.ollama.model = o['model'];
     }
+  }
+  const hidden = (parsed as { hiddenProjects?: unknown }).hiddenProjects;
+  if (Array.isArray(hidden)) {
+    merged.hiddenProjects = hidden.filter(
+      (p): p is string => typeof p === 'string' && p.trim().length > 0
+    );
   }
   return merged;
 }

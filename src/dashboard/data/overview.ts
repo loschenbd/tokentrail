@@ -1,4 +1,11 @@
 import type DatabaseType from 'better-sqlite3';
+import { bucketProject } from '../lib/project-bucket.js';
+import {
+  hiddenFeatureKeys,
+  rollupVisiblePredicate,
+  repoVisiblePredicate,
+  matchesHiddenPattern,
+} from '../lib/hidden-projects.js';
 import {
   colorFor,
   colorForProject,
@@ -10,6 +17,10 @@ import {
   UNCATEGORIZED_KEY,
   STRIPED_SENTINEL,
 } from '../lib/feature-colors.js';
+
+// Re-exported for existing importers (today.ts, api.ts, tests); the
+// implementation moved to lib/ so hidden-projects can use it cycle-free.
+export { bucketProject };
 
 export type OverviewVM = {
   windowDays: number;
@@ -124,7 +135,7 @@ export type OverviewVM = {
 };
 
 export function buildOverview(
-  { db, days }: { db: DatabaseType.Database; days: number }
+  { db, days, hidden = [] }: { db: DatabaseType.Database; days: number; hidden?: string[] }
 ): OverviewVM {
   const windowDays = Math.max(1, days);
   // All date arithmetic uses the server's local time so the dashboard
@@ -133,15 +144,23 @@ export function buildOverview(
   const priorStartExpr = `date('now', '-${windowDays * 2 - 1} days', 'localtime')`;
   const priorEndExpr = `date('now', '-${windowDays} days', 'localtime')`;
 
+  // settings.hiddenProjects display filter. Applied to every rollup-derived
+  // aggregate so totals, bands, and the unattributed invariant stay
+  // consistent with each other — but NOT to canonicalProjectColors (color
+  // slots stay stable when hiding toggles).
+  const hiddenKeys = hiddenFeatureKeys(db, hidden);
+  const visibleSql = rollupVisiblePredicate(hiddenKeys);
+  const repoVisibleSql = repoVisiblePredicate(hidden);
+
   // --- scalar stats ---
   const totalRow = db
-    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM feature_rollups WHERE date >= ${startExpr}`)
+    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM feature_rollups WHERE date >= ${startExpr} AND ${visibleSql}`)
     .get() as { total: number };
   const priorRow = db
-    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM feature_rollups WHERE date >= ${priorStartExpr} AND date <= ${priorEndExpr}`)
+    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM feature_rollups WHERE date >= ${priorStartExpr} AND date <= ${priorEndExpr} AND ${visibleSql}`)
     .get() as { total: number };
   const weekRow = db
-    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total, COALESCE(SUM(sessions_count), 0) AS sessions FROM feature_rollups WHERE date >= date('now', '-6 days', 'localtime')`)
+    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total, COALESCE(SUM(sessions_count), 0) AS sessions FROM feature_rollups WHERE date >= date('now', '-6 days', 'localtime') AND ${visibleSql}`)
     .get() as { total: number; sessions: number };
 
   const total = round2(totalRow.total);
@@ -157,7 +176,7 @@ export function buildOverview(
              MAX(feature_name) AS featureName,
              ROUND(SUM(total_cost_usd), 2) AS totalUsd
       FROM feature_rollups
-      WHERE date >= ${startExpr}
+      WHERE date >= ${startExpr} AND ${visibleSql}
       GROUP BY feature_key
       ORDER BY totalUsd DESC
       LIMIT 10
@@ -173,7 +192,7 @@ export function buildOverview(
              ROUND(SUM(total_cost_usd), 2) AS totalUsd,
              COALESCE(SUM(sessions_count), 0) AS sessionsCount
       FROM feature_rollups
-      WHERE date >= ${startExpr}
+      WHERE date >= ${startExpr} AND ${visibleSql}
       GROUP BY feature_key
     `)
     .all() as Array<{ featureKey: string; featureName: string; repo: string | null; totalUsd: number; sessionsCount: number }>;
@@ -198,7 +217,16 @@ export function buildOverview(
   // Canonical collision-free color map, keyed by projectKey. Resolved over
   // EVERY project in the ledger (not the windowed top 12) so a project keeps
   // one color across windows, pages, the API, and the menubar plugin.
+  // Hidden projects participate in resolution (their color slot stays
+  // claimed, so hiding never reshuffles other projects' hues) but are
+  // stripped from the emitted map — it's serialized into page HTML and the
+  // API payload, and a hidden project shouldn't be visible in view-source.
   const projectColors = canonicalProjectColors(db);
+  if (hidden.length > 0) {
+    for (const key of Object.keys(projectColors)) {
+      if (matchesHiddenPattern(hidden, key)) delete projectColors[key];
+    }
+  }
 
   const topProjects: OverviewVM['topProjects'] = topProjectsRaw.map((p) => ({
     ...p,
@@ -213,6 +241,7 @@ export function buildOverview(
              ROUND(amount, 2) AS amount, reason
       FROM anomalies
       WHERE dismissed_at IS NULL AND date >= ${startExpr}
+        AND ${rollupVisiblePredicate(hiddenKeys, `COALESCE(feature_key, '')`)}
       ORDER BY multiplier DESC, date DESC
       LIMIT 5
     `)
@@ -222,7 +251,7 @@ export function buildOverview(
     .prepare(`
       SELECT commit_sha AS sha, subject, repo, authored_at AS authoredAt
       FROM session_commits
-      WHERE authored_at IS NOT NULL
+      WHERE authored_at IS NOT NULL AND ${repoVisibleSql}
       ORDER BY authored_at DESC
       LIMIT 10
     `)
@@ -242,7 +271,7 @@ export function buildOverview(
              MAX(repo) AS repo,
              ROUND(SUM(total_cost_usd), 2) AS totalUsd
       FROM feature_rollups
-      WHERE date >= ${startExpr}
+      WHERE date >= ${startExpr} AND ${visibleSql}
       GROUP BY feature_key
     `)
     .all() as RawProjRow[];
@@ -295,17 +324,17 @@ export function buildOverview(
 
   // --- Commits / PRs per day ---
   const observedRows = db
-    .prepare(`SELECT date, SUM(total_cost_usd) AS total FROM feature_rollups WHERE date >= ${startExpr} GROUP BY date`)
+    .prepare(`SELECT date, SUM(total_cost_usd) AS total FROM feature_rollups WHERE date >= ${startExpr} AND ${visibleSql} GROUP BY date`)
     .all() as Array<{ date: string; total: number }>;
   const observedMap = new Map(observedRows.map((r) => [r.date, r.total]));
 
   const commitsByDay = db
-    .prepare(`SELECT date(authored_at, 'localtime') AS d, COUNT(*) AS n FROM session_commits WHERE authored_at IS NOT NULL AND date(authored_at, 'localtime') >= ${startExpr} GROUP BY date(authored_at, 'localtime')`)
+    .prepare(`SELECT date(authored_at, 'localtime') AS d, COUNT(*) AS n FROM session_commits WHERE authored_at IS NOT NULL AND date(authored_at, 'localtime') >= ${startExpr} AND ${repoVisibleSql} GROUP BY date(authored_at, 'localtime')`)
     .all() as Array<{ d: string; n: number }>;
   const commitsMap = new Map(commitsByDay.map((r) => [r.d, r.n]));
 
   const prsByDay = db
-    .prepare(`SELECT date(merged_at, 'localtime') AS d, COUNT(*) AS n FROM session_prs WHERE merged_at IS NOT NULL AND date(merged_at, 'localtime') >= ${startExpr} GROUP BY date(merged_at, 'localtime')`)
+    .prepare(`SELECT date(merged_at, 'localtime') AS d, COUNT(*) AS n FROM session_prs WHERE merged_at IS NOT NULL AND date(merged_at, 'localtime') >= ${startExpr} AND ${repoVisibleSql} GROUP BY date(merged_at, 'localtime')`)
     .all() as Array<{ d: string; n: number }>;
   const prsMap = new Map(prsByDay.map((r) => [r.d, r.n]));
 
@@ -341,7 +370,7 @@ export function buildOverview(
              MAX(repo) AS repo,
              ROUND(SUM(total_cost_usd), 2) AS usd
       FROM feature_rollups
-      WHERE date >= ${startExpr}
+      WHERE date >= ${startExpr} AND ${visibleSql}
       GROUP BY date, feature_key
     `)
     .all() as PerDayRawRow[];
@@ -494,32 +523,6 @@ export function canonicalProjectColors(db: DatabaseType.Database): Record<string
   const keys = [...spend.keys()].sort((a, b) =>
     (spend.get(b)! - spend.get(a)!) || (a < b ? -1 : a > b ? 1 : 0));
   return resolveProjectColors(keys);
-}
-
-export function bucketProject(r: { featureKey: string; featureName: string; repo: string | null }): {
-  projectKey: string;
-  projectName: string;
-} {
-  if (r.repo && r.repo.trim()) {
-    // CSV-resilient: prefer the first slug-style entry; a local/ alias of
-    // the same project only wins when no remote slug was ever observed.
-    const entries = r.repo.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
-    const firstRepo = entries.find((s) => !s.startsWith('local/')) ?? entries[0] ?? r.repo;
-    const owner = firstRepo.includes('/') ? firstRepo.split('/')[0] : '';
-    const name = firstRepo.split('/').pop() ?? firstRepo;
-    // local/<basename> reads better as just the basename; GitHub-style
-    // slugs keep the owner stripped so the eye lands on the project.
-    return {
-      projectKey: owner === 'local' ? `local:${name}` : `repo:${firstRepo}`,
-      projectName: name,
-    };
-  }
-  // No repo: the feature itself is its own project. Strip the "outside:"
-  // prefix from the key so the URL stays human-readable.
-  return {
-    projectKey: `feature:${r.featureKey}`,
-    projectName: r.featureName || r.featureKey,
-  };
 }
 
 function round2(n: number): number {

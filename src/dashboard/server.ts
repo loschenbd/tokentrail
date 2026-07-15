@@ -25,6 +25,7 @@ import { pkgRoot } from '../lib/pkg-root.js';
 import { buildSettingsVM } from './data/settings.js';
 import { renderSettings } from './render/settings.js';
 import { readSettings, writeSettings, type Settings } from '../lib/settings.js';
+import { hiddenProjectPatterns } from './lib/hidden-projects.js';
 import { getLLMClient } from '../lib/llm.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
@@ -36,7 +37,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.get('/', async (req, reply) => {
     const days = parseDays(req.query, opts.defaultDays);
-    const vm = buildOverview({ db: getDb(), days });
+    const vm = buildOverview({ db: getDb(), days, hidden: hiddenProjectPatterns() });
     const body = renderOverview(vm);
     reply.type('text/html; charset=utf-8');
     return renderShell({ title: 'Tokentrail · Overview', activeTab: 'overview', days }, body);
@@ -68,7 +69,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.get('/today', async (_req, reply) => {
     freshenIfStale();
-    const vm = buildTodayVM(getDb());
+    const vm = buildTodayVM(getDb(), { hidden: hiddenProjectPatterns() });
     reply.type('text/html; charset=utf-8');
     return renderShell(
       { title: 'Today · Tokentrail', activeTab: 'today', days: opts.defaultDays, showBack: true },
@@ -86,7 +87,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.get('/worth-a-look', async (req, reply) => {
     const showDismissed = parseShowDismissed(req.query);
-    const vm = buildWorthALook(getDb(), { showDismissed });
+    const vm = buildWorthALook(getDb(), { showDismissed, hidden: hiddenProjectPatterns() });
     reply.type('text/html; charset=utf-8');
     return renderShell(
       { title: 'Worth a look · Tokentrail', activeTab: 'worth-a-look', days: opts.defaultDays, showBack: true, showDismissed },
@@ -96,7 +97,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.get('/api/today', async (_req, reply) => {
     freshenIfStale();
-    const payload = buildToday(getDb());
+    const payload = buildToday(getDb(), { hidden: hiddenProjectPatterns() });
     reply.type('application/json; charset=utf-8');
     return payload;
   });
@@ -189,6 +190,8 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
           model: body.llm?.ollama?.model ?? current.llm.ollama.model,
         },
       },
+      // Not editable from this page — preserve whatever settings.json holds.
+      hiddenProjects: current.hiddenProjects,
     };
     writeSettings(next);
     return { ok: true };

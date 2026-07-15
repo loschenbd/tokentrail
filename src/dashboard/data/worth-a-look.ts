@@ -1,4 +1,5 @@
 import type DatabaseType from 'better-sqlite3';
+import { hiddenFeatureKeys, rollupVisiblePredicate } from '../lib/hidden-projects.js';
 
 export type WorthALookVM = {
   showDismissed: boolean;
@@ -18,20 +19,26 @@ export type WorthALookVM = {
 
 export type BuildWorthALookOptions = {
   showDismissed: boolean;
+  hidden?: string[];
 };
 
 export function buildWorthALook(
   db: DatabaseType.Database,
   opts: BuildWorthALookOptions = { showDismissed: false }
 ): WorthALookVM {
+  const hiddenKeys = hiddenFeatureKeys(db, opts.hidden ?? []);
+  const visibleSql = rollupVisiblePredicate(hiddenKeys, `COALESCE(feature_key, '')`);
+
   const dismissedCount = (db
-    .prepare(`SELECT COUNT(*) AS n FROM anomalies WHERE dismissed_at IS NOT NULL`)
+    .prepare(`SELECT COUNT(*) AS n FROM anomalies WHERE dismissed_at IS NOT NULL AND ${visibleSql}`)
     .get() as { n: number }).n;
 
   // Active rows always; dismissed rows only when requested. ORDER BY
   // `dismissedInt ASC` puts active (0) before dismissed (1) and tie-breaks
   // by date desc then multiplier desc within each group.
-  const whereClause = opts.showDismissed ? '' : 'WHERE dismissed_at IS NULL';
+  const whereClause = opts.showDismissed
+    ? `WHERE ${visibleSql}`
+    : `WHERE dismissed_at IS NULL AND ${visibleSql}`;
   const items = db
     .prepare(`
       SELECT id, kind, date,

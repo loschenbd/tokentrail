@@ -2,6 +2,7 @@ import { statSync } from 'node:fs';
 import type DatabaseType from 'better-sqlite3';
 import { buildOverview, bucketProject } from './overview.js';
 import { colorForProject } from '../lib/feature-colors.js';
+import { hiddenFeatureKeys, rollupVisiblePredicate } from '../lib/hidden-projects.js';
 
 const DASHBOARD_BASE_URL = 'http://127.0.0.1:4920';
 const MAX_PROJECTS = 3;
@@ -86,12 +87,20 @@ function todayCacheKey(db: DatabaseType.Database): string {
   return `${fileSig(db.name)};${fileSig(db.name + '-wal')};${tc};${today}`;
 }
 
-export function buildToday(db: DatabaseType.Database): TodayResponse {
-  const cacheKey = todayCacheKey(db);
+export function buildToday(
+  db: DatabaseType.Database,
+  opts: { hidden?: string[] } = {}
+): TodayResponse {
+  const hidden = opts.hidden ?? [];
+  // Hidden patterns join the cache key so editing settings.json takes
+  // effect on the next poll without waiting for a DB write.
+  const cacheKey = `${todayCacheKey(db)};hidden=${hidden.join(',')}`;
   const cached = todayCache.get(db);
   if (cached && cached.key === cacheKey) return cached.value;
 
-  const overview = buildOverview({ db, days: 1 });
+  const hiddenKeys = hiddenFeatureKeys(db, hidden);
+  const visibleSql = rollupVisiblePredicate(hiddenKeys);
+  const overview = buildOverview({ db, days: 1, hidden });
 
   const anomalyCount = (db
     .prepare(`SELECT COUNT(*) AS n FROM anomalies WHERE dismissed_at IS NULL`)
@@ -118,7 +127,7 @@ export function buildToday(db: DatabaseType.Database): TodayResponse {
              MAX(repo) AS repo,
              ROUND(SUM(total_cost_usd), 2) AS totalUsd
       FROM feature_rollups
-      WHERE date >= ${todayDateExpr}
+      WHERE date >= ${todayDateExpr} AND ${visibleSql}
       GROUP BY feature_key
       ORDER BY totalUsd DESC
     `)
@@ -148,14 +157,14 @@ export function buildToday(db: DatabaseType.Database): TodayResponse {
     anomalyCount,
     topAnomaly,
     lastEventAt,
-    menubar: buildMenubarSummary(db, overview.totalUsd),
+    menubar: buildMenubarSummary(db, overview.totalUsd, hidden, visibleSql),
   };
   todayCache.set(db, { key: cacheKey, value });
   return value;
 }
 
-function buildMenubarTrend(db: DatabaseType.Database): MenubarTrend {
-  const overview = buildOverview({ db, days: 30 });
+function buildMenubarTrend(db: DatabaseType.Database, hidden: string[]): MenubarTrend {
+  const overview = buildOverview({ db, days: 30, hidden });
   return {
     days: overview.days.map((d) => ({ date: d.date, bands: d.bands })),
     projects: overview.projects.map((p) => ({
@@ -175,13 +184,18 @@ function buildMenubarTrend(db: DatabaseType.Database): MenubarTrend {
   };
 }
 
-function buildMenubarSummary(db: DatabaseType.Database, todayUsd: number): MenubarSummary {
+function buildMenubarSummary(
+  db: DatabaseType.Database,
+  todayUsd: number,
+  hidden: string[],
+  visibleSql: string
+): MenubarSummary {
   // Daily totals over the last 30 days, one query.
   const rows = db
     .prepare(
       `SELECT date, ROUND(SUM(total_cost_usd), 2) AS total
          FROM feature_rollups
-        WHERE date >= date('now', '-29 days', 'localtime')
+        WHERE date >= date('now', '-29 days', 'localtime') AND ${visibleSql}
         GROUP BY date`
     )
     .all() as Array<{ date: string; total: number }>;
@@ -210,7 +224,7 @@ function buildMenubarSummary(db: DatabaseType.Database, todayUsd: number): Menub
     last30Usd: round2(last30Usd),
     deltaVsYesterday,
     yesterdayUsd,
-    trend: buildMenubarTrend(db),
+    trend: buildMenubarTrend(db, hidden),
   };
 }
 

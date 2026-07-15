@@ -31,6 +31,7 @@ describe('dashboard /api/settings', () => {
         openrouter: { apiKey: 'sk-or-v1-abcdefg1234', model: 'anthropic/claude-haiku-4.5' },
         ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:3b' },
       },
+      hiddenProjects: [],
     });
     const app = buildServer({ defaultDays: 30 });
     const r = await app.inject({ method: 'GET', url: '/api/settings' });
@@ -72,6 +73,7 @@ describe('dashboard /api/settings', () => {
         openrouter: { apiKey: 'sk-or-v1-abcdefg1234', model: 'anthropic/claude-haiku-4.5' },
         ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:3b' },
       },
+      hiddenProjects: [],
     });
     const app = buildServer({ defaultDays: 30 });
     // Verify key is present before clearing.
@@ -103,6 +105,7 @@ describe('dashboard /api/settings', () => {
         openrouter: { apiKey: 'sk-or-v1-XXXX5678', model: 'anthropic/claude-haiku-4.5' },
         ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:3b' },
       },
+      hiddenProjects: [],
     });
     const app = buildServer({ defaultDays: 30 });
     const r = await app.inject({ method: 'GET', url: '/api/settings' });
@@ -125,6 +128,7 @@ describe('dashboard /api/settings', () => {
           openrouter: { apiKey: null, model: 'anthropic/claude-haiku-4.5' },
           ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:3b' },
         },
+        hiddenProjects: [],
       });
       const app = buildServer({ defaultDays: 30 });
       const r = await app.inject({

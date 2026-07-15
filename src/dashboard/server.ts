@@ -159,25 +159,29 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   app.get('/settings', async (_req, reply) => {
-    const vm = buildSettingsVM();
+    const vm = buildSettingsVM(getDb());
     const body = renderSettings(vm);
     reply.type('text/html; charset=utf-8');
     return renderShell({ title: 'Tokentrail · Settings', activeTab: 'settings', days: opts.defaultDays }, body);
   });
 
-  app.get('/api/settings', async () => buildSettingsVM());
+  app.get('/api/settings', async () => buildSettingsVM(getDb()));
 
+  // Partial update: a body may carry `llm`, `hiddenProjects`, or both.
+  // Whatever it omits is preserved from the file, so the LLM form and the
+  // hidden-projects controls can save independently.
   app.post('/api/settings', async (req, reply) => {
     const body = req.body as Partial<Settings>;
-    // Validate backend enum.
-    const backend = body?.llm?.backend;
-    if (!backend || !['ollama', 'openrouter', 'none', 'auto'].includes(backend)) {
-      reply.code(400);
-      return { error: 'invalid backend' };
-    }
     const current = readSettings();
-    const next: Settings = {
-      llm: {
+
+    let llm = current.llm;
+    if (body?.llm !== undefined) {
+      const backend = body.llm?.backend;
+      if (!backend || !['ollama', 'openrouter', 'none', 'auto'].includes(backend)) {
+        reply.code(400);
+        return { error: 'invalid backend' };
+      }
+      llm = {
         backend,
         openrouter: {
           apiKey: body.llm?.openrouter?.apiKey === '__KEEP__'
@@ -189,11 +193,26 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
           baseUrl: body.llm?.ollama?.baseUrl ?? current.llm.ollama.baseUrl,
           model: body.llm?.ollama?.model ?? current.llm.ollama.model,
         },
-      },
-      // Not editable from this page — preserve whatever settings.json holds.
-      hiddenProjects: current.hiddenProjects,
-    };
-    writeSettings(next);
+      };
+    }
+
+    let hiddenProjects = current.hiddenProjects;
+    if (body?.hiddenProjects !== undefined) {
+      if (!Array.isArray(body.hiddenProjects)) {
+        reply.code(400);
+        return { error: 'hiddenProjects must be an array of strings' };
+      }
+      hiddenProjects = body.hiddenProjects
+        .filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+        .map((p) => p.trim());
+    }
+
+    if (body?.llm === undefined && body?.hiddenProjects === undefined) {
+      reply.code(400);
+      return { error: 'empty settings update' };
+    }
+
+    writeSettings({ llm, hiddenProjects });
     return { ok: true };
   });
 

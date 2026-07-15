@@ -904,6 +904,43 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .settings button[type="submit"]:hover { background: var(--color-accent-hover); color: var(--color-card-bg); }
 .settings .remove-key-hint { font-size: var(--size-small); color: var(--color-ink-muted); }
 
+/* --- Hidden projects --- */
+.settings .hidden-projects-hint {
+  font-size: var(--size-small);
+  color: var(--color-ink-muted);
+  margin: 0 0 10px;
+}
+.hidden-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.hidden-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: var(--size-small);
+  color: var(--color-ink);
+  background: rgba(95,111,94,0.08);
+  border: 1px solid var(--color-card-border);
+  border-radius: 2px;
+  padding: 3px 6px 3px 10px;
+}
+.settings .hidden-chip-remove {
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-ink-muted);
+}
+.settings .hidden-chip-remove:hover { background: transparent; color: var(--color-accent-hover); }
+.hidden-none { font-size: var(--size-small); color: var(--color-ink-muted); }
+.hide-project-row { display: flex; align-items: center; gap: 8px; }
+
 /* --- Hour-bar tooltip (Today strip): column variant of the shared tip --- */
 .hour-tooltip {
   position: fixed; /* viewport coords — see .subbar-tooltip */

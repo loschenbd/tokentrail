@@ -32,6 +32,7 @@ describe('settings', () => {
         openrouter: { apiKey: 'sk-or-test', model: 'anthropic/claude-haiku-4.5' },
         ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:7b' },
       },
+      hiddenProjects: [],
     };
     writeSettings(next);
     const s = readSettings();
@@ -60,5 +61,28 @@ describe('settings', () => {
     mkdirSync(tmp, { recursive: true });
     writeFileSync(settingsPath(), '{not json', 'utf8');
     assert.throws(() => readSettings(), /settings\.json.*invalid/i);
+  });
+});
+
+describe('settings hiddenProjects', () => {
+  test('defaults to empty array when file missing or key absent', () => {
+    assert.deepEqual(readSettings().hiddenProjects, []);
+    writeFileSync(settingsPath(), JSON.stringify({ llm: { backend: 'none' } }));
+    assert.deepEqual(readSettings().hiddenProjects, []);
+  });
+
+  test('reads string entries and drops non-strings and blanks', () => {
+    writeFileSync(
+      settingsPath(),
+      JSON.stringify({ hiddenProjects: ['job-search', 42, null, '  ', 'secret-thing'] })
+    );
+    assert.deepEqual(readSettings().hiddenProjects, ['job-search', 'secret-thing']);
+  });
+
+  test('round-trips through writeSettings', () => {
+    const next = readSettings();
+    next.hiddenProjects = ['job-search'];
+    writeSettings(next);
+    assert.deepEqual(readSettings().hiddenProjects, ['job-search']);
   });
 });

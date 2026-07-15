@@ -47,6 +47,7 @@ describe('getLLMClient()', () => {
         openrouter: { apiKey: 'sk-or-from-file', model: 'anthropic/claude-haiku-4.5' },
         ollama: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:3b' },
       },
+      hiddenProjects: [],
     });
     const c = getLLMClient();
     assert.equal(c?.backend, 'openrouter');

@@ -1,3 +1,35 @@
+// --- Hidden projects: add/remove applies immediately (no Save needed) ---
+async function postHiddenProjects(next) {
+  const r = await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ hiddenProjects: next }),
+  });
+  if (r.ok) location.reload();
+  else alert('Update failed: ' + r.status);
+}
+
+const hideSelect = document.getElementById('hide-project-select');
+const hideBtn = document.getElementById('hide-project-btn');
+if (hideSelect && hideBtn) {
+  hideSelect.addEventListener('change', () => { hideBtn.disabled = !hideSelect.value; });
+  hideBtn.addEventListener('click', async () => {
+    if (!hideSelect.value) return;
+    const cur = await (await fetch('/api/settings')).json();
+    const next = (cur.hiddenProjects || []).slice();
+    if (!next.includes(hideSelect.value)) next.push(hideSelect.value);
+    await postHiddenProjects(next);
+  });
+}
+
+document.querySelectorAll('.hidden-chip-remove').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const pattern = btn.closest('.hidden-chip').getAttribute('data-pattern');
+    const cur = await (await fetch('/api/settings')).json();
+    await postHiddenProjects((cur.hiddenProjects || []).filter((p) => p !== pattern));
+  });
+});
+
 const form = document.getElementById('llm-form');
 form.addEventListener('submit', async (e) => {
   e.preventDefault();

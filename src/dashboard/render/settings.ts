@@ -16,9 +16,41 @@ export function renderSettings(vm: SettingsViewModel): string {
         <button type="button" id="remove-key-cancel">Cancel</button>
       </div>` : '';
 
+  // Picker options: visible projects, deduped by display name (hiding a
+  // name hides every identity that shares it — repo slug, local alias,
+  // worktrees — which is what the eye expects).
+  const visibleNames = [...new Set(
+    vm.projects.filter((p) => !p.hidden).map((p) => p.name)
+  )].sort((a, b) => a.localeCompare(b));
+  const hideOptions = visibleNames
+    .map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`)
+    .join('');
+  const hiddenChips = vm.hiddenProjects
+    .map((p) => `
+      <span class="hidden-chip" data-pattern="${escapeHtml(p)}">${escapeHtml(p)}<button
+        type="button" class="hidden-chip-remove" aria-label="Show ${escapeHtml(p)} again">×</button></span>`)
+    .join('');
+
+  const hiddenProjectsUI = `
+    <fieldset class="hidden-projects">
+      <legend>Hidden projects</legend>
+      <p class="hidden-projects-hint">Hidden projects stay in the ledger and keep recording — they're just left off the trail. Matching is by name, so worktrees and local aliases hide together.</p>
+      <div class="hidden-chip-row" id="hidden-chip-row">
+        ${vm.hiddenProjects.length > 0 ? hiddenChips : '<span class="hidden-none">Nothing hidden.</span>'}
+      </div>
+      <div class="hide-project-row">
+        <label>Hide <select id="hide-project-select">
+          <option value="" selected disabled>Choose a project…</option>
+          ${hideOptions}
+        </select></label>
+        <button type="button" id="hide-project-btn" disabled>Hide</button>
+      </div>
+    </fieldset>`;
+
   return `
 <section class="settings">
   <h1>Settings</h1>
+  ${hiddenProjectsUI}
   <form id="llm-form">
     <fieldset>
       <legend>LLM backend</legend>

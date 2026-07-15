@@ -1,5 +1,12 @@
 import type DatabaseType from 'better-sqlite3';
 import { buildOverview, bucketProject, type OverviewVM } from './overview.js';
+import {
+  hiddenFeatureKeys,
+  rollupVisiblePredicate,
+  repoVisiblePredicate,
+  eventsVisiblePredicate,
+  matchesHiddenPattern,
+} from '../lib/hidden-projects.js';
 
 const TOP_PROJECTS_LIMIT = 5;
 const PACE_MIN_HISTORY_DAYS = 7;
@@ -34,16 +41,20 @@ export type TodayVM = {
 
 export function buildTodayVM(
   db: DatabaseType.Database,
-  opts: { nowHour?: number } = {},
+  opts: { nowHour?: number; hidden?: string[] } = {},
 ): TodayVM {
   const nowHour = opts.nowHour ?? new Date().getHours();
-  const overview = buildOverview({ db, days: 1 });
+  const hidden = opts.hidden ?? [];
+  const hiddenKeys = hiddenFeatureKeys(db, hidden);
+  const visibleSql = rollupVisiblePredicate(hiddenKeys);
+  const eventsVisibleSql = eventsVisiblePredicate(hidden, hiddenKeys);
+  const overview = buildOverview({ db, days: 1, hidden });
 
   const yesterdayRow = db
     .prepare(
       `SELECT COALESCE(SUM(total_cost_usd), 0) AS total
          FROM feature_rollups
-        WHERE date = date('now', '-1 day', 'localtime')`
+        WHERE date = date('now', '-1 day', 'localtime') AND ${visibleSql}`
     )
     .get() as { total: number };
   const yesterdayUsd = round2(yesterdayRow.total);
@@ -61,6 +72,7 @@ export function buildTodayVM(
          FROM usage_events ue
          LEFT JOIN sessions s ON s.session_id = ue.session_id
         WHERE date(ue.timestamp, 'localtime') = date('now', 'localtime')
+          AND ${eventsVisiblePredicate(hidden, hiddenKeys, 'ue')}
         GROUP BY ue.session_id
         ORDER BY MIN(ue.timestamp) ASC`
     )
@@ -70,7 +82,11 @@ export function buildTodayVM(
       featureName: string | null; featureKey: string | null;
     }>;
 
-  const sessions: TodaySession[] = sessionRows.map((r) => {
+  const sessions: TodaySession[] = sessionRows
+    // The SQL predicate sees ue.project_dir; the coalesced value can still
+    // come from sessions.project_dir, so re-check the final identity here.
+    .filter((r) => !matchesHiddenPattern(hidden, r.projectDir, r.featureKey, r.featureName))
+    .map((r) => {
     const projectName = r.projectDir ? (r.projectDir.split('/').pop() ?? '') : '';
     return {
       sessionId: r.sessionId,
@@ -92,7 +108,7 @@ export function buildTodayVM(
         : 0;
 
   // Step 3b: Re-map colors from the 30-day ranking (hoisted so it's in scope for the breakdown)
-  const colorRef = buildOverview({ db, days: 30 }).projectColors;
+  const colorRef = buildOverview({ db, days: 30, hidden }).projectColors;
 
   // 24 zero-filled hourly buckets for today.
   const hourly: TodayVM['hourly'] = Array.from({ length: 24 }, (_, hour) => ({ hour, usd: 0, projects: [] }));
@@ -102,6 +118,7 @@ export function buildTodayVM(
               SUM(estimated_cost_usd) AS usd
          FROM usage_events
         WHERE date(timestamp, 'localtime') = date('now', 'localtime')
+          AND ${eventsVisibleSql}
         GROUP BY hour`
     )
     .all() as { hour: number; usd: number }[];
@@ -117,6 +134,7 @@ export function buildTodayVM(
               SUM(estimated_cost_usd) AS usd
          FROM usage_events
         WHERE date(timestamp, 'localtime') = date('now', 'localtime')
+          AND ${eventsVisibleSql}
         GROUP BY hour, featureKey, featureName, repo`
     )
     .all() as Array<{ hour: number; featureKey: string; featureName: string; repo: string | null; usd: number }>;
@@ -143,7 +161,8 @@ export function buildTodayVM(
       `SELECT COALESCE(SUM(total_cost_usd), 0) AS total, COUNT(DISTINCT date) AS days
          FROM feature_rollups
         WHERE date >= date('now', '-30 day', 'localtime')
-          AND date < date('now', 'localtime')`
+          AND date < date('now', 'localtime')
+          AND ${visibleSql}`
     )
     .get() as { total: number; days: number };
   const usualDayUsd = usualRow.days > 0 ? round2(usualRow.total / usualRow.days) : 0;
@@ -154,11 +173,13 @@ export function buildTodayVM(
       `WITH today_sessions AS (
          SELECT DISTINCT session_id FROM usage_events
           WHERE date(timestamp, 'localtime') = date('now', 'localtime')
+            AND ${eventsVisibleSql}
        )
        SELECT sc.commit_sha AS sha, MAX(sc.subject) AS subject, MAX(sc.authored_at) AS at
          FROM session_commits sc
          JOIN today_sessions ts ON ts.session_id = sc.session_id
         WHERE date(sc.authored_at, 'localtime') = date('now', 'localtime')
+          AND ${repoVisiblePredicate(hidden, 'sc.repo')}
         GROUP BY sc.commit_sha
         ORDER BY at DESC`
     )
@@ -169,13 +190,15 @@ export function buildTodayVM(
       `WITH today_sessions AS (
          SELECT DISTINCT session_id FROM usage_events
           WHERE date(timestamp, 'localtime') = date('now', 'localtime')
+            AND ${eventsVisibleSql}
        )
        SELECT sp.repo AS repo, sp.pr_number AS n, MAX(sp.pr_title) AS title,
               MAX(sp.pr_state) AS state, MAX(sp.merged_at) AS mergedAt
          FROM session_prs sp
          JOIN today_sessions ts ON ts.session_id = sp.session_id
-        WHERE date(sp.merged_at, 'localtime') = date('now', 'localtime')
-           OR sp.pr_state = 'open'
+        WHERE (date(sp.merged_at, 'localtime') = date('now', 'localtime')
+           OR sp.pr_state = 'open')
+          AND ${repoVisiblePredicate(hidden, 'sp.repo')}
         GROUP BY sp.repo, sp.pr_number
         ORDER BY COALESCE(mergedAt, '9999') DESC`
     )
@@ -205,6 +228,7 @@ export function buildTodayVM(
            FROM usage_events
           WHERE date(timestamp, 'localtime') >= date('now', '-30 day', 'localtime')
             AND date(timestamp, 'localtime') < date('now', 'localtime')
+            AND ${eventsVisibleSql}
           GROUP BY d, h
        )
        -- h <= nowHour: "by now" includes the current, in-progress hour

@@ -120,11 +120,13 @@ describe('buildOverview with hidden projects', () => {
     assert.deepEqual(vm.projects.map((p) => p.name).sort(), ['Job Search', 'archi', 'job-search']);
   });
 
-  test('color slots stay stable when hiding toggles', () => {
+  test('color slots stay stable when hiding toggles, but hidden keys leave the emitted map', () => {
     const db = seededDb();
     const shown = buildOverview({ db, days: 30 });
     const hidden = buildOverview({ db, days: 30, hidden: ['job-search'] });
     assert.equal(hidden.projectColors['repo:loschenbd/archi'], shown.projectColors['repo:loschenbd/archi']);
+    // The map is serialized into page HTML — no hidden project may appear.
+    assert.ok(Object.keys(hidden.projectColors).every((k) => !k.includes('job-search')));
   });
 });
 

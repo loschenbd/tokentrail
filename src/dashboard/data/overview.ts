@@ -4,6 +4,7 @@ import {
   hiddenFeatureKeys,
   rollupVisiblePredicate,
   repoVisiblePredicate,
+  matchesHiddenPattern,
 } from '../lib/hidden-projects.js';
 import {
   colorFor,
@@ -216,7 +217,16 @@ export function buildOverview(
   // Canonical collision-free color map, keyed by projectKey. Resolved over
   // EVERY project in the ledger (not the windowed top 12) so a project keeps
   // one color across windows, pages, the API, and the menubar plugin.
+  // Hidden projects participate in resolution (their color slot stays
+  // claimed, so hiding never reshuffles other projects' hues) but are
+  // stripped from the emitted map — it's serialized into page HTML and the
+  // API payload, and a hidden project shouldn't be visible in view-source.
   const projectColors = canonicalProjectColors(db);
+  if (hidden.length > 0) {
+    for (const key of Object.keys(projectColors)) {
+      if (matchesHiddenPattern(hidden, key)) delete projectColors[key];
+    }
+  }
 
   const topProjects: OverviewVM['topProjects'] = topProjectsRaw.map((p) => ({
     ...p,

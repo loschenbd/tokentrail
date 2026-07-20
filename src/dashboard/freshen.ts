@@ -1,6 +1,62 @@
+import { spawn } from 'node:child_process';
 import { runIngest } from '../commands/ingest.js';
 import { runRollup } from '../commands/rollup.js';
 import { getDb } from '../db/db.js';
+
+// The full-history rollup allocates native SQLite scratch (a GROUP BY +
+// GROUP_CONCAT over every event) that better-sqlite3 frees but the OS
+// allocator keeps resident — so running it in the long-lived daemon
+// ratchets RSS to a plateau it never releases. Running it in a short-lived
+// child process returns that memory to the OS on exit. Falls back to an
+// in-process rollup whenever the child can't be spawned (dev/tsx runs where
+// argv[1] is a .ts file, or any spawn error), so correctness never depends
+// on the subprocess path succeeding.
+const ROLLUP_SUBPROCESS_TIMEOUT_MS = 60_000;
+
+async function runRollupIsolated(): Promise<void> {
+  const entry = process.argv[1];
+  if (entry && entry.endsWith('.js')) {
+    try {
+      await spawnRollup(entry);
+      return;
+    } catch (err) {
+      console.error(
+        '[dashboard] isolated rollup failed, running in-process:',
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+  await runRollup({ cluster: false });
+}
+
+function spawnRollup(entry: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Inherit env so TRACKER_DB_PATH (set in the daemon's launchd plist)
+    // points the child at the same database. WAL + busy_timeout=5000 (set
+    // in migrations on every connection) make the concurrent write safe.
+    const child = spawn(process.execPath, [entry, 'rollup', '--no-cluster'], {
+      stdio: ['ignore', 'ignore', 'pipe'],
+      env: process.env,
+    });
+    let stderr = '';
+    child.stderr?.on('data', (d) => {
+      if (stderr.length < 2000) stderr += String(d);
+    });
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error('rollup subprocess timed out'));
+    }, ROLLUP_SUBPROCESS_TIMEOUT_MS);
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+    child.on('exit', (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(new Error(`rollup subprocess exited ${code}: ${stderr.trim()}`));
+    });
+  });
+}
 
 // Debounce window: at most one freshen per FRESHEN_DEBOUNCE_MS window.
 // 30s is short enough that the menubar feels live (it polls every 60s)
@@ -38,10 +94,11 @@ export function freshenIfStale(): void {
       const ingest = await runIngest();
       const stale = isRollupBehindEvents();
       if (ingest.newEvents > 0 || stale) {
-        // cluster: false — this passive poll path must never trigger an LLM
-        // call. Clustering runs on the explicit refresh paths (run-all, the
-        // infer-mainline button) instead.
-        await runRollup({ cluster: false });
+        // Isolated + cluster-free: the rollup runs in a short-lived child so
+        // its native memory is reclaimed on exit, and a passive poll can
+        // never trigger an LLM call. Clustering runs on the explicit refresh
+        // paths (run-all, the infer-mainline button) instead.
+        await runRollupIsolated();
       }
     } catch (err) {
       console.error('[dashboard] freshen failed:', err);

@@ -21,7 +21,15 @@ export type RollupSummary = {
 // upsert's WHERE clause skips rows whose values are unchanged, so
 // updated_at moves only when the numbers actually moved — which is also
 // what keeps `sync` from re-pushing untouched rows to Notion.
-export async function runRollup(): Promise<RollupSummary> {
+// `cluster` gates the LLM-backed topic clustering step. It defaults to true
+// so the explicit paths (run-all, the `rollup` CLI, the infer-mainline SSE)
+// keep clustering. The dashboard's passive freshen loop passes false: that
+// path fires on every menubar poll (~60s), and clustering there would mean a
+// menubar tick could trigger an LLM call — pinning a local Ollama model in
+// memory once the backend is set to ollama. Clustering is not time-sensitive,
+// so it belongs only on the explicit/manual refresh paths.
+export async function runRollup(opts: { cluster?: boolean } = {}): Promise<RollupSummary> {
+  const shouldCluster = opts.cluster ?? true;
   const db = getDb();
 
   // Pull aggregated rows. Bucket events by their LOCAL date so the daily
@@ -240,23 +248,27 @@ export async function runRollup(): Promise<RollupSummary> {
   );
 
   // Topic clustering: cheap when nothing has changed (it short-circuits per
-  // feature on session-set fingerprint), so it's safe to run on every rollup.
-  try {
-    const clusters = await recomputeClusters(db);
-    if (clusters.featuresConsidered > 0) {
-      console.log(
-        `Clusters: ${clusters.featuresClustered} feature${clusters.featuresClustered === 1 ? '' : 's'} re-clustered, ` +
-          `${clusters.featuresSkipped} unchanged` +
-          (clusters.featuresFailed > 0 ? `, ${clusters.featuresFailed} failed` : '') +
-          (clusters.featuresBackedOff > 0 ? `, ${clusters.featuresBackedOff} backing off` : '') +
-          ` (${clusters.llmCalls} LLM call${clusters.llmCalls === 1 ? '' : 's'}).`
+  // feature on session-set fingerprint), so it's safe to run on every explicit
+  // rollup. Skipped on the passive freshen path (cluster=false) so a menubar
+  // poll never triggers an LLM call — see the note on runRollup's signature.
+  if (shouldCluster) {
+    try {
+      const clusters = await recomputeClusters(db);
+      if (clusters.featuresConsidered > 0) {
+        console.log(
+          `Clusters: ${clusters.featuresClustered} feature${clusters.featuresClustered === 1 ? '' : 's'} re-clustered, ` +
+            `${clusters.featuresSkipped} unchanged` +
+            (clusters.featuresFailed > 0 ? `, ${clusters.featuresFailed} failed` : '') +
+            (clusters.featuresBackedOff > 0 ? `, ${clusters.featuresBackedOff} backing off` : '') +
+            ` (${clusters.llmCalls} LLM call${clusters.llmCalls === 1 ? '' : 's'}).`
+        );
+      }
+    } catch (err) {
+      console.error(
+        'Cluster step failed (rollup itself still wrote):',
+        err instanceof Error ? err.message : err
       );
     }
-  } catch (err) {
-    console.error(
-      'Cluster step failed (rollup itself still wrote):',
-      err instanceof Error ? err.message : err
-    );
   }
 
   return { rowsUpserted };

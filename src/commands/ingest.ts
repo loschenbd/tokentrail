@@ -284,7 +284,16 @@ export async function runIngest(): Promise<IngestSummary> {
   const snapshots = await loadLatestHookSnapshots();
   const hookResult = applyHookSnapshots(db, snapshots);
 
-  const { inserted, updated } = refreshWorkUnits(db);
+  // work_units are a deterministic function of usage_events (with hook-refined
+  // branches applied above). If this cycle inserted no new events AND hook
+  // application changed nothing, the full GROUP BY would rebuild byte-identical
+  // rows — so skip it. This keeps an idle menubar poll (every ~60s) from
+  // re-scanning all usage_events when there is provably nothing to recompute.
+  let inserted = 0;
+  let updated = 0;
+  if (newEvents > 0 || hookResult.updated > 0) {
+    ({ inserted, updated } = refreshWorkUnits(db));
+  }
 
   console.log(
     `Trail updated: ${newEvents} new usage event${newEvents === 1 ? '' : 's'} ` +

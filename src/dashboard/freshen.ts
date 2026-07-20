@@ -38,7 +38,10 @@ export function freshenIfStale(): void {
       const ingest = await runIngest();
       const stale = isRollupBehindEvents();
       if (ingest.newEvents > 0 || stale) {
-        await runRollup();
+        // cluster: false — this passive poll path must never trigger an LLM
+        // call. Clustering runs on the explicit refresh paths (run-all, the
+        // infer-mainline button) instead.
+        await runRollup({ cluster: false });
       }
     } catch (err) {
       console.error('[dashboard] freshen failed:', err);

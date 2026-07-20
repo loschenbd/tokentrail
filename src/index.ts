@@ -203,9 +203,13 @@ program
 program
   .command('rollup')
   .description('Aggregate events into daily feature rollups.')
-  .action(async () => {
+  .option('--no-cluster', 'Skip the LLM-backed topic clustering step.')
+  .action(async (opts: { cluster?: boolean }) => {
     const { runRollup } = await import('./commands/rollup.js');
-    await runRollup();
+    // The dashboard daemon spawns `rollup --no-cluster` as a short-lived
+    // child (see freshen.ts) so the full-history rollup's native SQLite
+    // scratch is freed on process exit instead of ratcheting the daemon.
+    await runRollup({ cluster: opts.cluster !== false });
   });
 
 program

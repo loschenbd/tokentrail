@@ -14,6 +14,14 @@ function makeDb() {
   return db;
 }
 
+// buildBranchGraph's window is relative to now, so events must be dated
+// relative to now — fixed calendar dates age out of the window and make these
+// tests fail as time passes. Pin the time so assertions stay exact.
+function daysAgo(n: number, hhmm = '10:00'): string {
+  const day = new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  return `${day}T${hhmm}:00.000Z`;
+}
+
 function insertEvent(db: Database.Database, opts: {
   id: string; sessionId: string; timestamp: string;
   repo: string; branch: string;
@@ -155,12 +163,13 @@ describe('isMergedIntoMain (with stub git runner)', () => {
 describe('branch graph reads branch_merges as merged_at fallback', () => {
   test('branch with branch_merges row but no session_prs row is classified merged', () => {
     const db = makeDb();
-    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-15T10:00:00Z', repo: 'o/r', branch: 'feat/x' });
-    insertBranchMerge(db, { repo: 'o/r', branch: 'feat/x', mergedAt: '2026-06-15T11:00:00Z' });
+    const mergedAt = daysAgo(11, '11:00');
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: daysAgo(15), repo: 'o/r', branch: 'feat/x' });
+    insertBranchMerge(db, { repo: 'o/r', branch: 'feat/x', mergedAt });
     const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
     const b = r.branches[0]!;
     assert.equal(b.status, 'merged');
-    assert.equal(b.mergedAt, '2026-06-15T11:00:00Z');
+    assert.equal(b.mergedAt, mergedAt);
   });
 
   test('branch_merges row with null merged_at does NOT mark merged', () => {
@@ -177,16 +186,17 @@ describe('branch graph reads branch_merges as merged_at fallback', () => {
 
   test('session_prs merged_at takes precedence over branch_merges', () => {
     const db = makeDb();
-    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-15T10:00:00Z', repo: 'o/r', branch: 'feat/x' });
+    const prMergedAt = daysAgo(11, '12:00');
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: daysAgo(15), repo: 'o/r', branch: 'feat/x' });
     db.prepare(
       `INSERT INTO session_prs
          (session_id, repo, pr_number, pr_title, pr_url, pr_state, head_branch, merged_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run('s1', 'o/r', 99, 't', 'u', 'merged', 'feat/x', '2026-06-15T12:00:00Z');
-    insertBranchMerge(db, { repo: 'o/r', branch: 'feat/x', mergedAt: '2026-06-15T11:00:00Z' });
+    ).run('s1', 'o/r', 99, 't', 'u', 'merged', 'feat/x', prMergedAt);
+    insertBranchMerge(db, { repo: 'o/r', branch: 'feat/x', mergedAt: daysAgo(11, '11:00') });
     const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
     const b = r.branches[0]!;
     assert.equal(b.status, 'merged');
-    assert.equal(b.mergedAt, '2026-06-15T12:00:00Z', 'PR mergedAt should win over branch_merges');
+    assert.equal(b.mergedAt, prMergedAt, 'PR mergedAt should win over branch_merges');
   });
 });

@@ -38,15 +38,18 @@ describe('buildBranchGraph — skeleton', () => {
 
   test('lifecycle reflects MIN and MAX timestamps for each non-mainline branch', () => {
     const db = makeDb();
-    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: 'feat/x', cost: 5 });
-    insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: '2026-06-14T11:00:00Z', repo: 'o/r', branch: 'feat/x', cost: 3 });
-    insertEvent(db, { id: 'e3', sessionId: 's1', timestamp: '2026-06-12T08:00:00Z', repo: 'o/r', branch: 'feat/x', cost: 2 });
+    const first = daysAgo(15, '10:00');
+    const last = daysAgo(11, '11:00');
+    const mid = daysAgo(13, '08:00');
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: first, repo: 'o/r', branch: 'feat/x', cost: 5 });
+    insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: last, repo: 'o/r', branch: 'feat/x', cost: 3 });
+    insertEvent(db, { id: 'e3', sessionId: 's1', timestamp: mid, repo: 'o/r', branch: 'feat/x', cost: 2 });
     const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
     assert.equal(r.branches.length, 1);
     const b = r.branches[0]!;
     assert.equal(b.branch, 'feat/x');
-    assert.equal(b.firstEventAt, '2026-06-10T10:00:00Z');
-    assert.equal(b.lastEventAt, '2026-06-14T11:00:00Z');
+    assert.equal(b.firstEventAt, first);
+    assert.equal(b.lastEventAt, last);
   });
 
   test('mainline trunk detected — picks the branch with most events among master/main/trunk', () => {
@@ -61,9 +64,9 @@ describe('buildBranchGraph — skeleton', () => {
 
   test('branches sorted by firstEventAt ascending', () => {
     const db = makeDb();
-    insertEvent(db, { id: 'a', sessionId: 's1', timestamp: '2026-06-15T00:00:00Z', repo: 'o/r', branch: 'feat/b', cost: 1 });
-    insertEvent(db, { id: 'b', sessionId: 's2', timestamp: '2026-06-10T00:00:00Z', repo: 'o/r', branch: 'feat/a', cost: 1 });
-    insertEvent(db, { id: 'c', sessionId: 's3', timestamp: '2026-06-12T00:00:00Z', repo: 'o/r', branch: 'feat/c', cost: 1 });
+    insertEvent(db, { id: 'a', sessionId: 's1', timestamp: daysAgo(10), repo: 'o/r', branch: 'feat/b', cost: 1 });
+    insertEvent(db, { id: 'b', sessionId: 's2', timestamp: daysAgo(15), repo: 'o/r', branch: 'feat/a', cost: 1 });
+    insertEvent(db, { id: 'c', sessionId: 's3', timestamp: daysAgo(13), repo: 'o/r', branch: 'feat/c', cost: 1 });
     const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
     assert.deepEqual(r.branches.map((b) => b.branch), ['feat/a', 'feat/c', 'feat/b']);
   });
@@ -71,6 +74,16 @@ describe('buildBranchGraph — skeleton', () => {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+// buildBranchGraph's window is relative to now: a branch only surfaces if it
+// has an event within the last `days`. Fixed calendar dates silently age out
+// of that window and make these tests fail as time passes (they did — the
+// original 2026-06 literals fell outside the 30-day window by mid-July). Use
+// window-relative timestamps pinned to a stable time so assertions are exact.
+function daysAgo(n: number, hhmm = '10:00'): string {
+  const day = new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  return `${day}T${hhmm}:00.000Z`;
 }
 
 function insertPr(db: Database.Database, opts: {
@@ -95,29 +108,31 @@ function insertPr(db: Database.Database, opts: {
 describe('buildBranchGraph — PR matching', () => {
   test('merged PR populates mergedAt, prNumber, prUrl, status=merged', () => {
     const db = makeDb();
-    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: 'feat/x', cost: 5 });
-    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 42, headBranch: 'feat/x', state: 'merged', mergedAt: '2026-06-14T12:00:00Z' });
+    const mergedAt = daysAgo(11, '12:00');
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: daysAgo(15), repo: 'o/r', branch: 'feat/x', cost: 5 });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 42, headBranch: 'feat/x', state: 'merged', mergedAt });
     const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
     const b = r.branches.find((x) => x.branch === 'feat/x')!;
     assert.equal(b.status, 'merged');
-    assert.equal(b.mergedAt, '2026-06-14T12:00:00Z');
+    assert.equal(b.mergedAt, mergedAt);
     assert.equal(b.prNumber, 42);
     assert.equal(b.prUrl, 'https://github.com/o/r/pull/42');
   });
 
   test('PR with origin/ prefix on head_branch matches a usage_event branch without the prefix', () => {
     const db = makeDb();
-    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: 'feat/y', cost: 5 });
-    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 7, headBranch: 'origin/feat/y', state: 'merged', mergedAt: '2026-06-14T00:00:00Z' });
+    const mergedAt = daysAgo(11, '00:00');
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: daysAgo(15), repo: 'o/r', branch: 'feat/y', cost: 5 });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 7, headBranch: 'origin/feat/y', state: 'merged', mergedAt });
     const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
     const b = r.branches.find((x) => x.branch === 'feat/y')!;
     assert.equal(b.status, 'merged');
-    assert.equal(b.mergedAt, '2026-06-14T00:00:00Z');
+    assert.equal(b.mergedAt, mergedAt);
   });
 
   test('open PR (pr_state != merged) does NOT set mergedAt', () => {
     const db = makeDb();
-    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: 'feat/z', cost: 5 });
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: daysAgo(15), repo: 'o/r', branch: 'feat/z', cost: 5 });
     insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 9, headBranch: 'feat/z', state: 'open', mergedAt: null });
     const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
     const b = r.branches.find((x) => x.branch === 'feat/z')!;
@@ -239,9 +254,11 @@ describe('buildBranchGraph — multi-source branch list', () => {
     const db = makeDb();
     // Session has events on mainline (no branch info captured) AND a PR
     // for feat/x. Branch should still appear.
-    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: 'main', cost: 5 });
-    insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: '2026-06-11T12:00:00Z', repo: 'o/r', branch: null, cost: 3 });
-    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 7, headBranch: 'feat/x', state: 'merged', mergedAt: '2026-06-14T00:00:00Z' });
+    const first = daysAgo(15, '10:00');
+    const last = daysAgo(14, '12:00');
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: first, repo: 'o/r', branch: 'main', cost: 5 });
+    insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: last, repo: 'o/r', branch: null, cost: 3 });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 7, headBranch: 'feat/x', state: 'merged', mergedAt: daysAgo(11) });
     const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
     assert.equal(r.branches.length, 1);
     const b = r.branches[0]!;
@@ -249,8 +266,8 @@ describe('buildBranchGraph — multi-source branch list', () => {
     assert.equal(b.status, 'merged');
     // Lifecycle derived from session's usage_events, not from the (missing)
     // branch column.
-    assert.equal(b.firstEventAt, '2026-06-10T10:00:00Z');
-    assert.equal(b.lastEventAt, '2026-06-11T12:00:00Z');
+    assert.equal(b.firstEventAt, first);
+    assert.equal(b.lastEventAt, last);
   });
 
   test('cost is $0 for a branch surfaced only via session_prs (no usage_events.branch direct match)', () => {
@@ -259,9 +276,9 @@ describe('buildBranchGraph — multi-source branch list', () => {
     // would double-count, so we attribute nothing. The branch still
     // surfaces structurally with merge status, just $0 cost.
     const db = makeDb();
-    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: null, cost: 4 });
-    insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: '2026-06-10T11:00:00Z', repo: 'o/r', branch: 'main', cost: 6 });
-    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 1, headBranch: 'feat/x', state: 'merged', mergedAt: '2026-06-14T00:00:00Z' });
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: daysAgo(15, '10:00'), repo: 'o/r', branch: null, cost: 4 });
+    insertEvent(db, { id: 'e2', sessionId: 's1', timestamp: daysAgo(15, '11:00'), repo: 'o/r', branch: 'main', cost: 6 });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 1, headBranch: 'feat/x', state: 'merged', mergedAt: daysAgo(11) });
     const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
     const b = r.branches.find((x) => x.branch === 'feat/x')!;
     assert.equal(b.status, 'merged');
@@ -271,8 +288,8 @@ describe('buildBranchGraph — multi-source branch list', () => {
 
   test('strips origin/ prefix from session_prs.head_branch when building branch list', () => {
     const db = makeDb();
-    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: null, cost: 5 });
-    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 9, headBranch: 'origin/feat/y', state: 'merged', mergedAt: '2026-06-14T00:00:00Z' });
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: daysAgo(15), repo: 'o/r', branch: null, cost: 5 });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 9, headBranch: 'origin/feat/y', state: 'merged', mergedAt: daysAgo(11) });
     const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 })!;
     assert.equal(r.branches.length, 1);
     assert.equal(r.branches[0]!.branch, 'feat/y');
@@ -280,8 +297,10 @@ describe('buildBranchGraph — multi-source branch list', () => {
 
   test('mainline head_branch on session_prs does NOT surface as a separate branch', () => {
     const db = makeDb();
-    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-10T10:00:00Z', repo: 'o/r', branch: 'main', cost: 5 });
-    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 1, headBranch: 'main', state: 'merged', mergedAt: '2026-06-14T00:00:00Z' });
+    // Recent event so the window is NOT the reason for null — this must prove
+    // that a mainline head_branch is excluded, not that the data aged out.
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: daysAgo(2), repo: 'o/r', branch: 'main', cost: 5 });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 1, headBranch: 'main', state: 'merged', mergedAt: daysAgo(1) });
     const r = buildBranchGraph(db, { projectKey: 'repo:o/r', days: 30 });
     assert.equal(r, null);
   });

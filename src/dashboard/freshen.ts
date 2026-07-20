@@ -15,7 +15,13 @@ const ROLLUP_SUBPROCESS_TIMEOUT_MS = 60_000;
 
 async function runRollupIsolated(): Promise<void> {
   const entry = process.argv[1];
-  if (entry && entry.endsWith('.js')) {
+  // Take the subprocess path for any normal invocation node can re-exec —
+  // the packaged daemon's entry is the Homebrew bin symlink
+  // (`/opt/homebrew/bin/tokentrail`, no extension) or a dist `.js`, both of
+  // which `node <entry>` runs directly. Only skip tsx/ts-node dev runs, where
+  // argv[1] is a `.ts` file node can't run without a loader. Any spawn error
+  // still falls through to the in-process rollup below.
+  if (entry && !entry.endsWith('.ts')) {
     try {
       await spawnRollup(entry);
       return;

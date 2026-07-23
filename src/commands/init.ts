@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import {
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
   readlinkSync,
+  rmSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
@@ -45,6 +47,20 @@ const SWIFTBAR_PLUGIN_NAME = 'tokentrail.1m.sh';
 const APP_NAME = 'Tokentrail.app';
 const APP_DEST_DIR = join(homedir(), 'Applications');
 
+// Native menu-bar app (SwiftUI). Built by scripts/menubar-native/build.sh
+// into dist/Tokentrail.app; the formula runs that build so on brew installs
+// it's waiting in libexec. A LaunchAgent (mirroring the daemon) keeps it
+// running across logins without needing a login-item / SMAppService dance.
+const MENUBAR_APP_SRC_REL = join('scripts', 'menubar-native', 'dist', APP_NAME);
+const MENUBAR_APP_BINARY = 'Tokentrail'; // Contents/MacOS/<CFBundleExecutable>
+const MENUBAR_LABEL = 'com.benjaminloschen.tokentrail.menubar';
+const MENUBAR_PLIST_PATH = join(
+  homedir(),
+  'Library',
+  'LaunchAgents',
+  `${MENUBAR_LABEL}.plist`
+);
+
 export function runInit(opts: InitOptions = {}): void {
   if (platform() !== 'darwin') {
     console.error('tokentrail init: macOS-only. SwiftBar + launchd are not available elsewhere.');
@@ -56,11 +72,12 @@ export function runInit(opts: InitOptions = {}): void {
 
   console.log('Tokentrail init — laying out a trail you can find again.\n');
 
-  if (!opts.skipSwiftbar) installSwiftBarPlugin(opts, repoRoot);
   if (!opts.skipDaemon) installDaemon(opts, repoRoot);
   installSkills(opts);
   if (!opts.skipHook) installRepoHook(opts);
-  if (!opts.skipApp) installApp(opts, repoRoot);
+  // The native menu-bar app replaces the old SwiftBar plugin + launcher.
+  // --skip-swiftbar is kept as a back-compat alias for --skip-app.
+  if (!opts.skipApp && !opts.skipSwiftbar) installMenubarApp(opts, repoRoot);
 
   printNextSteps(opts);
 }
@@ -275,6 +292,70 @@ export function installApp(opts: InitOptions, repoRoot: string): void {
   console.log(`    [linked] ${dst} → ${src}`);
 }
 
+/**
+ * Install the native SwiftUI menu-bar app — the replacement for the old
+ * SwiftBar plugin + AppKit launcher. Copies the built .app into
+ * ~/Applications (a real bundle survives brew upgrades; a symlink into the
+ * versioned Cellar would dangle), then registers a LaunchAgent that launches
+ * it at login and immediately. Ad-hoc signing is fine because the app is
+ * BUILT on this machine — no com.apple.quarantine, so Gatekeeper never
+ * challenges it (no "Open Anyway" needed).
+ *
+ * Source: <repoRoot>/scripts/menubar-native/dist/Tokentrail.app
+ *   - brew: repoRoot is libexec; the formula's build.sh step produced it.
+ *   - dev:  exists only if you ran scripts/menubar-native/build.sh — we skip
+ *           with a hint (and a Swift-toolchain nudge) rather than erroring.
+ */
+export function installMenubarApp(opts: InitOptions, repoRoot: string): void {
+  console.log('• Tokentrail menu-bar app');
+
+  const src = join(repoRoot, MENUBAR_APP_SRC_REL);
+  const dst = join(APP_DEST_DIR, APP_NAME);
+
+  if (!existsSync(src)) {
+    console.log(`    [skip] no .app at ${src}`);
+    console.log('           Build it with: scripts/menubar-native/build.sh');
+    console.log('           (needs the Swift toolchain — xcode-select --install)');
+    return;
+  }
+
+  if (opts.dryRun) {
+    console.log(`    [dry] would copy ${src} → ${dst}`);
+    console.log(`    [dry] would write + load ${MENUBAR_PLIST_PATH}`);
+    return;
+  }
+
+  mkdirSync(APP_DEST_DIR, { recursive: true });
+
+  // Stop any running instance so the copy doesn't clobber a live bundle,
+  // then replace the copy and relaunch via launchd below.
+  stopMenubarApp();
+  rmSync(dst, { recursive: true, force: true });
+  cpSync(src, dst, { recursive: true });
+  console.log(`    [copied] ${dst}`);
+
+  // LaunchAgent → starts now and at each login. No KeepAlive, so the app's
+  // own Quit stays quit until the next login (not instantly relaunched).
+  const appBinary = join(dst, 'Contents', 'MacOS', MENUBAR_APP_BINARY);
+  mkdirSync(dirname(MENUBAR_PLIST_PATH), { recursive: true });
+  if (isLoaded(MENUBAR_LABEL)) launchctlUnload(MENUBAR_PLIST_PATH);
+  writeFileSync(MENUBAR_PLIST_PATH, renderMenubarPlist(appBinary));
+  launchctlLoad(MENUBAR_PLIST_PATH);
+  console.log(`    [loaded] ${MENUBAR_LABEL} — menu-bar total appears within ~60s`);
+}
+
+function stopMenubarApp(): void {
+  try {
+    execFileSync(
+      '/usr/bin/pkill',
+      ['-f', `${APP_NAME}/Contents/MacOS/${MENUBAR_APP_BINARY}`],
+      { stdio: 'ignore' }
+    );
+  } catch {
+    /* not running — fine */
+  }
+}
+
 function printNextSteps(opts: InitOptions): void {
   console.log('\nTrail laid.');
   if (opts.dryRun) {
@@ -318,6 +399,26 @@ export function renderDaemonPlist(args: {
   <string>${DAEMON_LOG_PATH}</string>
   <key>StandardErrorPath</key>
   <string>${DAEMON_LOG_PATH}</string>
+</dict>
+</plist>
+`;
+}
+
+export function renderMenubarPlist(appBinary: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${MENUBAR_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${appBinary}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Interactive</string>
 </dict>
 </plist>
 `;

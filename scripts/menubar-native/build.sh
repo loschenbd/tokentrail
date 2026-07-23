@@ -4,6 +4,7 @@
 #   ./build.sh          → compile binary + bundle dist/Tokentrail.app
 #   ./build.sh run      → build, then launch the .app
 #   ./build.sh preview  → build, render the panel to a PNG (headless)
+#   ./build.sh install  → build, replace the copy in /Applications, relaunch
 #
 # Reuses docs/logo.png for the icon (same sips/iconutil path as the
 # existing launcher Makefile).
@@ -72,4 +73,14 @@ echo "→ built $APP (v$VERSION)"
 case "${1:-}" in
   run)     open "$APP" ;;
   preview) "$APP/Contents/MacOS/Tokentrail" --render-png "$DIST/preview.png" ;;
+  install)
+    DEST="/Applications/Tokentrail Menu Bar.app"
+    echo "→ installing to $DEST"
+    pkill -f "Tokentrail Menu Bar.app/Contents/MacOS/Tokentrail" 2>/dev/null || true
+    sleep 1
+    rm -rf "$DEST"
+    cp -R "$APP" "$DEST"
+    open "$DEST"
+    echo "→ installed & relaunched (v$VERSION)"
+    ;;
 esac

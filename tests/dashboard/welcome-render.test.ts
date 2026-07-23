@@ -4,31 +4,28 @@ import { renderTrailMap } from '../../src/dashboard/render/trail-map.js';
 import type { SetupStatus } from '../../src/dashboard/data/setup-status.js';
 
 const ALL_FALSE: SetupStatus = {
-  swiftbarApp: false,
-  menubarPlugin: false,
+  menubarApp: false,
   daemon: false,
   skills: false,
   hook: false,
 };
 const ALL_TRUE: SetupStatus = {
-  swiftbarApp: true,
-  menubarPlugin: true,
+  menubarApp: true,
   daemon: true,
   skills: true,
   hook: true,
 };
 
 describe('renderTrailMap welcome checklist', () => {
-  test('renders the 6-row checklist when nothing is installed', () => {
+  test('renders the 5-row checklist when nothing is installed', () => {
     const html = renderTrailMap({ mode: 'welcome', setupStatus: ALL_FALSE });
     assert.match(html, /data-tt-setup/);
-    for (const key of ['cli', 'swiftbarApp', 'menubarPlugin', 'daemon', 'skills', 'hook']) {
+    for (const key of ['cli', 'menubarApp', 'daemon', 'skills', 'hook']) {
       assert.match(html, new RegExp(`data-row="${key}"`));
     }
-    assert.match(html, /data-action="menubarPlugin"/);
+    assert.match(html, /data-action="menubarApp"/);
     assert.match(html, /data-action="daemon"/);
     assert.match(html, /data-action="skills"/);
-    assert.match(html, /data-show="swiftbarApp"/);
     assert.match(html, /data-show="hook"/);
     assert.doesNotMatch(html, /tt-setup-done/);
   });
@@ -38,7 +35,7 @@ describe('renderTrailMap welcome checklist', () => {
     assert.match(html, /tt-setup-done/);
     assert.match(html, /Setup complete/);
     assert.match(html, /href="\/welcome"[^>]*tt-recheck/);
-    assert.doesNotMatch(html, /data-row="menubarPlugin"/);
+    assert.doesNotMatch(html, /data-row="menubarApp"/);
     assert.doesNotMatch(html, /data-action=/);
   });
 

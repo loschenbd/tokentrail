@@ -11,13 +11,11 @@ export type DashboardOptions = {
 /**
  * First run lands on the onboarding wizard; every run after that lands on
  * the Overview. "First run" = none of the setup steps Tokentrail itself
- * installs exist yet. Partial setups (e.g. a user who skipped the menubar
- * on purpose) go to the Overview — the wizard stays reachable at /welcome.
- * swiftbarApp is deliberately ignored: it detects SwiftBar.app, which the
- * user installs, not us.
+ * installs exist yet. Partial setups (e.g. a user who skipped the menu-bar
+ * app on purpose) go to the Overview — the wizard stays reachable at /welcome.
  */
 export function pickOpenPath(status: SetupStatus): '/' | '/welcome' {
-  const fresh = !status.menubarPlugin && !status.daemon && !status.skills && !status.hook;
+  const fresh = !status.menubarApp && !status.daemon && !status.skills && !status.hook;
   return fresh ? '/welcome' : '/';
 }
 

@@ -20,7 +20,7 @@ import { renderTrailMap } from './render/trail-map.js';
 import { freshenIfStale } from './freshen.js';
 import { readSetupStatus } from './data/setup-status.js';
 import { runInstallSkills } from '../commands/install-skills.js';
-import { installSwiftBarPlugin, installDaemon } from '../commands/init.js';
+import { installMenubarApp, installDaemon } from '../commands/init.js';
 import { pkgRoot } from '../lib/pkg-root.js';
 import { buildSettingsVM } from './data/settings.js';
 import { renderSettings } from './render/settings.js';
@@ -116,10 +116,10 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     return { ok: true, status: readSetupStatus() };
   });
 
-  app.post('/api/setup/menubar-plugin', async (_req, reply) => {
+  app.post('/api/setup/menubar-app', async (_req, reply) => {
     reply.type('application/json; charset=utf-8');
     try {
-      installSwiftBarPlugin({}, pkgRoot());
+      installMenubarApp({}, pkgRoot());
       return { ok: true, status: readSetupStatus() };
     } catch (err) {
       return {

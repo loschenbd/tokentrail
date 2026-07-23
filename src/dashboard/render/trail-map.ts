@@ -67,12 +67,12 @@ function renderCta(mode: TrailMapMode): string {
 function renderSetupChecklist(status?: SetupStatus): string {
   if (!status) return '';
 
-  if (status.swiftbarApp && status.menubarPlugin && status.daemon && status.skills && status.hook) {
+  if (status.menubarApp && status.daemon && status.skills && status.hook) {
     return `
       <div class="tt-setup tt-setup-done" id="tt-setup" data-tt-setup>
         <div class="tt-done">
           <span class="tt-dot tt-dot-ok"></span>
-          <span class="tt-label">Setup complete · all 5 steps installed</span>
+          <span class="tt-label">Setup complete · all 4 steps installed</span>
           <a href="/welcome" class="tt-recheck">Re-check</a>
         </div>
       </div>
@@ -82,8 +82,7 @@ function renderSetupChecklist(status?: SetupStatus): string {
   // CLI is implicitly installed — you're hitting this URL.
   const rows: Array<{ key: keyof SetupStatus | 'cli'; label: string; action: 'run' | 'show' | 'none' }> = [
     { key: 'cli', label: 'CLI installed', action: 'none' },
-    { key: 'swiftbarApp', label: 'SwiftBar.app', action: 'show' },
-    { key: 'menubarPlugin', label: 'Menubar plugin', action: 'run' },
+    { key: 'menubarApp', label: 'Menu-bar app', action: 'run' },
     { key: 'daemon', label: 'Dashboard daemon', action: 'run' },
     { key: 'skills', label: 'Claude Code skills', action: 'run' },
     { key: 'hook', label: 'Session-end hook (per repo)', action: 'show' },

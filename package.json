@@ -30,6 +30,7 @@
     "dist/",
     "templates/",
     "scripts/menubar/",
+    "scripts/menubar-native/",
     "src/hooks/",
     "README.md",
     "LICENSE"

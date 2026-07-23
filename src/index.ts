@@ -365,13 +365,13 @@ program
 
 program
   .command('init')
-  .description('One-shot setup: SwiftBar plugin, launchd daemon, Claude skills + hook.')
+  .description('One-shot setup: menu-bar app, launchd daemon, Claude skills + hook.')
   .option('--dry-run', 'Print every step without writing anything.')
   .option('--force', 'Replace existing symlinks, plists, and skills.')
-  .option('--skip-swiftbar', 'Skip the SwiftBar plugin step.')
+  .option('--skip-swiftbar', 'Back-compat alias for --skip-app.')
   .option('--skip-daemon', "Skip the launchd dashboard daemon step.")
   .option('--skip-hook', "Skip installing the session-end hook into this repo.")
-  .option('--skip-app', 'Skip symlinking Tokentrail.app into ~/Applications/.')
+  .option('--skip-app', 'Skip installing the native Tokentrail menu-bar app.')
   .option('--node-path <path>', 'Override the tokentrail binary path written into the launchd plist (rarely needed).')
   .action(
     async (opts: {

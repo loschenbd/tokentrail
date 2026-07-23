@@ -4,11 +4,8 @@ import { join, resolve } from 'node:path';
 
 /**
  * Where "the" tracker DB lives. Every entry point (CLI, launchd daemon,
- * Tokentrail.app) must agree on this, or a user ends up with disjoint
- * databases depending on how they launched Tokentrail. Mirror the candidate
- * search in scripts/macos-app/launch.sh; keep the two lists in sync when
- * editing either (the launcher has no meaningful cwd, so it omits that
- * candidate).
+ * menu-bar app via the daemon's /api) must agree on this, or a user ends up
+ * with disjoint databases depending on how they launched Tokentrail.
  *
  * Order: explicit env override; a DB already sitting under the working
  * directory (pre-0.3.4 CLI runs created ./data/tracker.db, and dev checkouts

@@ -3,8 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 export type SetupStatus = {
-  swiftbarApp: boolean;
-  menubarPlugin: boolean;
+  menubarApp: boolean;
   daemon: boolean;
   skills: boolean;
   hook: boolean;
@@ -12,13 +11,16 @@ export type SetupStatus = {
 
 export function readSetupStatus(opts: { home?: string; appsDir?: string } = {}): SetupStatus {
   const home = opts.home ?? homedir();
-  const appsDir = opts.appsDir ?? '/Applications';
+  const appsDir = opts.appsDir ?? join(home, 'Applications');
 
   return {
-    swiftbarApp: existsSync(join(appsDir, 'SwiftBar.app')),
-    menubarPlugin: existsSync(
-      join(home, 'Library', 'Application Support', 'SwiftBar', 'tokentrail.1m.sh'),
-    ),
+    // The native menu-bar app is installed by `tokentrail init`, which writes
+    // its LaunchAgent and copies the bundle into ~/Applications. Either signal
+    // counts as installed.
+    menubarApp:
+      existsSync(
+        join(home, 'Library', 'LaunchAgents', 'com.benjaminloschen.tokentrail.menubar.plist'),
+      ) || existsSync(join(appsDir, 'Tokentrail.app')),
     daemon: existsSync(
       join(home, 'Library', 'LaunchAgents', 'com.tokentrail.daemon.plist'),
     ),

@@ -5,8 +5,7 @@ import type { SetupStatus } from '../src/dashboard/data/setup-status.js';
 
 function status(overrides: Partial<SetupStatus> = {}): SetupStatus {
   return {
-    swiftbarApp: false,
-    menubarPlugin: false,
+    menubarApp: false,
     daemon: false,
     skills: false,
     hook: false,
@@ -20,12 +19,8 @@ describe('pickOpenPath', () => {
   });
 
   test('any completed setup step lands on the Overview', () => {
-    for (const step of ['menubarPlugin', 'daemon', 'skills', 'hook'] as const) {
+    for (const step of ['menubarApp', 'daemon', 'skills', 'hook'] as const) {
       assert.equal(pickOpenPath(status({ [step]: true })), '/', `${step} alone should open Overview`);
     }
-  });
-
-  test('SwiftBar.app alone does not count — the user installs it, not us', () => {
-    assert.equal(pickOpenPath(status({ swiftbarApp: true })), '/welcome');
   });
 });

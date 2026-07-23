@@ -19,7 +19,7 @@ describe('/api/setup/*', () => {
     const body = res.json();
     assert.equal(body.ok, true);
     assert.equal(typeof body.status, 'object');
-    for (const k of ['swiftbarApp', 'menubarPlugin', 'daemon', 'skills', 'hook']) {
+    for (const k of ['menubarApp', 'daemon', 'skills', 'hook']) {
       assert.equal(typeof body.status[k], 'boolean', `${k} should be boolean`);
     }
     await app.close();

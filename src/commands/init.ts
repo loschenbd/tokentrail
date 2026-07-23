@@ -2,16 +2,12 @@ import { execFileSync } from 'node:child_process';
 import {
   cpSync,
   existsSync,
-  lstatSync,
   mkdirSync,
-  readlinkSync,
   rmSync,
-  symlinkSync,
-  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir, platform } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { findGitRoot, runInstallHook } from './install-hook.js';
 import { runInstallSkills } from './install-skills.js';
@@ -37,13 +33,6 @@ const DAEMON_PLIST_PATH = join(
   `${DAEMON_LABEL}.plist`
 );
 const DAEMON_LOG_PATH = join(homedir(), 'Library', 'Logs', 'tokentrail-daemon.log');
-const SWIFTBAR_PLUGIN_DIR = join(
-  homedir(),
-  'Library',
-  'Application Support',
-  'SwiftBar'
-);
-const SWIFTBAR_PLUGIN_NAME = 'tokentrail.1m.sh';
 const APP_NAME = 'Tokentrail.app';
 const APP_DEST_DIR = join(homedir(), 'Applications');
 
@@ -63,7 +52,7 @@ const MENUBAR_PLIST_PATH = join(
 
 export function runInit(opts: InitOptions = {}): void {
   if (platform() !== 'darwin') {
-    console.error('tokentrail init: macOS-only. SwiftBar + launchd are not available elsewhere.');
+    console.error('tokentrail init: macOS-only. The menu-bar app + launchd are not available elsewhere.');
     process.exitCode = 1;
     return;
   }
@@ -80,61 +69,6 @@ export function runInit(opts: InitOptions = {}): void {
   if (!opts.skipApp && !opts.skipSwiftbar) installMenubarApp(opts, repoRoot);
 
   printNextSteps(opts);
-}
-
-export function installSwiftBarPlugin(opts: InitOptions, repoRoot: string): void {
-  console.log('• SwiftBar plugin');
-  if (!existsSync('/Applications/SwiftBar.app')) {
-    console.log('    SwiftBar.app not found in /Applications.');
-    console.log('    Install it with:  brew install --cask swiftbar');
-    console.log('    Then re-run:      tokentrail init');
-    return;
-  }
-
-  const src = join(repoRoot, 'scripts', 'menubar', SWIFTBAR_PLUGIN_NAME);
-  const dst = join(SWIFTBAR_PLUGIN_DIR, SWIFTBAR_PLUGIN_NAME);
-
-  if (!existsSync(src)) {
-    console.log(`    [warn] plugin source missing: ${src}`);
-    return;
-  }
-
-  if (!opts.dryRun) mkdirSync(SWIFTBAR_PLUGIN_DIR, { recursive: true });
-
-  let existing: ReturnType<typeof lstatSync> | undefined;
-  try {
-    existing = lstatSync(dst);
-  } catch {
-    /* no entry */
-  }
-
-  if (existing?.isSymbolicLink()) {
-    let target: string | null = null;
-    try { target = readlinkSync(dst); } catch { /* unreadable */ }
-    if (target === src) {
-      console.log(`    [ok] plugin already linked: ${dst}`);
-      return;
-    }
-    if (!opts.force) {
-      console.log(`    [skip] ${dst} points elsewhere — pass --force to replace.`);
-      return;
-    }
-    if (!opts.dryRun) unlinkSync(dst);
-  } else if (existing) {
-    if (!opts.force) {
-      console.log(`    [skip] ${dst} exists (not a symlink) — pass --force to replace.`);
-      return;
-    }
-    if (!opts.dryRun) unlinkSync(dst);
-  }
-
-  if (opts.dryRun) {
-    console.log(`    [dry] would link ${dst} → ${src}`);
-    return;
-  }
-
-  symlinkSync(src, dst);
-  console.log(`    [linked] ${dst} → ${src}`);
 }
 
 /**
@@ -226,70 +160,6 @@ function installRepoHook(opts: InitOptions): void {
     return;
   }
   runInstallHook({ repo, dryRun: opts.dryRun });
-}
-
-/**
- * Symlink the Tokentrail.app launcher into ~/Applications/ so it shows up
- * in Spotlight, LaunchPad, and Finder. We do this from init (not from the
- * Homebrew formula's post_install) because brew's post_install context
- * silently drops writes outside HOMEBREW_PREFIX — the symlink to ~/Apps/
- * never lands. Running it here as the user, post-install, avoids that.
- *
- * Source path: <repoRoot>/scripts/macos-app/dist/Tokentrail.app
- *   - On brew installs, repoRoot is libexec, so the .app is already built
- *     and waiting for us there (the formula's `make app` step produces it).
- *   - On dev checkouts, the .app exists only if the user ran
- *     `make -C scripts/macos-app app` themselves — we skip with a hint if
- *     it's missing rather than erroring.
- */
-export function installApp(opts: InitOptions, repoRoot: string): void {
-  console.log('• Tokentrail.app launcher');
-
-  const src = join(repoRoot, 'scripts', 'macos-app', 'dist', APP_NAME);
-  const dst = join(APP_DEST_DIR, APP_NAME);
-
-  if (!existsSync(src)) {
-    console.log(`    [skip] no .app at ${src}`);
-    console.log('           (Build it with: make -C scripts/macos-app app)');
-    return;
-  }
-
-  if (!opts.dryRun) mkdirSync(APP_DEST_DIR, { recursive: true });
-
-  let existing: ReturnType<typeof lstatSync> | undefined;
-  try {
-    existing = lstatSync(dst);
-  } catch {
-    /* no entry */
-  }
-
-  if (existing?.isSymbolicLink()) {
-    let target: string | null = null;
-    try { target = readlinkSync(dst); } catch { /* unreadable */ }
-    if (target === src) {
-      console.log(`    [ok] launcher already linked: ${dst}`);
-      return;
-    }
-    if (!opts.force) {
-      console.log(`    [skip] ${dst} points elsewhere — pass --force to replace.`);
-      return;
-    }
-    if (!opts.dryRun) unlinkSync(dst);
-  } else if (existing) {
-    if (!opts.force) {
-      console.log(`    [skip] ${dst} exists (not a symlink) — pass --force to replace.`);
-      return;
-    }
-    if (!opts.dryRun) unlinkSync(dst);
-  }
-
-  if (opts.dryRun) {
-    console.log(`    [dry] would link ${dst} → ${src}`);
-    return;
-  }
-
-  symlinkSync(src, dst);
-  console.log(`    [linked] ${dst} → ${src}`);
 }
 
 /**

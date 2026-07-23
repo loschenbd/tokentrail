@@ -16,8 +16,7 @@ describe('readSetupStatus', () => {
     const { home, apps } = fixture();
     const s = readSetupStatus({ home, appsDir: apps });
     assert.deepEqual(s, {
-      swiftbarApp: false,
-      menubarPlugin: false,
+      menubarApp: false,
       daemon: false,
       skills: false,
       hook: false,
@@ -27,14 +26,10 @@ describe('readSetupStatus', () => {
   test('detects each artifact independently', () => {
     const { home, apps } = fixture();
 
-    mkdirSync(join(apps, 'SwiftBar.app'));
-
-    const pluginDir = join(home, 'Library', 'Application Support', 'SwiftBar');
-    mkdirSync(pluginDir, { recursive: true });
-    writeFileSync(join(pluginDir, 'tokentrail.1m.sh'), '#!/bin/sh');
-
     const agentDir = join(home, 'Library', 'LaunchAgents');
     mkdirSync(agentDir, { recursive: true });
+    // Native menu-bar app: its LaunchAgent is the install signal.
+    writeFileSync(join(agentDir, 'com.benjaminloschen.tokentrail.menubar.plist'), '<plist/>');
     writeFileSync(join(agentDir, 'com.tokentrail.daemon.plist'), '<plist/>');
 
     mkdirSync(join(home, '.claude', 'skills', 'tokentrail-spend'), { recursive: true });
@@ -52,8 +47,7 @@ describe('readSetupStatus', () => {
     writeFileSync(join(projDir, 'cwd'), repo);
 
     const s = readSetupStatus({ home, appsDir: apps });
-    assert.equal(s.swiftbarApp, true);
-    assert.equal(s.menubarPlugin, true);
+    assert.equal(s.menubarApp, true);
     assert.equal(s.daemon, true);
     assert.equal(s.skills, true);
     assert.equal(s.hook, true);

@@ -353,13 +353,12 @@
   if (!root) return;
 
   const ACTION_URLS = {
-    menubarPlugin: '/api/setup/menubar-plugin',
+    menubarApp: '/api/setup/menubar-app',
     daemon: '/api/setup/daemon',
     skills: '/api/setup/skills',
   };
 
   const SHOW_COMMANDS = {
-    swiftbarApp: 'brew install --cask swiftbar',
     hook: 'tokentrail install-hook --repo /path/to/your/repo',
   };
 

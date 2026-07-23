@@ -20,14 +20,20 @@ not for memory.
 ./build.sh            # compile + bundle dist/Tokentrail.app
 ./build.sh run        # build, then launch into the menu bar
 ./build.sh preview    # build, render the panel to dist/preview.png (headless)
+./build.sh install    # build, replace /Applications/Tokentrail Menu Bar.app, relaunch
 ```
 
 Requires the Xcode toolchain (Swift 6+) and macOS 13+ (`MenuBarExtra`).
 The app is `LSUIElement` (no Dock icon) and ad-hoc signed for local use.
+`TT_FOCUS="<project name>" ./build.sh preview` seeds a focused project so the
+headless render can capture the chart's focus state (inert in normal use).
 
 ## Status
 
-Prototype. Working: live polling, stacked-area chart with server-resolved
-project colors, hot-day flame in the menu-bar title, live dot, offline state.
-Not yet done before it could retire the SwiftBar plugin: per-series chart
-hover isolation, distribution/signing, and wiring into `make install`.
+Shipped locally; has replaced the SwiftBar plugin. Working: live polling,
+stacked-area chart with server-resolved project colors, hot-day flame in the
+menu-bar title, live dot, offline state, a 30-day project breakdown (expandable
+tail, clickable rows → project pages), anomaly detail linking to /worth-a-look,
+and interactive chart focus — hovering the chart or a breakdown row dims the
+other bands and redraws the focused project un-stacked from the baseline on top.
+Not yet done: distribution/signing (still ad-hoc, local-only).

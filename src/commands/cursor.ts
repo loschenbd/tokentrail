@@ -2,10 +2,15 @@ import { existsSync } from 'node:fs';
 import type DatabaseType from 'better-sqlite3';
 import { commitExistsIn, repoContextFor } from '../services/git.js';
 import { getDb } from '../db/db.js';
+import { getConfig } from '../lib/config.js';
 import {
   readScoredCommits,
   cursorTrackingDbPath,
 } from '../services/cursor-tracking-reader.js';
+import {
+  deriveSessionCookie, fetchUsageSummary, fetchMeteredUsd,
+  type CursorUtilization, type CursorMetered,
+} from '../services/cursor-cloud.js';
 
 // Resolve a Cursor-scored commit hash to a Tokentrail repo slug by testing
 // membership across known project dirs. First containing repo wins. Results
@@ -148,4 +153,54 @@ export async function runCursorIngest(
       '.'
   );
   return { inserted, parked, scanned: commits.length };
+}
+
+export async function runCursorUsage(
+  dbArg?: DatabaseType.Database,
+  deps?: { cookie?: string | null; util?: CursorUtilization | null; metered?: CursorMetered | null }
+): Promise<'updated' | 'stale' | 'skipped'> {
+  const db = dbArg ?? getDb();
+  if (!getConfig().cursorCloudSpend) { console.log('Cursor: cloud usage disabled by config.'); return 'skipped'; }
+  const cookie = deps?.cookie !== undefined ? deps.cookie : deriveSessionCookie();
+  if (!cookie) { console.log('Cursor: no session cookie found; skipping cloud usage.'); return 'skipped'; }
+
+  const util = deps?.util !== undefined ? deps.util : await fetchUsageSummary(cookie);
+  let metered: CursorMetered | null;
+  if (deps?.metered !== undefined) metered = deps.metered;
+  else {
+    const cycleStartMs = util?.cycleStart ? Date.parse(util.cycleStart) : 0;
+    metered = await fetchMeteredUsd(cookie, Number.isFinite(cycleStartMs) ? cycleStartMs : 0);
+  }
+
+  const now = new Date().toISOString();
+  if (util === null && metered === null) {
+    const existing = db.prepare('SELECT id FROM cursor_usage WHERE id=1').get();
+    if (existing) { db.prepare('UPDATE cursor_usage SET stale = 1 WHERE id = 1').run(); return 'stale'; }
+    return 'skipped';
+  }
+
+  db.prepare(`
+    INSERT INTO cursor_usage
+      (id, cycle_start, cycle_end, membership_type, plan_used, plan_limit, plan_pct_used,
+       ondemand_enabled, ondemand_used, metered_usd, events_scanned, events_total, truncated, fetched_at, stale)
+    VALUES (1, @cs, @ce, @mt, @pu, @pl, @pp, @oe, @ou, @mu, @es, @et, @tr, @f, 0)
+    ON CONFLICT(id) DO UPDATE SET
+      cycle_start=excluded.cycle_start, cycle_end=excluded.cycle_end, membership_type=excluded.membership_type,
+      plan_used=excluded.plan_used, plan_limit=excluded.plan_limit, plan_pct_used=excluded.plan_pct_used,
+      ondemand_enabled=excluded.ondemand_enabled, ondemand_used=excluded.ondemand_used,
+      metered_usd=excluded.metered_usd, events_scanned=excluded.events_scanned,
+      events_total=excluded.events_total, truncated=excluded.truncated, fetched_at=excluded.fetched_at, stale=0
+  `).run({
+    cs: util?.cycleStart ?? null, ce: util?.cycleEnd ?? null, mt: util?.membershipType ?? null,
+    pu: util?.planUsed ?? null, pl: util?.planLimit ?? null, pp: util?.planPctUsed ?? null,
+    oe: util?.ondemandEnabled == null ? null : util.ondemandEnabled ? 1 : 0,
+    ou: util?.ondemandUsed ?? null,
+    mu: metered?.usd ?? null, es: metered?.eventsScanned ?? null, et: metered?.eventsTotal ?? null,
+    tr: metered?.truncated ? 1 : 0, f: now,
+  });
+  const plan = util?.membershipType ?? 'unknown';
+  const dollars = metered?.usd != null ? `$${metered.usd.toFixed(2)}` : 'n/a';
+  console.log(`Cursor usage (account-wide, estimated): ${plan} · ${dollars} metered this cycle` +
+    (metered?.truncated ? ' (partial — event history truncated)' : '') + '.');
+  return 'updated';
 }

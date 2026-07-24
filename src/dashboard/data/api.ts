@@ -2,7 +2,7 @@ import { statSync } from 'node:fs';
 import type DatabaseType from 'better-sqlite3';
 import { buildOverview, bucketProject } from './overview.js';
 import { colorForProject } from '../lib/feature-colors.js';
-import { hiddenFeatureKeys, rollupVisiblePredicate } from '../lib/hidden-projects.js';
+import { hiddenFeatureKeys, rollupVisiblePredicate, shownAnomalyPredicate } from '../lib/hidden-projects.js';
 
 const DASHBOARD_BASE_URL = 'http://127.0.0.1:4920';
 const MAX_PROJECTS = 3;
@@ -102,8 +102,12 @@ export function buildToday(
   const visibleSql = rollupVisiblePredicate(hiddenKeys);
   const overview = buildOverview({ db, days: 1, hidden });
 
+  // Same canonical filter the Worth a look page uses: not dismissed AND not on
+  // a hidden project, so the menubar count can't disagree with the dashboard.
+  const shownAnomalies = shownAnomalyPredicate(hiddenKeys);
+
   const anomalyCount = (db
-    .prepare(`SELECT COUNT(*) AS n FROM anomalies WHERE dismissed_at IS NULL`)
+    .prepare(`SELECT COUNT(*) AS n FROM anomalies WHERE ${shownAnomalies}`)
     .get() as { n: number }).n;
 
   const lastEventAt = (db
@@ -112,7 +116,7 @@ export function buildToday(
 
   const topAnomaly = (db
     .prepare(`SELECT amount, date, reason FROM anomalies
-              WHERE dismissed_at IS NULL
+              WHERE ${shownAnomalies}
               ORDER BY amount DESC LIMIT 1`)
     .get() ?? null) as { amount: number; date: string; reason: string } | null;
 

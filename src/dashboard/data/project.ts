@@ -2,6 +2,7 @@ import type DatabaseType from 'better-sqlite3';
 import { buildBranchGraph, type BranchGraphVM } from './branches.js';
 import { canonicalProjectColors } from './overview.js';
 import { colorForProject } from '../lib/feature-colors.js';
+import { shownAnomalyPredicate } from '../lib/hidden-projects.js';
 
 // A "project" is a higher-level grouping than a feature. There are three
 // kinds of project key:
@@ -231,7 +232,11 @@ export function buildProjectDetail(
         SELECT id, kind, date, feature_key AS featureKey, session_id AS sessionId,
                ROUND(amount, 2) AS amount, reason
         FROM anomalies
-        WHERE dismissed_at IS NULL
+        -- Empty hidden keys on purpose: this list is already scoped to the
+        -- viewed project's feature_keys, so hidden-project filtering doesn't
+        -- apply (you navigated here explicitly). Still routed through the
+        -- shared helper so the "not dismissed" semantics can't drift.
+        WHERE ${shownAnomalyPredicate([])}
           AND date >= ${startExpr}
           AND feature_key IN (SELECT value FROM json_each(?))
         ORDER BY multiplier DESC, date DESC

@@ -72,6 +72,35 @@ export function rollupVisiblePredicate(hiddenKeys: string[], column = 'feature_k
   return `${column} NOT IN (${hiddenKeys.map(sqlQuote).join(', ')})`;
 }
 
+/** Visibility filter for the `anomalies` table specifically. Its feature_key
+ *  can be NULL (day-level anomalies), so it's COALESCEd to '' — a bare
+ *  `feature_key NOT IN (...)` evaluates to NULL for those rows and would
+ *  silently drop them. Always truthy for AND-chain interpolation. */
+export function anomalyVisiblePredicate(hiddenKeys: string[]): string {
+  return rollupVisiblePredicate(hiddenKeys, `COALESCE(feature_key, '')`);
+}
+
+/**
+ * Canonical WHERE fragment for anomalies SHOWN to the user: not dismissed AND
+ * not on a hidden project. Every display surface that lists anomalies — the
+ * menubar today API, the Worth a look page, the overview, the project detail
+ * page — MUST filter through this so they can't disagree about which anomalies
+ * are "active" (this pairing drifted once when the menubar API kept the
+ * dismissed clause but dropped the visibility one). The project detail page
+ * passes empty hiddenKeys on purpose: it is already scoped to one project's
+ * feature_keys, so hidden-project filtering is a no-op there, but it still
+ * shares the dismissed semantics. Pass includeDismissed to keep dismissed rows
+ * (still visibility-filtered), e.g. Worth a look's "Show dismissed" toggle.
+ * Always truthy.
+ */
+export function shownAnomalyPredicate(
+  hiddenKeys: string[],
+  opts: { includeDismissed?: boolean } = {}
+): string {
+  const visible = anomalyVisiblePredicate(hiddenKeys);
+  return opts.includeDismissed ? visible : `dismissed_at IS NULL AND ${visible}`;
+}
+
 /** LIKE-escape for user patterns interpolated into NOT LIKE fragments. */
 function likeEscape(s: string): string {
   return s.replace(/([\\%_])/g, '\\$1');

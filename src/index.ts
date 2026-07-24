@@ -43,6 +43,16 @@ program
   });
 
 program
+  .command('cursor')
+  .description('Track Cursor usage: local AI-authored code + account spend.')
+  .option('--ingest', 'Only ingest local AI-line attribution (Source B).')
+  .option('--spend', 'Only fetch account spend (Source A).')
+  .action(async (opts: { ingest?: boolean; spend?: boolean }) => {
+    const { runCursor } = await import('./commands/cursor.js');
+    await runCursor({ ingest: opts.ingest, spend: opts.spend });
+  });
+
+program
   .command('report')
   .description('Follow token usage across recent work.')
   .option('--days <n>', 'Number of days to include (default 30)', '30')

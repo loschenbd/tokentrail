@@ -123,3 +123,11 @@ function runGit(cwd: string, args: string[]): string | null {
     return null;
   }
 }
+
+// True when <sha> is a commit object present in the repo at <dir>.
+// `git cat-file -e <sha>^{commit}` exits 0 iff the object exists and is a
+// commit; runGit returns null on any non-zero exit, so null => false.
+export function commitExistsIn(dir: string, sha: string): boolean {
+  if (!isGitRepo(dir)) return false;
+  return runGit(dir, ['cat-file', '-e', `${sha}^{commit}`]) !== null;
+}

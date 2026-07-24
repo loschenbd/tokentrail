@@ -55,6 +55,14 @@ export type TokentrailConfig = {
   featureOverrides: Record<string, FeatureOverride>;
   /** Where this config was loaded from (informational; null = defaults only). */
   source: string | null;
+  /** Override path to Cursor's ai-code-tracking.db. Null = default location. */
+  cursorTrackingDbPath: string | null;
+  /** Override path to Cursor's globalStorage state.vscdb. Null = default. */
+  cursorStateDbPath: string | null;
+  /** Manually-pasted WorkosCursorSessionToken cookie value. Null = derive locally. */
+  cursorSessionCookie: string | null;
+  /** When false, skip the cursor.com network call entirely (local Source B still runs). */
+  cursorCloudSpend: boolean;
 };
 
 const EMPTY_CONFIG: TokentrailConfig = {
@@ -63,6 +71,10 @@ const EMPTY_CONFIG: TokentrailConfig = {
   extraProjectsParentDirs: [],
   featureOverrides: {},
   source: null,
+  cursorTrackingDbPath: null,
+  cursorStateDbPath: null,
+  cursorSessionCookie: null,
+  cursorCloudSpend: true,
 };
 
 let cached: TokentrailConfig | null = null;
@@ -125,6 +137,10 @@ function normalize(raw: unknown, source: string): TokentrailConfig {
     extraProjectsParentDirs: asStringArray(obj.extraProjectsParentDirs, 'extraProjectsParentDirs', source),
     featureOverrides: asOverrides(obj.featureOverrides, source),
     source,
+    cursorTrackingDbPath: typeof obj.cursorTrackingDbPath === 'string' ? obj.cursorTrackingDbPath : null,
+    cursorStateDbPath: typeof obj.cursorStateDbPath === 'string' ? obj.cursorStateDbPath : null,
+    cursorSessionCookie: typeof obj.cursorSessionCookie === 'string' ? obj.cursorSessionCookie : null,
+    cursorCloudSpend: obj.cursorCloudSpend !== false,
   };
 }
 

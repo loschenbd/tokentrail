@@ -24,6 +24,22 @@ struct TodayResponse: Decodable {
     let topAnomaly: Anomaly?
     let lastEventAt: String?
     let menubar: Menubar
+    let sourcesToday: SourcesResponse?
+    let sources30d: SourcesResponse?
+}
+
+struct SourceCost: Decodable, Identifiable {
+    let key: String
+    let label: String
+    let usd: Double
+    let extra: Extra?
+    struct Extra: Decodable { let aiLines: Int? }
+    var id: String { key }
+}
+struct SourcesResponse: Decodable {
+    let days: Int
+    let totalUsd: Double
+    let sources: [SourceCost]
 }
 
 struct Project: Decodable, Identifiable {
@@ -486,22 +502,37 @@ struct PanelView: View {
     // hovering either the chart or a row in the breakdown list. TT_FOCUS seeds
     // it for the headless preview, which can't hover.
     @State private var focused: String? = ProcessInfo.processInfo.environment["TT_FOCUS"]
+    // Which source is selected in the picker. TT_SOURCE seeds it for the
+    // headless preview (mirrors TT_FOCUS above), since the picker can't be
+    // clicked in a headless --render-png run.
+    @State private var sourceTab: SourceTab =
+        SourceTab(rawValue: ProcessInfo.processInfo.environment["TT_SOURCE"] ?? "") ?? .all
+
+    enum SourceTab: String, CaseIterable { case all = "All", claude = "Claude", cursor = "Cursor" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let t = store.today {
-                header(t)
-                Divider()
-                statBlock(t)
-                if t.menubar.trend.days.count >= 2 {
-                    TrendChart(trend: t.menubar.trend, focused: $focused)
-                    BreakdownView(trend: t.menubar.trend, focused: $focused)
+                if hasCursor(t) {
+                    Picker("", selection: $sourceTab) {
+                        ForEach(SourceTab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
                 }
-                Divider()
-                worthALook(t)
-                if !t.topProjects.isEmpty {
+                if sourceTab == .cursor {
+                    cursorView(t)
+                } else {
+                    header(t)
                     Divider()
-                    projects(t)
+                    statBlock(t)
+                    if sourceTab == .all { sourceSplit(t) }
+                    if t.menubar.trend.days.count >= 2 {
+                        TrendChart(trend: t.menubar.trend, focused: $focused)
+                        BreakdownView(trend: t.menubar.trend, focused: $focused)
+                    }
+                    Divider(); worthALook(t)
+                    if !t.topProjects.isEmpty { Divider(); projects(t) }
                 }
                 Divider()
                 actions()
@@ -516,6 +547,36 @@ struct PanelView: View {
         }
         .padding(14)
         .frame(width: 320)
+    }
+
+    private func hasCursor(_ t: TodayResponse) -> Bool {
+        (t.sourcesToday?.sources.contains { $0.key == "cursor" } ?? false)
+        || (t.sources30d?.sources.contains { $0.key == "cursor" } ?? false)
+    }
+
+    @ViewBuilder private func sourceSplit(_ t: TodayResponse) -> some View {
+        if let s = t.sources30d, s.sources.count > 1 {
+            HStack(spacing: 8) {
+                Text("30d by source").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Text(s.sources.map { "\($0.label) \(Fmt.usd($0.usd))" }.joined(separator: " · "))
+                    .font(.caption)
+            }
+        }
+    }
+
+    @ViewBuilder private func cursorView(_ t: TodayResponse) -> some View {
+        let today = t.sourcesToday?.sources.first { $0.key == "cursor" }
+        let d30 = t.sources30d?.sources.first { $0.key == "cursor" }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Cursor").font(.headline)
+            Text("\(Fmt.usd(today?.usd ?? 0)) today · \(Fmt.usd(d30?.usd ?? 0)) this cycle (est.)")
+                .font(.callout)
+            if let lines = d30?.extra?.aiLines, lines > 0 {
+                Text("\(lines) AI-authored lines (all-time)")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 
     private func header(_ t: TodayResponse) -> some View {

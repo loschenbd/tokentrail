@@ -8,6 +8,10 @@ const EMPTY_CONFIG: TokentrailConfig = {
   extraBranchPatterns: [],
   extraProjectsParentDirs: [],
   featureOverrides: {},
+  cursorTrackingDbPath: null,
+  cursorStateDbPath: null,
+  cursorSessionCookie: null,
+  cursorCloudSpend: true,
   source: null,
 };
 

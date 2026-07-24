@@ -125,7 +125,7 @@ export function renderCursorLane(db: DatabaseType.Database): string {
 
   if (byFeature.length === 0 && !usage) return '';
 
-  const lines: string[] = ['', 'Cursor'];
+  const lines: string[] = ['', 'Cursor (all-time)'];
   if (usage) {
     const plan = usage.membership_type ?? 'unknown';
     const usd = usage.metered_usd != null ? `$${usage.metered_usd.toFixed(2)}` : 'n/a';

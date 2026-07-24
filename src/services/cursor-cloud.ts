@@ -58,6 +58,7 @@ export function deriveSessionCookie(): string | null {
 }
 
 function num(v: unknown): number | null {
+  if (v == null) return null;
   const n = Number(v); return Number.isFinite(n) ? n : null;
 }
 
@@ -101,7 +102,8 @@ export function sumMeteredUsd(
     if (typeof e !== 'object' || e === null) continue;
     const o = e as Record<string, any>;
     const ts = Number(o.timestamp);
-    if (Number.isFinite(ts) && ts < cycleStartMs) { reached = true; break; }
+    if (!Number.isFinite(ts)) continue;
+    if (ts < cycleStartMs) { reached = true; break; }
     const c = Number(o.chargedCents);
     if (Number.isFinite(c)) cents += c;
     scanned++;
@@ -122,7 +124,7 @@ export async function fetchMeteredUsd(
           'Content-Type': 'application/json' },
         body: JSON.stringify({ page }),
       });
-      if (!res.ok) { console.warn(`Cursor: usage-events ${res.status}.`); return page === 1 ? null : { usd, eventsScanned: scanned, eventsTotal: total, truncated: true }; }
+      if (!res.ok) { console.warn(`Cursor: usage-events ${res.status}.`); return page === 1 ? null : { usd: round2(usd), eventsScanned: scanned, eventsTotal: total, truncated: true }; }
       const body = (await res.json()) as Record<string, any>;
       total = Number(body.totalUsageEventsCount) || total;
       const events: unknown[] = Array.isArray(body.usageEventsDisplay) ? body.usageEventsDisplay : [];

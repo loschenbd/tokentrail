@@ -84,74 +84,78 @@ export async function runCursorIngest(
   const since = wmRow?.last_scored_at ?? 0;
 
   const commits = readScoredCommits(path, since);
-  if (commits.length === 0) {
-    console.log('Cursor: no new scored commits.');
-    return { inserted: 0, parked: 0, scanned: 0 };
-  }
-
-  const dirs = knownProjectDirs(db);
-  const cache = new Map<string, string | null>();
-
-  const upsert = db.prepare(`
-    INSERT INTO cursor_code_attribution
-      (commit_hash, repo, branch, ai_lines, composer_lines, tab_lines,
-       human_lines, ai_pct, committed_at, message, scored_at, source)
-    VALUES
-      (@commit_hash, @repo, @branch, @ai_lines, @composer_lines, @tab_lines,
-       @human_lines, @ai_pct, @committed_at, @message, @scored_at, 'cursor')
-    ON CONFLICT(commit_hash) DO UPDATE SET
-      repo = COALESCE(excluded.repo, cursor_code_attribution.repo),
-      branch = excluded.branch,
-      ai_lines = excluded.ai_lines,
-      composer_lines = excluded.composer_lines,
-      tab_lines = excluded.tab_lines,
-      human_lines = excluded.human_lines,
-      ai_pct = excluded.ai_pct,
-      committed_at = excluded.committed_at,
-      message = excluded.message,
-      scored_at = excluded.scored_at
-  `);
-
   let inserted = 0;
   let parked = 0;
-  let maxScored = since;
-  const tx = db.transaction(() => {
-    for (const c of commits) {
-      const repo = resolveCommitRepo(c.commitHash, dirs, cache);
-      if (repo === null) parked++;
-      upsert.run({
-        commit_hash: c.commitHash,
-        repo,
-        branch: c.branch,
-        ai_lines: c.aiLines,
-        composer_lines: c.composerLines,
-        tab_lines: c.tabLines,
-        human_lines: c.humanLines,
-        ai_pct: c.aiPct,
-        committed_at: c.committedAt,
-        message: c.message,
-        scored_at: c.scoredAt,
-      });
-      inserted++;
-      if (c.scoredAt > maxScored) maxScored = c.scoredAt;
-    }
-    db.prepare(
-      `INSERT INTO cursor_ingest_state (key, last_scored_at) VALUES (?, ?)
-       ON CONFLICT(key) DO UPDATE SET last_scored_at = excluded.last_scored_at`
-    ).run(WATERMARK_KEY, maxScored);
-  });
-  tx();
 
+  if (commits.length === 0) {
+    console.log('Cursor: no new scored commits.');
+  } else {
+    const dirs = knownProjectDirs(db);
+    const cache = new Map<string, string | null>();
+
+    const upsert = db.prepare(`
+      INSERT INTO cursor_code_attribution
+        (commit_hash, repo, branch, ai_lines, composer_lines, tab_lines,
+         human_lines, ai_pct, committed_at, message, scored_at, source)
+      VALUES
+        (@commit_hash, @repo, @branch, @ai_lines, @composer_lines, @tab_lines,
+         @human_lines, @ai_pct, @committed_at, @message, @scored_at, 'cursor')
+      ON CONFLICT(commit_hash) DO UPDATE SET
+        repo = COALESCE(excluded.repo, cursor_code_attribution.repo),
+        branch = excluded.branch,
+        ai_lines = excluded.ai_lines,
+        composer_lines = excluded.composer_lines,
+        tab_lines = excluded.tab_lines,
+        human_lines = excluded.human_lines,
+        ai_pct = excluded.ai_pct,
+        committed_at = excluded.committed_at,
+        message = excluded.message,
+        scored_at = excluded.scored_at
+    `);
+
+    let maxScored = since;
+    const tx = db.transaction(() => {
+      for (const c of commits) {
+        const repo = resolveCommitRepo(c.commitHash, dirs, cache);
+        if (repo === null) parked++;
+        upsert.run({
+          commit_hash: c.commitHash,
+          repo,
+          branch: c.branch,
+          ai_lines: c.aiLines,
+          composer_lines: c.composerLines,
+          tab_lines: c.tabLines,
+          human_lines: c.humanLines,
+          ai_pct: c.aiPct,
+          committed_at: c.committedAt,
+          message: c.message,
+          scored_at: c.scoredAt,
+        });
+        inserted++;
+        if (c.scoredAt > maxScored) maxScored = c.scoredAt;
+      }
+      db.prepare(
+        `INSERT INTO cursor_ingest_state (key, last_scored_at) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET last_scored_at = excluded.last_scored_at`
+      ).run(WATERMARK_KEY, maxScored);
+    });
+    tx();
+
+    console.log(
+      `Cursor: ingested ${inserted} scored commit${inserted === 1 ? '' : 's'}` +
+        (parked > 0 ? ` (${parked} awaiting a known repo)` : '') +
+        '.'
+    );
+  }
+
+  // Always re-resolve parked commits, even on an idle (zero-new-commit) run:
+  // a repo that was unknown last run may be known now (a new session dir
+  // appeared), and that shouldn't require a fresh scored commit to surface.
   const refixed = reresolveParkedCommits(db);
   if (refixed > 0) {
     console.log(`Cursor: attributed ${refixed} previously-parked commit${refixed === 1 ? '' : 's'} to a now-known repo.`);
   }
 
-  console.log(
-    `Cursor: ingested ${inserted} scored commit${inserted === 1 ? '' : 's'}` +
-      (parked > 0 ? ` (${parked} awaiting a known repo)` : '') +
-      '.'
-  );
   return { inserted, parked, scanned: commits.length };
 }
 
@@ -168,8 +172,12 @@ export async function runCursorUsage(
   let metered: CursorMetered | null;
   if (deps?.metered !== undefined) metered = deps.metered;
   else {
-    const cycleStartMs = util?.cycleStart ? Date.parse(util.cycleStart) : 0;
-    metered = await fetchMeteredUsd(cookie, Number.isFinite(cycleStartMs) ? cycleStartMs : 0);
+    // Only sum metered events against a real cycle boundary. Without a
+    // finite, positive cycle-start timestamp, fetchMeteredUsd would page
+    // through the entire event history and the sum would be mislabeled
+    // "this cycle" — so skip the fetch entirely in that case.
+    const cs = util?.cycleStart ? Date.parse(util.cycleStart) : NaN;
+    metered = (Number.isFinite(cs) && cs > 0) ? await fetchMeteredUsd(cookie, cs) : null;
   }
 
   const now = new Date().toISOString();
@@ -179,30 +187,44 @@ export async function runCursorUsage(
     return 'skipped';
   }
 
+  // A partial failure (exactly one of util/metered missing) must not
+  // clobber the last-good value for the missing half. COALESCE against
+  // the existing row on every nullable column preserves it; stale=1
+  // flags the row as not fully fresh. When both are present this is a
+  // no-op (excluded.* always wins) and stale=0, matching prior behavior.
+  const partial = util === null || metered === null;
+
   db.prepare(`
     INSERT INTO cursor_usage
       (id, cycle_start, cycle_end, membership_type, plan_used, plan_limit, plan_pct_used,
        ondemand_enabled, ondemand_used, metered_usd, events_scanned, events_total, truncated, fetched_at, stale)
-    VALUES (1, @cs, @ce, @mt, @pu, @pl, @pp, @oe, @ou, @mu, @es, @et, @tr, @f, 0)
+    VALUES (1, @cs, @ce, @mt, @pu, @pl, @pp, @oe, @ou, @mu, @es, @et, @tr, @f, @stale)
     ON CONFLICT(id) DO UPDATE SET
-      cycle_start=excluded.cycle_start, cycle_end=excluded.cycle_end, membership_type=excluded.membership_type,
-      plan_used=excluded.plan_used, plan_limit=excluded.plan_limit, plan_pct_used=excluded.plan_pct_used,
-      ondemand_enabled=excluded.ondemand_enabled, ondemand_used=excluded.ondemand_used,
-      metered_usd=excluded.metered_usd, events_scanned=excluded.events_scanned,
-      events_total=excluded.events_total, truncated=excluded.truncated, fetched_at=excluded.fetched_at, stale=0
+      cycle_start=COALESCE(excluded.cycle_start, cursor_usage.cycle_start),
+      cycle_end=COALESCE(excluded.cycle_end, cursor_usage.cycle_end),
+      membership_type=COALESCE(excluded.membership_type, cursor_usage.membership_type),
+      plan_used=COALESCE(excluded.plan_used, cursor_usage.plan_used),
+      plan_limit=COALESCE(excluded.plan_limit, cursor_usage.plan_limit),
+      plan_pct_used=COALESCE(excluded.plan_pct_used, cursor_usage.plan_pct_used),
+      ondemand_enabled=COALESCE(excluded.ondemand_enabled, cursor_usage.ondemand_enabled),
+      ondemand_used=COALESCE(excluded.ondemand_used, cursor_usage.ondemand_used),
+      metered_usd=COALESCE(excluded.metered_usd, cursor_usage.metered_usd),
+      events_scanned=COALESCE(excluded.events_scanned, cursor_usage.events_scanned),
+      events_total=COALESCE(excluded.events_total, cursor_usage.events_total),
+      truncated=excluded.truncated, fetched_at=excluded.fetched_at, stale=excluded.stale
   `).run({
     cs: util?.cycleStart ?? null, ce: util?.cycleEnd ?? null, mt: util?.membershipType ?? null,
     pu: util?.planUsed ?? null, pl: util?.planLimit ?? null, pp: util?.planPctUsed ?? null,
     oe: util?.ondemandEnabled == null ? null : util.ondemandEnabled ? 1 : 0,
     ou: util?.ondemandUsed ?? null,
     mu: metered?.usd ?? null, es: metered?.eventsScanned ?? null, et: metered?.eventsTotal ?? null,
-    tr: metered?.truncated ? 1 : 0, f: now,
+    tr: metered?.truncated ? 1 : 0, f: now, stale: partial ? 1 : 0,
   });
   const plan = util?.membershipType ?? 'unknown';
   const dollars = metered?.usd != null ? `$${metered.usd.toFixed(2)}` : 'n/a';
   console.log(`Cursor usage (account-wide, estimated): ${plan} · ${dollars} metered this cycle` +
     (metered?.truncated ? ' (partial — event history truncated)' : '') + '.');
-  return 'updated';
+  return partial ? 'stale' : 'updated';
 }
 
 export async function runCursor(

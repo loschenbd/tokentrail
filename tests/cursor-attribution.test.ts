@@ -105,3 +105,28 @@ test('reresolveParkedCommits fills repo once the dir is known', () => {
   const row: any = db.prepare('SELECT repo FROM cursor_code_attribution WHERE commit_hash=?').get(sha);
   assert.ok(row.repo.startsWith('local/'));
 });
+
+test('runCursorIngest re-resolves parked commits even when there are zero new scored commits', async () => {
+  const { dir, sha } = makeRepoWithCommit();
+  const db = new Database(':memory:');
+  runMigrations(db);
+  // A previously-parked row (repo unknown at the time) whose sha lives in a
+  // dir that IS now known via a session.
+  db.prepare(`INSERT INTO cursor_code_attribution
+    (commit_hash, repo, branch, ai_lines, composer_lines, tab_lines, human_lines, scored_at)
+    VALUES (?, NULL, 'main', 5, 5, 0, 0, 1)`).run(sha);
+  db.prepare(`INSERT INTO sessions (session_id, project_dir, first_seen_at, last_seen_at)
+    VALUES ('s', ?, '2026-01-01','2026-01-01')`).run(dir);
+
+  // Point at a missing cursor tracking db -> readScoredCommits returns [],
+  // i.e. zero new scored commits this run.
+  resetConfigCache();
+  (getConfig() as any).cursorTrackingDbPath = '/no/such/cursor-tracking.db';
+
+  const res = await runCursorIngest(db);
+  assert.equal(res.scanned, 0);
+  assert.equal(res.inserted, 0);
+
+  const row: any = db.prepare('SELECT repo FROM cursor_code_attribution WHERE commit_hash=?').get(sha);
+  assert.ok(row.repo && row.repo.startsWith('local/'));
+});

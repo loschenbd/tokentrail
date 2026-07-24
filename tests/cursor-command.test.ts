@@ -1,8 +1,8 @@
-import { describe, test } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';
-import { _setDbForTest, closeDb } from '../src/db/db.js';
+import { _setDbForTest } from '../src/db/db.js';
 import { runCursor } from '../src/commands/cursor.js';
 import { resetConfigCache, getConfig } from '../src/lib/config.js';
 

@@ -59,8 +59,12 @@ import { getConfig, resetConfigCache } from '../src/lib/config.js';
 
 test('runCursorIngest stores rows, resolving repo where a commit is known', async () => {
   const { dir, sha } = makeRepoWithCommit();
-  // fixture cursor db with one scored commit matching the real sha
-  const cur = new Database('/tmp/tt-cursor-ingest.db');
+  // fixture cursor db with one scored commit matching the real sha.
+  // Use a fresh temp dir (not a fixed /tmp path) so a leftover file from a
+  // prior run can't make `CREATE TABLE scored_commits` fail as "already exists"
+  // — that made the suite pass once, then fail on every re-run.
+  const curPath = join(mkdtempSync(join(tmpdir(), 'tt-cursor-ingest-')), 'ct.db');
+  const cur = new Database(curPath);
   cur.exec(`CREATE TABLE scored_commits (commitHash TEXT, branchName TEXT, scoredAt INTEGER,
     composerLinesAdded INTEGER, tabLinesAdded INTEGER, humanLinesAdded INTEGER,
     v2AiPercentage TEXT, commitMessage TEXT, commitDate TEXT,
@@ -77,7 +81,7 @@ test('runCursorIngest stores rows, resolving repo where a commit is known', asyn
 
   // point config at the fixture cursor db
   resetConfigCache();
-  (getConfig() as any).cursorTrackingDbPath = '/tmp/tt-cursor-ingest.db';
+  (getConfig() as any).cursorTrackingDbPath = curPath;
 
   const res = await runCursorIngest(db);
   assert.equal(res.inserted, 1);

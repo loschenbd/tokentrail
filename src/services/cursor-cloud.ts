@@ -17,7 +17,7 @@ export type CursorUtilization = {
   planUsed: number | null; planLimit: number | null; planPctUsed: number | null;
   ondemandEnabled: boolean | null; ondemandUsed: number | null;
 };
-export type CursorMetered = { usd: number; eventsScanned: number; eventsTotal: number; truncated: boolean };
+export type CursorMetered = { usd: number; byDay: Record<string, number>; eventsScanned: number; eventsTotal: number; truncated: boolean };
 
 function stateDbPath(): string {
   const override = getConfig().cursorStateDbPath;
@@ -111,11 +111,40 @@ export function sumMeteredUsd(
   return { usd: Math.round(cents) / 100, scanned, reachedCycleStart: reached };
 }
 
+// Per-day USD from chargedCents, for events at/after cycleStartMs. Same
+// newest-first stop rule and non-finite-timestamp skip as sumMeteredUsd.
+export function bucketMeteredByDay(
+  events: unknown[], cycleStartMs: number
+): { byDay: Record<string, number>; reachedCycleStart: boolean } {
+  const cents: Record<string, number> = {};
+  let reached = false;
+  for (const e of events) {
+    if (typeof e !== 'object' || e === null) continue;
+    const o = e as Record<string, any>;
+    const ts = Number(o.timestamp);
+    if (!Number.isFinite(ts)) continue;
+    if (ts < cycleStartMs) { reached = true; break; }
+    const c = Number(o.chargedCents);
+    if (!Number.isFinite(c)) continue;
+    const date = new Date(ts).toISOString().slice(0, 10);
+    cents[date] = (cents[date] ?? 0) + c;
+  }
+  const byDay: Record<string, number> = {};
+  for (const [d, c] of Object.entries(cents)) byDay[d] = Math.round(c) / 100;
+  return { byDay, reachedCycleStart: reached };
+}
+
 export async function fetchMeteredUsd(
   cookie: string, cycleStartMs: number, fetchImpl: typeof fetch = fetch
 ): Promise<CursorMetered | null> {
   let usd = 0, scanned = 0, total = 0, truncated = false;
   let prevFirstTs: string | null = null;
+  const byDayCents: Record<string, number> = {};
+  const finalizeByDay = (): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const [d, c] of Object.entries(byDayCents)) out[d] = Math.round(c) / 100;
+    return out;
+  };
   try {
     for (let page = 1; page <= MAX_PAGES; page++) {
       const res = await fetchImpl(EVENTS_URL, {
@@ -124,7 +153,7 @@ export async function fetchMeteredUsd(
           'Content-Type': 'application/json' },
         body: JSON.stringify({ page }),
       });
-      if (!res.ok) { console.warn(`Cursor: usage-events ${res.status}.`); return page === 1 ? null : { usd: round2(usd), eventsScanned: scanned, eventsTotal: total, truncated: true }; }
+      if (!res.ok) { console.warn(`Cursor: usage-events ${res.status}.`); return page === 1 ? null : { usd: round2(usd), byDay: finalizeByDay(), eventsScanned: scanned, eventsTotal: total, truncated: true }; }
       const body = (await res.json()) as Record<string, any>;
       total = Number(body.totalUsageEventsCount) || total;
       const events: unknown[] = Array.isArray(body.usageEventsDisplay) ? body.usageEventsDisplay : [];
@@ -136,16 +165,18 @@ export async function fetchMeteredUsd(
       prevFirstTs = firstTs;
       const r = sumMeteredUsd(events, cycleStartMs);
       usd += r.usd; scanned += r.scanned;
-      if (r.reachedCycleStart) return { usd: round2(usd), eventsScanned: scanned, eventsTotal: total, truncated: false };
+      const b = bucketMeteredByDay(events, cycleStartMs);
+      for (const [d, u] of Object.entries(b.byDay)) byDayCents[d] = (byDayCents[d] ?? 0) + Math.round(u * 100);
+      if (r.reachedCycleStart) return { usd: round2(usd), byDay: finalizeByDay(), eventsScanned: scanned, eventsTotal: total, truncated: false };
       // Otherwise keep paginating — a genuinely-last real page is caught by
       // the empty-page check above on the next iteration. Don't guess "last
       // page" from a short page: pagination page sizes aren't guaranteed.
       if (page === MAX_PAGES) truncated = true;
     }
-    return { usd: round2(usd), eventsScanned: scanned, eventsTotal: total, truncated };
+    return { usd: round2(usd), byDay: finalizeByDay(), eventsScanned: scanned, eventsTotal: total, truncated };
   } catch (err) {
     console.warn(`Cursor: usage-events failed (${(err as Error).message}).`);
-    return scanned > 0 ? { usd: round2(usd), eventsScanned: scanned, eventsTotal: total, truncated: true } : null;
+    return scanned > 0 ? { usd: round2(usd), byDay: finalizeByDay(), eventsScanned: scanned, eventsTotal: total, truncated: true } : null;
   }
 }
 

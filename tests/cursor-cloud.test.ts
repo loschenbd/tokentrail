@@ -105,3 +105,38 @@ test('runCursorUsage skips with no cookie', async () => {
   const db = new Database(':memory:'); runMigrations(db);
   assert.equal(await runCursorUsage(db, { cookie: null }), 'skipped');
 });
+
+test('runCursorUsage preserves last-good metered value on a partial (metered-only) failure', async () => {
+  const db = new Database(':memory:'); runMigrations(db);
+  await runCursorUsage(db, { cookie: 'c', util: UTIL as any,
+    metered: { usd: 12.4, eventsScanned: 210, eventsTotal: 13481, truncated: false } });
+  const r = await runCursorUsage(db, { cookie: 'c', util: UTIL as any, metered: null });
+  assert.equal(r, 'stale');
+  const row: any = db.prepare('SELECT * FROM cursor_usage WHERE id=1').get();
+  // metered half is missing this run -> the last-good value must survive,
+  // not be wiped to NULL by the upsert.
+  assert.equal(row.metered_usd, 12.4);
+  assert.equal(row.membership_type, 'pro');
+  assert.equal(row.stale, 1);
+});
+
+test('runCursorUsage does not sum unbounded event history when there is no valid cycle start', async () => {
+  const db = new Database(':memory:'); runMigrations(db);
+  let fetchCalled = false;
+  const origFetch = global.fetch;
+  global.fetch = (async () => {
+    fetchCalled = true;
+    return new Response('{}', { status: 200 });
+  }) as unknown as typeof fetch;
+  try {
+    // util is null (no cycleStart available) and metered is not injected ->
+    // fetchMeteredUsd must never be called, since without a cycle boundary
+    // it would page through and sum the entire event history.
+    const r = await runCursorUsage(db, { cookie: 'c', util: null });
+    assert.equal(fetchCalled, false);
+    assert.equal(r, 'skipped');
+    assert.equal(db.prepare('SELECT id FROM cursor_usage WHERE id=1').get(), undefined);
+  } finally {
+    global.fetch = origFetch;
+  }
+});

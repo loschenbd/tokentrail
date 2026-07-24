@@ -1,4 +1,4 @@
-import { describe, test } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';

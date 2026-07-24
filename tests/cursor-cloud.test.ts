@@ -85,17 +85,28 @@ describe('fetch*', () => {
     assert.equal(await fetchUsageSummary('c', f), null);
   });
   test('fetchMeteredUsd paginates until it reaches cycle start', async () => {
-    const page1 = { totalUsageEventsCount: 3, usageEventsDisplay: [
-      { timestamp: '3000', chargedCents: 100 }, { timestamp: '2500', chargedCents: 100 }] };
-    const page2 = { totalUsageEventsCount: 3, usageEventsDisplay: [
-      { timestamp: '2000', chargedCents: 100 }, { timestamp: '500', chargedCents: 999 }] };
+    // Two distinct UTC dates across the two pages, with dayA receiving
+    // contributions from BOTH pages -> proves byDay accumulates cross-page.
+    const dayA = new Date(1700086400500).toISOString().slice(0, 10);
+    const dayB = new Date(1700000000000).toISOString().slice(0, 10);
+    const page1 = { totalUsageEventsCount: 5, usageEventsDisplay: [
+      { timestamp: '1700086400500', chargedCents: 100 }, // dayA
+      { timestamp: '1700086400000', chargedCents: 150 }] }; // dayA
+    const page2 = { totalUsageEventsCount: 5, usageEventsDisplay: [
+      { timestamp: '1700086300000', chargedCents: 200 }, // dayA (from page 2)
+      { timestamp: '1700000000000', chargedCents: 300 }, // dayB
+      { timestamp: '500', chargedCents: 999 }] };         // before cycle -> stops pagination
     let call = 0;
     const f = (async () => new Response(JSON.stringify(call++ === 0 ? page1 : page2),
       { status: 200 })) as unknown as typeof fetch;
     const out = await fetchMeteredUsd('c', 1000, f);
-    assert.equal(out?.usd, 3);         // 3 in-cycle events x $1.00
+    assert.equal(out?.usd, 7.5);       // (100+150+200+300)/100 in-cycle events
     assert.equal(out?.truncated, false);
-    assert.equal(out?.eventsTotal, 3);
+    assert.equal(out?.eventsTotal, 5);
+    // dayA = (100+150 from page1) + (200 from page2) = 4.50
+    assert.equal(out?.byDay[dayA], 4.5);
+    // dayB = 300 from page2 only = 3.00
+    assert.equal(out?.byDay[dayB], 3);
   });
 });
 

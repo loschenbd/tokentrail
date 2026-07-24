@@ -23,7 +23,7 @@ export type TodayProject = {
   features: TodayFeature[];
 };
 
-// Slim 30-day stacked-trend payload for the menubar plugin's chart image.
+// Slim 30-day stacked-trend payload for the native menu-bar app's chart.
 // Mirrors the overview trend chart: same bands, same server-resolved project
 // colors, same stack order — so the dropdown chart matches the dashboard.
 export type MenubarTrend = {

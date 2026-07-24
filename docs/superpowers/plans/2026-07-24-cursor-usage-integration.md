@@ -28,7 +28,7 @@
 - Create `src/services/cursor-tracking-reader.ts` — read-only reader over `ai-code-tracking.db` → typed `scored_commits` rows. No DB writes, no git.
 - Create `src/services/cursor-cloud.ts` — session-cookie derivation from `state.vscdb` + `usage-summary` fetch/parse. Network + foreign-DB read only.
 - Create `src/commands/cursor.ts` — orchestration: ingest (Source B), spend (Source A), and the combined entry. Owns the Tokentrail-DB writes.
-- Modify `src/db/schema.ts` — add `cursor_code_attribution`, `cursor_spend`, `cursor_ingest_state` tables + indexes.
+- Modify `src/db/schema.ts` — add `cursor_code_attribution`, `cursor_usage`, `cursor_ingest_state` tables + indexes.
 - Modify `src/services/git.ts` — add `commitExistsIn(dir, sha)`.
 - Modify `src/lib/config.ts` — add Cursor config knobs.
 - Modify `src/index.ts` — register `tokentrail cursor`.
@@ -79,7 +79,7 @@ No commit — this is investigation only.
 - Test: `tests/cursor-tracking-reader.test.ts` (schema-presence check reused later)
 
 **Interfaces:**
-- Produces tables: `cursor_code_attribution`, `cursor_spend`, `cursor_ingest_state`.
+- Produces tables: `cursor_code_attribution`, `cursor_usage`, `cursor_ingest_state`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -99,7 +99,7 @@ describe('cursor schema', () => {
       .all()
       .map((r: any) => r.name);
     assert.ok(names.includes('cursor_code_attribution'));
-    assert.ok(names.includes('cursor_spend'));
+    assert.ok(names.includes('cursor_usage'));
     assert.ok(names.includes('cursor_ingest_state'));
   });
 });
@@ -132,16 +132,22 @@ Append to the `SCHEMA_STATEMENTS` array in `src/db/schema.ts`:
   `CREATE INDEX IF NOT EXISTS idx_cursor_attr_repo_branch
     ON cursor_code_attribution (repo, branch)`,
 
-  `CREATE TABLE IF NOT EXISTS cursor_spend (
-    id            INTEGER PRIMARY KEY CHECK (id = 1),
-    period_start  TEXT,
-    period_end    TEXT,
-    spend_usd     REAL,
-    quota_usd     REAL,
-    requests      INTEGER,
-    plan          TEXT,
-    fetched_at    TEXT NOT NULL,
-    stale         INTEGER NOT NULL DEFAULT 0
+  `CREATE TABLE IF NOT EXISTS cursor_usage (
+    id                 INTEGER PRIMARY KEY CHECK (id = 1),
+    cycle_start        TEXT,
+    cycle_end          TEXT,
+    membership_type    TEXT,
+    plan_used          REAL,
+    plan_limit         REAL,
+    plan_pct_used      REAL,
+    ondemand_enabled   INTEGER,
+    ondemand_used      REAL,
+    metered_usd        REAL,     -- SUM(chargedCents)/100 over the current cycle
+    events_scanned     INTEGER,  -- how many dashboard events were summed
+    events_total       INTEGER,  -- totalUsageEventsCount reported by the API
+    truncated          INTEGER NOT NULL DEFAULT 0,  -- 1 if the page cap stopped us early
+    fetched_at         TEXT NOT NULL,
+    stale              INTEGER NOT NULL DEFAULT 0
   )`,
 
   `CREATE TABLE IF NOT EXISTS cursor_ingest_state (
@@ -149,7 +155,7 @@ Append to the `SCHEMA_STATEMENTS` array in `src/db/schema.ts`:
     last_scored_at INTEGER NOT NULL
   )`,
 ```
-(`cursor_spend` is a singleton row via `CHECK (id = 1)` — the tile is one account-level figure.)
+(`cursor_usage` is a singleton row via `CHECK (id = 1)` — one account-level snapshot folding both endpoints: utilization from `usage-summary` and the metered-dollar total from `get-filtered-usage-events`.)
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -160,7 +166,7 @@ Expected: PASS.
 
 ```bash
 git add src/db/schema.ts tests/cursor-tracking-reader.test.ts
-git commit -m "feat(cursor): add cursor_code_attribution, cursor_spend, cursor_ingest_state tables"
+git commit -m "feat(cursor): add cursor_code_attribution, cursor_usage, cursor_ingest_state tables"
 ```
 
 ---
@@ -824,18 +830,26 @@ git commit -m "feat(cursor): re-resolve parked NULL-repo commits on later runs"
 
 ---
 
-## Task 8: Source A — cloud spend service
+## Task 8: Source A — cloud service (cookie + two endpoints)
 
 **Files:**
 - Create: `src/services/cursor-cloud.ts`
 - Test: `tests/cursor-cloud.test.ts`
 
+**Confirmed by Task 0 spike (use these exact shapes):**
+- Cookie: `WorkosCursorSessionToken=<sub>::<jwt>`. `<jwt>` = `cursorAuth/accessToken` from `state.vscdb`; `<sub>` = that JWT's `sub` claim (base64url-decode the middle segment; value looks like `github|user_01J...`). Bare JWT → 401.
+- `GET https://cursor.com/api/usage-summary` → `{ billingCycleStart, billingCycleEnd, membershipType, individualUsage: { plan: { used, limit, remaining, totalPercentUsed }, onDemand: { enabled, used, limit, remaining } } }`. No dollars here.
+- `POST https://cursor.com/api/dashboard/get-filtered-usage-events` (header `Origin: https://cursor.com`, body `{}` for page 1) → `{ totalUsageEventsCount, usageEventsDisplay: [ { timestamp("ms"), model, chargedCents(number), usageBasedCosts("$x.xx"|"-"), tokenUsage:{...}, conversationId } ] }`, newest-first, 100/page. Dollar total = Σ`chargedCents`/100 over events in the current cycle.
+
 **Interfaces:**
 - Produces:
-  - `export type CursorUsageSummary = { spendUsd: number | null; quotaUsd: number | null; requests: number | null; plan: string | null; periodStart: string | null; periodEnd: string | null }`
-  - `export function readSessionCookie(): string | null`
-  - `export function parseUsageSummary(json: unknown): CursorUsageSummary`
-  - `export async function fetchUsageSummary(cookie: string, fetchImpl?: typeof fetch): Promise<CursorUsageSummary | null>`
+  - `export type CursorUtilization = { cycleStart: string | null; cycleEnd: string | null; membershipType: string | null; planUsed: number | null; planLimit: number | null; planPctUsed: number | null; ondemandEnabled: boolean | null; ondemandUsed: number | null }`
+  - `export type CursorMetered = { usd: number; eventsScanned: number; eventsTotal: number; truncated: boolean }`
+  - `export function deriveSessionCookie(): string | null`
+  - `export function parseUsageSummary(json: unknown): CursorUtilization`
+  - `export async function fetchUsageSummary(cookie: string, fetchImpl?: typeof fetch): Promise<CursorUtilization | null>`
+  - `export function sumMeteredUsd(events: unknown[], cycleStartMs: number): { usd: number; scanned: number; reachedCycleStart: boolean }`
+  - `export async function fetchMeteredUsd(cookie: string, cycleStartMs: number, fetchImpl?: typeof fetch): Promise<CursorMetered | null>`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -843,45 +857,75 @@ Create `tests/cursor-cloud.test.ts`:
 ```ts
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseUsageSummary, fetchUsageSummary } from '../src/services/cursor-cloud.js';
+import {
+  parseUsageSummary,
+  fetchUsageSummary,
+  sumMeteredUsd,
+  fetchMeteredUsd,
+} from '../src/services/cursor-cloud.js';
 
 describe('parseUsageSummary', () => {
-  test('maps known fields and tolerates missing ones', () => {
-    // Field names confirmed in Task 0; adjust the keys below to the real shape.
+  test('maps the confirmed usage-summary shape', () => {
     const out = parseUsageSummary({
-      billingCycle: { start: '2026-07-01', end: '2026-07-31' },
-      plan: 'pro',
-      onDemandSpendCents: 4120,
-      quotaCents: 5000,
-      requestCount: 2310,
+      billingCycleStart: '2026-07-22T23:42:23.613Z',
+      billingCycleEnd: '2026-08-22T23:42:23.613Z',
+      membershipType: 'pro',
+      individualUsage: {
+        plan: { used: 3, limit: 500, remaining: 497, totalPercentUsed: 0.6 },
+        onDemand: { enabled: false, used: 0, limit: null, remaining: null },
+      },
     });
-    assert.equal(out.spendUsd, 41.2);
-    assert.equal(out.quotaUsd, 50);
-    assert.equal(out.requests, 2310);
-    assert.equal(out.plan, 'pro');
-    assert.equal(out.periodStart, '2026-07-01');
+    assert.equal(out.membershipType, 'pro');
+    assert.equal(out.planUsed, 3);
+    assert.equal(out.planLimit, 500);
+    assert.equal(out.planPctUsed, 0.6);
+    assert.equal(out.ondemandEnabled, false);
+    assert.equal(out.cycleStart, '2026-07-22T23:42:23.613Z');
   });
-
-  test('garbage input yields all-null, no throw', () => {
+  test('garbage -> all null, no throw', () => {
     const out = parseUsageSummary(null);
-    assert.equal(out.spendUsd, null);
-    assert.equal(out.plan, null);
+    assert.equal(out.membershipType, null);
+    assert.equal(out.planUsed, null);
   });
 });
 
-describe('fetchUsageSummary', () => {
-  test('returns null on non-200 without throwing', async () => {
-    const fakeFetch = (async () => new Response('nope', { status: 401 })) as unknown as typeof fetch;
-    const out = await fetchUsageSummary('cookie', fakeFetch);
-    assert.equal(out, null);
+describe('sumMeteredUsd', () => {
+  const cycleStartMs = 1000;
+  test('sums chargedCents for events at/after cycle start, stops when older', () => {
+    const events = [
+      { timestamp: '3000', chargedCents: 950 },   // $9.50
+      { timestamp: '2000', chargedCents: 50 },    // $0.50
+      { timestamp: '500',  chargedCents: 999 },   // before cycle -> excluded, signals reachedCycleStart
+    ];
+    const r = sumMeteredUsd(events, cycleStartMs);
+    assert.equal(r.usd, 10);           // 9.50 + 0.50
+    assert.equal(r.scanned, 2);
+    assert.equal(r.reachedCycleStart, true);
   });
+  test('no pre-cycle event -> reachedCycleStart false', () => {
+    const r = sumMeteredUsd([{ timestamp: '3000', chargedCents: 100 }], cycleStartMs);
+    assert.equal(r.usd, 1);
+    assert.equal(r.reachedCycleStart, false);
+  });
+});
 
-  test('parses a 200 body', async () => {
-    const body = JSON.stringify({ plan: 'pro', onDemandSpendCents: 100, quotaCents: 200 });
-    const fakeFetch = (async () => new Response(body, { status: 200 })) as unknown as typeof fetch;
-    const out = await fetchUsageSummary('cookie', fakeFetch);
-    assert.equal(out?.spendUsd, 1);
-    assert.equal(out?.quotaUsd, 2);
+describe('fetch*', () => {
+  test('fetchUsageSummary returns null on non-200', async () => {
+    const f = (async () => new Response('x', { status: 401 })) as unknown as typeof fetch;
+    assert.equal(await fetchUsageSummary('c', f), null);
+  });
+  test('fetchMeteredUsd paginates until it reaches cycle start', async () => {
+    const page1 = { totalUsageEventsCount: 3, usageEventsDisplay: [
+      { timestamp: '3000', chargedCents: 100 }, { timestamp: '2500', chargedCents: 100 }] };
+    const page2 = { totalUsageEventsCount: 3, usageEventsDisplay: [
+      { timestamp: '2000', chargedCents: 100 }, { timestamp: '500', chargedCents: 999 }] };
+    let call = 0;
+    const f = (async () => new Response(JSON.stringify(call++ === 0 ? page1 : page2),
+      { status: 200 })) as unknown as typeof fetch;
+    const out = await fetchMeteredUsd('c', 1000, f);
+    assert.equal(out?.usd, 3);         // 3 in-cycle events x $1.00
+    assert.equal(out?.truncated, false);
+    assert.equal(out?.eventsTotal, 3);
   });
 });
 ```
@@ -905,33 +949,36 @@ import { getConfig } from '../lib/config.js';
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3') as typeof DatabaseType;
 
-export type CursorUsageSummary = {
-  spendUsd: number | null;
-  quotaUsd: number | null;
-  requests: number | null;
-  plan: string | null;
-  periodStart: string | null;
-  periodEnd: string | null;
+const USAGE_SUMMARY_URL = 'https://cursor.com/api/usage-summary';
+const EVENTS_URL = 'https://cursor.com/api/dashboard/get-filtered-usage-events';
+const MAX_PAGES = 200;       // safety cap; matches CodexBar. Truncation is flagged, never silent.
+const PAGE_SIZE = 100;       // observed page size
+
+export type CursorUtilization = {
+  cycleStart: string | null; cycleEnd: string | null; membershipType: string | null;
+  planUsed: number | null; planLimit: number | null; planPctUsed: number | null;
+  ondemandEnabled: boolean | null; ondemandUsed: number | null;
 };
+export type CursorMetered = { usd: number; eventsScanned: number; eventsTotal: number; truncated: boolean };
 
 function stateDbPath(): string {
   const override = getConfig().cursorStateDbPath;
   if (override) return override;
-  return join(
-    homedir(),
-    'Library',
-    'Application Support',
-    'Cursor',
-    'User',
-    'globalStorage',
-    'state.vscdb'
-  );
+  return join(homedir(), 'Library', 'Application Support', 'Cursor',
+    'User', 'globalStorage', 'state.vscdb');
 }
 
-// Cookie resolution: explicit config value wins; otherwise derive from the
-// local Cursor state DB. Returns null when neither is available — the caller
-// then skips the network call cleanly.
-export function readSessionCookie(): string | null {
+function jwtSub(jwt: string): string | null {
+  try {
+    const payload = jwt.split('.')[1];
+    if (!payload) return null;
+    const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return typeof json.sub === 'string' ? json.sub : null;
+  } catch { return null; }
+}
+
+// Cookie = "<sub>::<jwt>". Manual config cookie wins (already composed).
+export function deriveSessionCookie(): string | null {
   const manual = getConfig().cursorSessionCookie;
   if (manual) return manual;
   const path = stateDbPath();
@@ -939,65 +986,110 @@ export function readSessionCookie(): string | null {
   let db: DatabaseType.Database | null = null;
   try {
     db = new Database(path, { readonly: true, fileMustExist: true });
-    // Task 0 confirms the exact key holding the WorkosCursorSessionToken.
-    // Placeholder key name below MUST be replaced with the verified key.
-    const row = db
-      .prepare("SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'")
+    const row = db.prepare("SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'")
       .get() as { value: string } | undefined;
-    return row?.value ?? null;
+    const jwt = row?.value;
+    if (!jwt) return null;
+    const sub = jwtSub(jwt);
+    if (!sub) return null;
+    return `${sub}::${jwt}`;
   } catch (err) {
-    console.warn(`Cursor: could not read session cookie (${(err as Error).message}).`);
+    console.warn(`Cursor: could not read session token (${(err as Error).message}).`);
     return null;
-  } finally {
-    db?.close();
-  }
+  } finally { db?.close(); }
 }
 
-function centsToUsd(v: unknown): number | null {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.round(n) / 100 : null;
+function num(v: unknown): number | null {
+  const n = Number(v); return Number.isFinite(n) ? n : null;
 }
 
-export function parseUsageSummary(json: unknown): CursorUsageSummary {
-  const empty: CursorUsageSummary = {
-    spendUsd: null, quotaUsd: null, requests: null,
-    plan: null, periodStart: null, periodEnd: null,
-  };
+export function parseUsageSummary(json: unknown): CursorUtilization {
+  const empty: CursorUtilization = {
+    cycleStart: null, cycleEnd: null, membershipType: null, planUsed: null,
+    planLimit: null, planPctUsed: null, ondemandEnabled: null, ondemandUsed: null };
   if (typeof json !== 'object' || json === null) return empty;
   const o = json as Record<string, any>;
+  const plan = o.individualUsage?.plan ?? {};
+  const od = o.individualUsage?.onDemand ?? {};
   return {
-    spendUsd: centsToUsd(o.onDemandSpendCents),
-    quotaUsd: centsToUsd(o.quotaCents),
-    requests: Number.isFinite(Number(o.requestCount)) ? Number(o.requestCount) : null,
-    plan: typeof o.plan === 'string' ? o.plan : null,
-    periodStart: o.billingCycle?.start ?? null,
-    periodEnd: o.billingCycle?.end ?? null,
+    cycleStart: typeof o.billingCycleStart === 'string' ? o.billingCycleStart : null,
+    cycleEnd: typeof o.billingCycleEnd === 'string' ? o.billingCycleEnd : null,
+    membershipType: typeof o.membershipType === 'string' ? o.membershipType : null,
+    planUsed: num(plan.used), planLimit: num(plan.limit), planPctUsed: num(plan.totalPercentUsed),
+    ondemandEnabled: typeof od.enabled === 'boolean' ? od.enabled : null,
+    ondemandUsed: num(od.used),
   };
 }
 
 export async function fetchUsageSummary(
-  cookie: string,
-  fetchImpl: typeof fetch = fetch
-): Promise<CursorUsageSummary | null> {
+  cookie: string, fetchImpl: typeof fetch = fetch
+): Promise<CursorUtilization | null> {
   try {
-    const res = await fetchImpl('https://cursor.com/api/usage-summary', {
-      headers: {
-        Cookie: `WorkosCursorSessionToken=${cookie}`,
-        Origin: 'https://cursor.com',
-      },
-    });
-    if (!res.ok) {
-      console.warn(`Cursor: usage-summary returned ${res.status}.`);
-      return null;
-    }
+    const res = await fetchImpl(USAGE_SUMMARY_URL, {
+      headers: { Cookie: `WorkosCursorSessionToken=${cookie}`, Origin: 'https://cursor.com' } });
+    if (!res.ok) { console.warn(`Cursor: usage-summary ${res.status}.`); return null; }
     return parseUsageSummary(await res.json());
+  } catch (err) { console.warn(`Cursor: usage-summary failed (${(err as Error).message}).`); return null; }
+}
+
+// Sum chargedCents (as USD) over events newer-or-equal to cycleStartMs.
+// Events arrive newest-first; the first event older than cycleStart means we
+// have seen the whole current cycle -> reachedCycleStart=true (stop paging).
+export function sumMeteredUsd(
+  events: unknown[], cycleStartMs: number
+): { usd: number; scanned: number; reachedCycleStart: boolean } {
+  let cents = 0, scanned = 0, reached = false;
+  for (const e of events) {
+    if (typeof e !== 'object' || e === null) continue;
+    const o = e as Record<string, any>;
+    const ts = Number(o.timestamp);
+    if (Number.isFinite(ts) && ts < cycleStartMs) { reached = true; break; }
+    const c = Number(o.chargedCents);
+    if (Number.isFinite(c)) cents += c;
+    scanned++;
+  }
+  return { usd: Math.round(cents) / 100, scanned, reachedCycleStart: reached };
+}
+
+export async function fetchMeteredUsd(
+  cookie: string, cycleStartMs: number, fetchImpl: typeof fetch = fetch
+): Promise<CursorMetered | null> {
+  let usd = 0, scanned = 0, total = 0, truncated = false;
+  let prevFirstTs: string | null = null;
+  try {
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const res = await fetchImpl(EVENTS_URL, {
+        method: 'POST',
+        headers: { Cookie: `WorkosCursorSessionToken=${cookie}`, Origin: 'https://cursor.com',
+          'Content-Type': 'application/json' },
+        body: JSON.stringify({ page }),
+      });
+      if (!res.ok) { console.warn(`Cursor: usage-events ${res.status}.`); return page === 1 ? null : { usd, eventsScanned: scanned, eventsTotal: total, truncated: true }; }
+      const body = (await res.json()) as Record<string, any>;
+      total = Number(body.totalUsageEventsCount) || total;
+      const events: unknown[] = Array.isArray(body.usageEventsDisplay) ? body.usageEventsDisplay : [];
+      if (events.length === 0) break;
+      // Pagination-unsupported guard: if page N returns the same first event as
+      // page N-1, the `page` param is not honored -> stop and flag truncated.
+      const firstTs = (events[0] as any)?.timestamp ?? null;
+      if (page > 1 && firstTs === prevFirstTs) { truncated = true; break; }
+      prevFirstTs = firstTs;
+      const r = sumMeteredUsd(events, cycleStartMs);
+      usd += r.usd; scanned += r.scanned;
+      if (r.reachedCycleStart) return { usd: round2(usd), eventsScanned: scanned, eventsTotal: total, truncated: false };
+      if (events.length < PAGE_SIZE) break; // last page
+      if (page === MAX_PAGES) truncated = true;
+    }
+    return { usd: round2(usd), eventsScanned: scanned, eventsTotal: total, truncated };
   } catch (err) {
-    console.warn(`Cursor: usage-summary fetch failed (${(err as Error).message}).`);
-    return null;
+    console.warn(`Cursor: usage-events failed (${(err as Error).message}).`);
+    return scanned > 0 ? { usd: round2(usd), eventsScanned: scanned, eventsTotal: total, truncated: true } : null;
   }
 }
+
+function round2(n: number): number { return Math.round(n * 100) / 100; }
 ```
-**Task 0 dependency:** replace the `cursorAuth/accessToken` key and the `onDemandSpendCents`/`quotaCents`/`billingCycle` field names with the values confirmed in the spike. If Task 0 found Source A unworkable, keep only the `manual` cookie branch in `readSessionCookie` and the tests still pass.
+**Live-confirm note (optional, one call):** the spike confirmed page 1 via body `{}`; the `{ "page": n }` pagination param is best-effort with a repeat-first-event guard that flags `truncated` if the param is not honored. When convenient, confirm the real pagination key against the live endpoint and adjust the body; tests use a mock and do not require it.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1008,20 +1100,20 @@ Expected: PASS.
 
 ```bash
 git add src/services/cursor-cloud.ts tests/cursor-cloud.test.ts
-git commit -m "feat(cursor): Source A usage-summary fetch + parse (injectable fetch)"
+git commit -m "feat(cursor): cloud service — cookie derivation, usage-summary + metered-dollar events"
 ```
 
 ---
 
-## Task 9: Spend persistence with stale fallback
+## Task 9: Usage persistence with stale fallback
 
 **Files:**
 - Modify: `src/commands/cursor.ts`
 - Test: `tests/cursor-cloud.test.ts`
 
 **Interfaces:**
-- Consumes: `readSessionCookie`, `fetchUsageSummary` (Task 8).
-- Produces: `export async function runCursorSpend(db?: DatabaseType.Database, deps?: { cookie?: string | null; summary?: CursorUsageSummary | null }): Promise<'updated' | 'stale' | 'skipped'>`
+- Consumes: `deriveSessionCookie`, `fetchUsageSummary`, `fetchMeteredUsd` (Task 8).
+- Produces: `export async function runCursorUsage(db?: DatabaseType.Database, deps?: { cookie?: string | null; util?: CursorUtilization | null; metered?: CursorMetered | null }): Promise<'updated' | 'stale' | 'skipped'>`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1029,41 +1121,44 @@ Append to `tests/cursor-cloud.test.ts`:
 ```ts
 import Database from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';
-import { runCursorSpend } from '../src/commands/cursor.js';
+import { runCursorUsage } from '../src/commands/cursor.js';
 
-test('runCursorSpend writes a fresh row', async () => {
+const UTIL = { cycleStart: 'a', cycleEnd: 'b', membershipType: 'pro', planUsed: 3,
+  planLimit: 500, planPctUsed: 0.6, ondemandEnabled: false, ondemandUsed: 0 };
+
+test('runCursorUsage writes a fresh row folding both endpoints', async () => {
   const db = new Database(':memory:'); runMigrations(db);
-  const r = await runCursorSpend(db, {
-    cookie: 'c',
-    summary: { spendUsd: 41.2, quotaUsd: 50, requests: 10, plan: 'pro', periodStart: 'a', periodEnd: 'b' },
-  });
+  const r = await runCursorUsage(db, { cookie: 'c', util: UTIL as any,
+    metered: { usd: 12.4, eventsScanned: 210, eventsTotal: 13481, truncated: false } });
   assert.equal(r, 'updated');
-  const row: any = db.prepare('SELECT * FROM cursor_spend WHERE id=1').get();
-  assert.equal(row.spend_usd, 41.2);
+  const row: any = db.prepare('SELECT * FROM cursor_usage WHERE id=1').get();
+  assert.equal(row.membership_type, 'pro');
+  assert.equal(row.metered_usd, 12.4);
+  assert.equal(row.plan_pct_used, 0.6);
   assert.equal(row.stale, 0);
 });
 
-test('runCursorSpend marks stale + keeps last-good when fetch fails', async () => {
+test('runCursorUsage marks stale + keeps last-good when fetch fails', async () => {
   const db = new Database(':memory:'); runMigrations(db);
-  await runCursorSpend(db, { cookie: 'c', summary: { spendUsd: 5, quotaUsd: 9, requests: 1, plan: 'p', periodStart: 'a', periodEnd: 'b' } });
-  const r = await runCursorSpend(db, { cookie: 'c', summary: null }); // simulate fetch failure
+  await runCursorUsage(db, { cookie: 'c', util: UTIL as any,
+    metered: { usd: 5, eventsScanned: 1, eventsTotal: 1, truncated: false } });
+  const r = await runCursorUsage(db, { cookie: 'c', util: null, metered: null });
   assert.equal(r, 'stale');
-  const row: any = db.prepare('SELECT spend_usd, stale FROM cursor_spend WHERE id=1').get();
-  assert.equal(row.spend_usd, 5);   // preserved
+  const row: any = db.prepare('SELECT metered_usd, stale FROM cursor_usage WHERE id=1').get();
+  assert.equal(row.metered_usd, 5);
   assert.equal(row.stale, 1);
 });
 
-test('runCursorSpend skips with no cookie', async () => {
+test('runCursorUsage skips with no cookie', async () => {
   const db = new Database(':memory:'); runMigrations(db);
-  const r = await runCursorSpend(db, { cookie: null });
-  assert.equal(r, 'skipped');
+  assert.equal(await runCursorUsage(db, { cookie: null }), 'skipped');
 });
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --import tsx --test tests/cursor-cloud.test.ts`
-Expected: FAIL — `runCursorSpend` not exported.
+Expected: FAIL — `runCursorUsage` not exported.
 
 - [ ] **Step 3: Implement**
 
@@ -1071,63 +1166,57 @@ Add to `src/commands/cursor.ts`:
 ```ts
 import { getConfig } from '../lib/config.js';
 import {
-  readSessionCookie,
-  fetchUsageSummary,
-  type CursorUsageSummary,
+  deriveSessionCookie, fetchUsageSummary, fetchMeteredUsd,
+  type CursorUtilization, type CursorMetered,
 } from '../services/cursor-cloud.js';
 
-export async function runCursorSpend(
+export async function runCursorUsage(
   dbArg?: DatabaseType.Database,
-  deps?: { cookie?: string | null; summary?: CursorUsageSummary | null }
+  deps?: { cookie?: string | null; util?: CursorUtilization | null; metered?: CursorMetered | null }
 ): Promise<'updated' | 'stale' | 'skipped'> {
   const db = dbArg ?? getDb();
-  if (!getConfig().cursorCloudSpend) {
-    console.log('Cursor: cloud spend disabled by config.');
-    return 'skipped';
-  }
-  const cookie = deps?.cookie !== undefined ? deps.cookie : readSessionCookie();
-  if (!cookie) {
-    console.log('Cursor: no session cookie found; skipping spend.');
-    return 'skipped';
-  }
-  const summary =
-    deps?.summary !== undefined ? deps.summary : await fetchUsageSummary(cookie);
-  const now = new Date().toISOString();
+  if (!getConfig().cursorCloudSpend) { console.log('Cursor: cloud usage disabled by config.'); return 'skipped'; }
+  const cookie = deps?.cookie !== undefined ? deps.cookie : deriveSessionCookie();
+  if (!cookie) { console.log('Cursor: no session cookie found; skipping cloud usage.'); return 'skipped'; }
 
-  if (summary === null) {
-    // Mark existing row stale; if none exists, nothing to show.
-    const existing = db.prepare('SELECT id FROM cursor_spend WHERE id=1').get();
-    if (existing) {
-      db.prepare('UPDATE cursor_spend SET stale = 1 WHERE id = 1').run();
-      return 'stale';
-    }
+  const util = deps?.util !== undefined ? deps.util : await fetchUsageSummary(cookie);
+  let metered: CursorMetered | null;
+  if (deps?.metered !== undefined) metered = deps.metered;
+  else {
+    const cycleStartMs = util?.cycleStart ? Date.parse(util.cycleStart) : 0;
+    metered = await fetchMeteredUsd(cookie, Number.isFinite(cycleStartMs) ? cycleStartMs : 0);
+  }
+
+  const now = new Date().toISOString();
+  if (util === null && metered === null) {
+    const existing = db.prepare('SELECT id FROM cursor_usage WHERE id=1').get();
+    if (existing) { db.prepare('UPDATE cursor_usage SET stale = 1 WHERE id = 1').run(); return 'stale'; }
     return 'skipped';
   }
 
   db.prepare(`
-    INSERT INTO cursor_spend
-      (id, period_start, period_end, spend_usd, quota_usd, requests, plan, fetched_at, stale)
-    VALUES (1, @ps, @pe, @spend, @quota, @req, @plan, @fetched, 0)
+    INSERT INTO cursor_usage
+      (id, cycle_start, cycle_end, membership_type, plan_used, plan_limit, plan_pct_used,
+       ondemand_enabled, ondemand_used, metered_usd, events_scanned, events_total, truncated, fetched_at, stale)
+    VALUES (1, @cs, @ce, @mt, @pu, @pl, @pp, @oe, @ou, @mu, @es, @et, @tr, @f, 0)
     ON CONFLICT(id) DO UPDATE SET
-      period_start = excluded.period_start,
-      period_end   = excluded.period_end,
-      spend_usd    = excluded.spend_usd,
-      quota_usd    = excluded.quota_usd,
-      requests     = excluded.requests,
-      plan         = excluded.plan,
-      fetched_at   = excluded.fetched_at,
-      stale        = 0
+      cycle_start=excluded.cycle_start, cycle_end=excluded.cycle_end, membership_type=excluded.membership_type,
+      plan_used=excluded.plan_used, plan_limit=excluded.plan_limit, plan_pct_used=excluded.plan_pct_used,
+      ondemand_enabled=excluded.ondemand_enabled, ondemand_used=excluded.ondemand_used,
+      metered_usd=excluded.metered_usd, events_scanned=excluded.events_scanned,
+      events_total=excluded.events_total, truncated=excluded.truncated, fetched_at=excluded.fetched_at, stale=0
   `).run({
-    ps: summary.periodStart, pe: summary.periodEnd,
-    spend: summary.spendUsd, quota: summary.quotaUsd,
-    req: summary.requests, plan: summary.plan, fetched: now,
+    cs: util?.cycleStart ?? null, ce: util?.cycleEnd ?? null, mt: util?.membershipType ?? null,
+    pu: util?.planUsed ?? null, pl: util?.planLimit ?? null, pp: util?.planPctUsed ?? null,
+    oe: util?.ondemandEnabled == null ? null : util.ondemandEnabled ? 1 : 0,
+    ou: util?.ondemandUsed ?? null,
+    mu: metered?.usd ?? null, es: metered?.eventsScanned ?? null, et: metered?.eventsTotal ?? null,
+    tr: metered?.truncated ? 1 : 0, f: now,
   });
-  console.log(
-    `Cursor spend (account-wide, estimated): ` +
-      `$${(summary.spendUsd ?? 0).toFixed(2)}` +
-      (summary.quotaUsd != null ? ` of $${summary.quotaUsd.toFixed(2)} plan` : '') +
-      '.'
-  );
+  const plan = util?.membershipType ?? 'unknown';
+  const dollars = metered?.usd != null ? `$${metered.usd.toFixed(2)}` : 'n/a';
+  console.log(`Cursor usage (account-wide, estimated): ${plan} · ${dollars} metered this cycle` +
+    (metered?.truncated ? ' (partial — event history truncated)' : '') + '.');
   return 'updated';
 }
 ```
@@ -1141,10 +1230,9 @@ Expected: PASS.
 
 ```bash
 git add src/commands/cursor.ts tests/cursor-cloud.test.ts
-git commit -m "feat(cursor): persist spend with stale-fallback and skip paths"
+git commit -m "feat(cursor): persist cloud usage (utilization + metered $) with stale fallback"
 ```
 
----
 
 ## Task 10: `tokentrail cursor` command + run-all wiring
 
@@ -1194,7 +1282,7 @@ export async function runCursor(
 ): Promise<void> {
   const both = !opts.ingest && !opts.spend;
   if (both || opts.ingest) await runCursorIngest();
-  if (both || opts.spend) await runCursorSpend();
+  if (both || opts.spend) await runCursorUsage();
 }
 ```
 In `src/index.ts`, register after the `ingest` command block:
@@ -1252,17 +1340,18 @@ import Database from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';
 import { renderCursorLane } from '../src/commands/report.js';
 
-test('renderCursorLane shows lines and account spend, never mixed', () => {
+test('renderCursorLane shows lines and account usage, never mixed', () => {
   const db = new Database(':memory:'); runMigrations(db);
   db.prepare(`INSERT INTO cursor_code_attribution
     (commit_hash, repo, branch, ai_lines, composer_lines, tab_lines, human_lines, ai_pct, scored_at)
     VALUES ('h','local/proj','main', 100, 90, 10, 5, 95.2, 1)`).run();
-  db.prepare(`INSERT INTO cursor_spend (id, spend_usd, quota_usd, plan, fetched_at, stale)
-    VALUES (1, 41.2, 50, 'pro', '2026-07-24', 0)`).run();
+  db.prepare(`INSERT INTO cursor_usage
+    (id, membership_type, plan_pct_used, metered_usd, truncated, fetched_at, stale)
+    VALUES (1, 'pro', 0.6, 41.2, 0, '2026-07-24', 0)`).run();
   const out = renderCursorLane(db);
   assert.match(out, /Cursor/);
   assert.match(out, /100/);            // ai lines shown
-  assert.match(out, /\$41\.20/);       // spend shown
+  assert.match(out, /\$41\.20/);       // metered dollars shown
   assert.match(out, /account-wide/);   // dollars labeled non-attributable
   assert.match(out, /estimated/);      // rule #3
 });
@@ -1296,18 +1385,26 @@ export function renderCursorLane(db: DatabaseType.Database): string {
        LIMIT 20`
     )
     .all() as Array<{ repo: string; branch: string; ai: number; human: number; commits: number }>;
-  const spend = db
-    .prepare('SELECT spend_usd, quota_usd, plan, stale FROM cursor_spend WHERE id = 1')
-    .get() as { spend_usd: number | null; quota_usd: number | null; plan: string | null; stale: number } | undefined;
+  const usage = db
+    .prepare(`SELECT membership_type, plan_pct_used, metered_usd, truncated, stale
+              FROM cursor_usage WHERE id = 1`)
+    .get() as {
+      membership_type: string | null; plan_pct_used: number | null;
+      metered_usd: number | null; truncated: number; stale: number;
+    } | undefined;
 
-  if (byFeature.length === 0 && !spend) return '';
+  if (byFeature.length === 0 && !usage) return '';
 
   const lines: string[] = ['', 'Cursor'];
-  if (spend) {
-    const s = spend.spend_usd != null ? `$${spend.spend_usd.toFixed(2)}` : '$0.00';
-    const q = spend.quota_usd != null ? ` of $${spend.quota_usd.toFixed(2)} plan` : '';
-    const staleTag = spend.stale ? ' (stale)' : '';
-    lines.push(`  Spend (account-wide, estimated): ${s}${q}${staleTag} — not attributable per-feature.`);
+  if (usage) {
+    const plan = usage.membership_type ?? 'unknown';
+    const usd = usage.metered_usd != null ? `$${usage.metered_usd.toFixed(2)}` : 'n/a';
+    const pct = usage.plan_pct_used != null ? ` · ${usage.plan_pct_used}% of included usage` : '';
+    const partial = usage.truncated ? ' (partial)' : '';
+    const staleTag = usage.stale ? ' (stale)' : '';
+    lines.push(
+      `  Usage (account-wide, estimated): ${plan} · ${usd} metered this cycle${partial}${pct}${staleTag} — not attributable per-feature.`
+    );
   }
   for (const r of byFeature) {
     const pct = r.ai + r.human > 0 ? Math.round((r.ai / (r.ai + r.human)) * 100) : 0;
@@ -1416,4 +1513,4 @@ git commit -m "docs(cursor): document tokentrail cursor command and config knobs
 
 **Placeholder scan:** The only deferred concreteness is the exact cursor.com JSON field names + cookie key, which Task 0 resolves before Task 8 lands; the parser/tests are written against a named shape and adjusted to the confirmed one. No "TBD/handle errors appropriately" left.
 
-**Type consistency:** `CursorScoredCommit`, `CursorUsageSummary`, `resolveCommitRepo(hash, dirs, cache)`, `runCursorIngest(db?)`, `runCursorSpend(db?, deps?)`, `runCursor({ingest,spend})`, `renderCursorLane(db)`, `commitExistsIn(dir, sha)` — names/signatures match across all consuming tasks.
+**Type consistency:** `CursorScoredCommit`, `CursorUtilization`, `CursorMetered`, `resolveCommitRepo(hash, dirs, cache)`, `runCursorIngest(db?)`, `runCursorUsage(db?, deps?)`, `runCursor({ingest,spend})`, `renderCursorLane(db)`, `commitExistsIn(dir, sha)`, `deriveSessionCookie()`, `fetchUsageSummary`, `fetchMeteredUsd`, `sumMeteredUsd` — names/signatures match across all consuming tasks. (`runCursor`'s `--spend` flag label is retained as the CLI name for the cloud lane; it invokes `runCursorUsage`.)

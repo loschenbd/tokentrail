@@ -220,6 +220,22 @@ export async function runCursorUsage(
     mu: metered?.usd ?? null, es: metered?.eventsScanned ?? null, et: metered?.eventsTotal ?? null,
     tr: metered?.truncated ? 1 : 0, f: now, stale: partial ? 1 : 0,
   });
+
+  // Per-day metered rollup (Cursor-only table; never summed into usage_events).
+  // Only write when metered actually succeeded this run — a partial/stale run
+  // keeps the last-good daily rows, mirroring the cursor_usage stale behavior.
+  if (metered && metered.byDay) {
+    const upsertDay = db.prepare(`
+      INSERT INTO cursor_daily_cost (date, usd, updated_at)
+      VALUES (@date, @usd, @now)
+      ON CONFLICT(date) DO UPDATE SET usd = excluded.usd, updated_at = excluded.updated_at
+    `);
+    const tx = db.transaction((entries: Array<[string, number]>) => {
+      for (const [date, usd] of entries) upsertDay.run({ date, usd, now });
+    });
+    tx(Object.entries(metered.byDay));
+  }
+
   const plan = util?.membershipType ?? 'unknown';
   const dollars = metered?.usd != null ? `$${metered.usd.toFixed(2)}` : 'n/a';
   console.log(`Cursor usage (account-wide, estimated): ${plan} · ${dollars} metered this cycle` +

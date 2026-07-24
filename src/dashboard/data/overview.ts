@@ -5,6 +5,7 @@ import {
   rollupVisiblePredicate,
   repoVisiblePredicate,
   matchesHiddenPattern,
+  shownAnomalyPredicate,
 } from '../lib/hidden-projects.js';
 import {
   colorFor,
@@ -240,8 +241,7 @@ export function buildOverview(
       SELECT id, kind, date, feature_key AS featureKey, session_id AS sessionId,
              ROUND(amount, 2) AS amount, reason
       FROM anomalies
-      WHERE dismissed_at IS NULL AND date >= ${startExpr}
-        AND ${rollupVisiblePredicate(hiddenKeys, `COALESCE(feature_key, '')`)}
+      WHERE ${shownAnomalyPredicate(hiddenKeys)} AND date >= ${startExpr}
       ORDER BY multiplier DESC, date DESC
       LIMIT 5
     `)

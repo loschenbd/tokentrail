@@ -6,11 +6,14 @@ import { runMigrations } from '../src/db/migrations.js';
 import { buildOverview } from '../src/dashboard/data/overview.js';
 import { buildTodayVM } from '../src/dashboard/data/today.js';
 import { buildToday } from '../src/dashboard/data/api.js';
+import { buildWorthALook } from '../src/dashboard/data/worth-a-look.js';
 import {
   normalizeProjectToken,
   matchesHiddenPattern,
   hiddenFeatureKeys,
   rollupVisiblePredicate,
+  anomalyVisiblePredicate,
+  shownAnomalyPredicate,
 } from '../src/dashboard/lib/hidden-projects.js';
 
 const require = createRequire(import.meta.url);
@@ -89,6 +92,68 @@ describe('hiddenFeatureKeys', () => {
 
   test('predicate escapes single quotes in feature keys', () => {
     assert.equal(rollupVisiblePredicate(["it's"]), `feature_key NOT IN ('it''s')`);
+  });
+});
+
+describe('anomaly visibility predicates', () => {
+  test('anomalyVisiblePredicate COALESCEs feature_key so NULL rows survive', () => {
+    assert.equal(anomalyVisiblePredicate([]), '1=1');
+    assert.equal(
+      anomalyVisiblePredicate(['hidden-feat']),
+      `COALESCE(feature_key, '') NOT IN ('hidden-feat')`
+    );
+  });
+
+  test('shownAnomalyPredicate pairs the dismissed + visibility clauses', () => {
+    // Active-only (default): both clauses, so a caller cannot keep one and
+    // silently drop the other — the bug that made the menubar disagree.
+    assert.equal(
+      shownAnomalyPredicate(['h']),
+      `dismissed_at IS NULL AND COALESCE(feature_key, '') NOT IN ('h')`
+    );
+    // includeDismissed keeps dismissed rows but STILL applies visibility.
+    assert.equal(
+      shownAnomalyPredicate(['h'], { includeDismissed: true }),
+      `COALESCE(feature_key, '') NOT IN ('h')`
+    );
+    // No hidden projects → dismissed clause only (visibility is a no-op).
+    assert.equal(shownAnomalyPredicate([]), 'dismissed_at IS NULL AND 1=1');
+  });
+});
+
+describe('anomaly visibility parity across surfaces', () => {
+  function insertAnomaly(
+    db: DatabaseType.Database,
+    o: { date: string; featureKey: string; amount: number; dismissed?: boolean }
+  ): void {
+    db.prepare(
+      `INSERT INTO anomalies (kind, date, feature_key, session_id, amount, baseline, multiplier, reason, dismissed_at)
+       VALUES ('feature_spike', @date, @key, NULL, @amount, 1, 10, '10x baseline', @dismissed)`
+    ).run({ date: o.date, key: o.featureKey, amount: o.amount, dismissed: o.dismissed ? '2026-06-15T00:00:00Z' : null });
+  }
+
+  test('an active anomaly on a hidden project is dropped by menubar, overview, and Worth a look alike', () => {
+    const db = makeDb();
+    const today = daysAgo(0);
+    // Rollups let hiddenFeatureKeys() resolve the CFA pattern → its feature_key.
+    seedRollups(db, [
+      { date: today, cost: 52, featureKey: 'outside:projects-cfa', featureName: 'CFA' },
+      { date: today, cost: 12, featureKey: 'archi-homepage', repo: 'loschenbd/archi' },
+    ]);
+    insertAnomaly(db, { date: today, featureKey: 'outside:projects-cfa', amount: 52 }); // hidden
+    insertAnomaly(db, { date: today, featureKey: 'archi-homepage', amount: 12 });       // visible
+
+    const hidden = ['cfa'];
+    // Menubar today API
+    const todayResp = buildToday(db, { hidden });
+    assert.equal(todayResp.anomalyCount, 1);
+    assert.equal(todayResp.topAnomaly!.amount, 12);
+    // Overview page
+    const overview = buildOverview({ db, days: 1, hidden });
+    assert.deepEqual(overview.anomalies.map((a) => a.featureKey), ['archi-homepage']);
+    // Worth a look page
+    const wal = buildWorthALook(db, { showDismissed: false, hidden });
+    assert.deepEqual(wal.items.map((i) => i.featureKey), ['archi-homepage']);
   });
 });
 

@@ -304,4 +304,19 @@ describe('buildToday — menubar summary', () => {
     const res = buildToday(db);
     assert.equal(res.topAnomaly, null);
   });
+
+  test('anomalies on hidden projects are excluded from count + topAnomaly (matches worth-a-look)', () => {
+    const db = makeDb();
+    const today = (db.prepare(`SELECT date('now','localtime') AS d`).get() as { d: string }).d;
+    // A feature_rollup lets hiddenFeatureKeys() resolve the pattern → feature_key.
+    insertRollup(db, { date: today, featureKey: 'outside:projects-cfa', featureName: 'CFA', repo: null, cost: 52, sessionIds: 'sCfa', sessions: 1 });
+    insertAnomaly(db, { date: today, dismissed: false, featureKey: 'outside:projects-cfa', amount: 52 });
+    insertAnomaly(db, { date: today, dismissed: false, featureKey: 'visible-feat', amount: 12 });
+
+    const res = buildToday(db, { hidden: ['cfa'] });
+    // Only the visible anomaly counts; the hidden one is dropped just like on
+    // the dashboard's Worth a look page.
+    assert.equal(res.anomalyCount, 1);
+    assert.equal(res.topAnomaly!.amount, 12);
+  });
 });

@@ -367,35 +367,33 @@ Tokentrail overview. Flags:
 Anomalies on `/worth-a-look` can be dismissed and restored inline. Labeling
 and sync stay on the CLI for now. Stop the dashboard with Ctrl-C.
 
-### Menu bar widget (SwiftBar)
+### Menu bar app (native)
 
-Put today's spend in your macOS menu bar. `tokentrail init` does this
-for you — it symlinks the SwiftBar plugin into
-`~/Library/Application Support/SwiftBar/` and writes the launchd plist
-that keeps the dashboard daemon running. If you skipped `init` or want
-to do it by hand:
+Put today's spend in your macOS menu bar. `tokentrail init` installs a
+native SwiftUI app (built from source during `brew install`, so it's
+ad-hoc signed and runs without a Gatekeeper prompt) into
+`~/Applications/Tokentrail.app` and registers a LaunchAgent that keeps it
+running across logins. Source and a standalone build script live in
+[`scripts/menubar-native/`](scripts/menubar-native/).
 
-```bash
-brew install --cask swiftbar
-ln -s "$PWD/scripts/menubar/tokentrail.1m.sh" \
-  ~/Library/Application\ Support/SwiftBar/
-```
+If the app didn't build during install, add the Swift toolchain with
+`xcode-select --install` and re-run `tokentrail init`.
 
-Open SwiftBar from Spotlight; it picks up the plugin automatically. The
-widget shows today's spend (`$X.XX`) and refreshes every minute. Click
-it to see:
+The menu-bar title shows today's spend (`~$X.XX`), with a flame on unusual
+burn days. Click it for:
 
-- A 14-day sparkline of daily spend, the delta vs yesterday, and how
-  long ago the data was refreshed.
-- Today / Last 7d / Last 30d totals, plus a `⚠ Worth a look` row when
-  there are active anomalies.
-- Today's top projects, each with its constituent features nested
-  underneath.
+- A native, interactive Swift Charts trend — hover the chart or a
+  breakdown row to focus a project (every other band dims; the focused one
+  is redrawn from the baseline with a day/value tooltip).
+- Today / Yesterday / Last 7d / Last 30d totals, a 30-day per-project
+  breakdown with an expandable tail, and a `⚠ Worth a look` row that links
+  to `/worth-a-look` when there are active anomalies.
+- Today's top projects (features nested underneath), each clickable
+  through to its dashboard page.
 
-Requires `tokentrail dashboard` to be running on port 4920. If it
-isn't, the widget shows `$—` and a "not running" hint instead of
-crashing. (`init`'s launchd plist keeps the daemon up across reboots;
-manage it with `launchctl unload`/`load` on
+It reads the dashboard daemon on port 4920. If the daemon isn't running the
+title shows `$—` instead of crashing. (`init`'s launchd plist keeps the
+daemon up across reboots; manage it with `launchctl unload`/`load` on
 `~/Library/LaunchAgents/com.tokentrail.daemon.plist`.)
 
 ### Anomalies

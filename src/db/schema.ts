@@ -261,4 +261,10 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     key            TEXT PRIMARY KEY,
     last_scored_at INTEGER NOT NULL
   )`,
+
+  `CREATE TABLE IF NOT EXISTS cursor_daily_cost (
+    date        TEXT PRIMARY KEY,
+    usd         REAL NOT NULL DEFAULT 0,
+    updated_at  TEXT NOT NULL
+  )`,
 ];

@@ -3,6 +3,7 @@ import type DatabaseType from 'better-sqlite3';
 import { buildOverview, bucketProject } from './overview.js';
 import { colorForProject } from '../lib/feature-colors.js';
 import { hiddenFeatureKeys, rollupVisiblePredicate, shownAnomalyPredicate } from '../lib/hidden-projects.js';
+import { buildSources, type SourcesResponse } from './sources.js';
 
 const DASHBOARD_BASE_URL = 'http://127.0.0.1:4920';
 const MAX_PROJECTS = 3;
@@ -59,6 +60,8 @@ export type TodayResponse = {
   // "0s ago" in the menubar and tell the user nothing.
   lastEventAt: string | null;
   menubar: MenubarSummary;
+  sourcesToday: SourcesResponse;
+  sources30d: SourcesResponse;
 };
 
 // Cache the full payload between menubar polls (every 60 s). Between
@@ -149,6 +152,7 @@ export function buildToday(
     });
   }
 
+  const menubar = buildMenubarSummary(db, overview.totalUsd, hidden, visibleSql);
   const value: TodayResponse = {
     todayUsd: overview.totalUsd,
     topProjects: overview.topProjects.slice(0, MAX_PROJECTS).map((p) => ({
@@ -161,7 +165,9 @@ export function buildToday(
     anomalyCount,
     topAnomaly,
     lastEventAt,
-    menubar: buildMenubarSummary(db, overview.totalUsd, hidden, visibleSql),
+    menubar,
+    sourcesToday: buildSources(db, { days: 1, claudeUsd: overview.totalUsd }),
+    sources30d: buildSources(db, { days: 30, claudeUsd: menubar.last30Usd }),
   };
   todayCache.set(db, { key: cacheKey, value });
   return value;

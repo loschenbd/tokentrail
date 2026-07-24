@@ -154,6 +154,7 @@ land, so you don't want it committed.
 ```
 tokentrail init        # One-shot setup: SwiftBar + daemon + Claude skills + hook + Tokentrail.app.
 tokentrail ingest      # Load new usage events into the local ledger.
+tokentrail cursor      # Track Cursor AI usage (local lines + cloud account spend).
 tokentrail enrich      # Pull PR metadata for branches we've seen.
 tokentrail rollup      # Aggregate events into daily feature rollups.
 tokentrail report      # Follow token usage across recent work.
@@ -295,6 +296,55 @@ If you'd rather wire the hook by hand, copy `examples/claude-settings.example
 .json` to the target repo's `.claude/settings.json` and replace
 `/ABSOLUTE/PATH/TO/tokentrail/src/hooks/session-end.sh` with the actual path
 on your machine.
+
+## Cursor integration
+
+`tokentrail cursor` tracks AI-assisted code usage from [Cursor](https://www.cursor.com),
+the VS Code fork with AI superpowers. It reads two sources: local AI-authored line
+counts and account-wide cloud utilization.
+
+### What it captures
+
+- **Local lines (Source B)** — reads Cursor's local tracking database
+  (`~/.cursor/ai-tracking/ai-code-tracking.db`) and attributes line counts to
+  repo/branch → feature. Metric: lines of code. Offline; no network calls.
+- **Cloud account spend (Source A)** — reads your Cursor web session and calls
+  cursor.com for account-wide utilization and metered USD cost. Metric: dollars
+  (estimated). Requires internet and a valid session.
+
+Unlike token-based features (Claude Code), **Cursor spend is account-wide and not
+attributable per feature** — only per session day. Cursor metrics live in their own
+tables and do not roll up into the `Total Cost USD` column (which is Claude-only).
+
+### Configuration
+
+Set these keys in `.tokentrail.json` (repo root or `~/.config/tokentrail/config.json`):
+
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `cursorTrackingDbPath` | string | `~/.cursor/ai-tracking/ai-code-tracking.db` | Override local tracking database path. |
+| `cursorStateDbPath` | string | `~/.cursor/state.vscdb` | Override Cursor state database path (source for session cookie derivation). |
+| `cursorSessionCookie` | string | (derived) | Paste a session cookie directly instead of deriving from state.vscdb. |
+| `cursorCloudSpend` | boolean | `true` | Set `false` to disable cloud API calls. Source B (local lines) still works offline. |
+
+### Privacy note
+
+The cloud spend call is optional. Set `"cursorCloudSpend": false` in your config to
+keep Cursor usage analysis entirely local and offline. Source B (line attribution)
+requires no network access.
+
+### Running the command
+
+```bash
+tokentrail cursor          # Both sources (local lines + cloud spend)
+tokentrail cursor --ingest # Source B only (local AI-authored lines)
+tokentrail cursor --spend  # Source A only (cloud account usage)
+```
+
+`tokentrail run-all` includes Cursor automatically (both sources) as a
+non-fatal stage — if Cursor isn't installed or the cloud call fails, the
+rest of the pipeline is unaffected. To turn off the network path, set
+`cursorCloudSpend: false` (local line attribution still runs).
 
 ## Automation
 

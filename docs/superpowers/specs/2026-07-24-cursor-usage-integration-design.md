@@ -140,12 +140,28 @@ stale         INTEGER NOT NULL DEFAULT 0
 - Config `cursor.cloudSpend: false` disables the network path entirely
   (offline / privacy). Source B is unaffected.
 
-### Deferred to phase 2 (not built now — YAGNI)
-`POST https://cursor.com/api/dashboard/get-filtered-usage-events` returns
-paginated events with `meteredCostUSD` + model per event (cookie + matching
-`Origin` header for CSRF; 1000/page, up to 200 pages). It enables per-model
-dollar itemization but still carries no branch, and the pagination/CSRF weight
-is high. Noted as a future enrichment; explicitly excluded from this spec.
+### Revision (2026-07-24, post-spike) — Both endpoints, confirmed shapes
+The Task 0 spike ran against the live account and changed Source A:
+
+- **Auth is confirmed:** cookie = `WorkosCursorSessionToken=<sub>::<jwt>`, where
+  `<jwt>` is `cursorAuth/accessToken` from `state.vscdb` and `<sub>` is that
+  JWT's `sub` claim (`github|user_…`). Bare JWT → 401; composed → 200.
+- **`usage-summary` returns utilization, not dollars:** `billingCycleStart/End`,
+  `membershipType`, `individualUsage.plan.{used,limit,remaining,totalPercentUsed}`,
+  `individualUsage.onDemand.{enabled,used,limit,remaining}`. There is no
+  `spend_usd` field. (My pre-spike `onDemandSpendCents`/`quotaCents` were wrong.)
+- **Dollars come from `get-filtered-usage-events`:** POST + `Origin` header,
+  body `{}` → page 1 (100 events, newest-first) + `totalUsageEventsCount`. Each
+  event carries a numeric `chargedCents`, plus `model`, `tokenUsage`,
+  `conversationId`. Metered-dollar total = Σ`chargedCents`/100 over the current
+  cycle (paginate newest-first, stop when an event predates `billingCycleStart`).
+- **Decision (user, "Both endpoints"):** ship both — utilization tile from
+  `usage-summary` and the metered-dollar total from the events endpoint, folded
+  into a single `cursor_usage` singleton row (replacing the planned
+  `cursor_spend`). Pagination bounds the scan to the current cycle with a
+  `truncated` flag on the 200-page safety cap — no silent truncation.
+- Per-event storage (tokens/model/conversation) remains **out of scope** — the
+  events carry no branch, so only the aggregate feeds the tile.
 
 ---
 

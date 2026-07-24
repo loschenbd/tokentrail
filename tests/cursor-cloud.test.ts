@@ -6,6 +6,7 @@ import {
   fetchUsageSummary,
   sumMeteredUsd,
   fetchMeteredUsd,
+  bucketMeteredByDay,
 } from '../src/services/cursor-cloud.js';
 import { runMigrations } from '../src/db/migrations.js';
 import { runCursorUsage } from '../src/commands/cursor.js';
@@ -55,6 +56,29 @@ describe('sumMeteredUsd', () => {
   });
 });
 
+describe('bucketMeteredByDay', () => {
+  const cycleStartMs = 1000;
+  test('groups chargedCents by UTC date, respects cycle boundary', () => {
+    // 1_700_000_000_000 ms = 2023-11-14; 1_700_086_400_000 = 2023-11-15
+    const events = [
+      { timestamp: '1700086400000', chargedCents: 250 }, // day A
+      { timestamp: '1700086400001', chargedCents: 150 }, // day A
+      { timestamp: '1700000000000', chargedCents: 100 }, // day B
+      { timestamp: '500', chargedCents: 999 },           // before cycle -> excluded, stops
+    ];
+    const { byDay, reachedCycleStart } = bucketMeteredByDay(events, cycleStartMs);
+    const dayA = new Date(1700086400000).toISOString().slice(0, 10);
+    const dayB = new Date(1700000000000).toISOString().slice(0, 10);
+    assert.equal(byDay[dayA], 4);   // (250+150)/100
+    assert.equal(byDay[dayB], 1);   // 100/100
+    assert.equal(reachedCycleStart, true);
+  });
+  test('skips non-finite timestamps', () => {
+    const { byDay } = bucketMeteredByDay([{ timestamp: 'x', chargedCents: 500 }], 0);
+    assert.equal(Object.keys(byDay).length, 0);
+  });
+});
+
 describe('fetch*', () => {
   test('fetchUsageSummary returns null on non-200', async () => {
     const f = (async () => new Response('x', { status: 401 })) as unknown as typeof fetch;
@@ -81,7 +105,7 @@ const UTIL = { cycleStart: 'a', cycleEnd: 'b', membershipType: 'pro', planUsed: 
 test('runCursorUsage writes a fresh row folding both endpoints', async () => {
   const db = new Database(':memory:'); runMigrations(db);
   const r = await runCursorUsage(db, { cookie: 'c', util: UTIL as any,
-    metered: { usd: 12.4, eventsScanned: 210, eventsTotal: 13481, truncated: false } });
+    metered: { usd: 12.4, byDay: {}, eventsScanned: 210, eventsTotal: 13481, truncated: false } });
   assert.equal(r, 'updated');
   const row: any = db.prepare('SELECT * FROM cursor_usage WHERE id=1').get();
   assert.equal(row.membership_type, 'pro');
@@ -93,7 +117,7 @@ test('runCursorUsage writes a fresh row folding both endpoints', async () => {
 test('runCursorUsage marks stale + keeps last-good when fetch fails', async () => {
   const db = new Database(':memory:'); runMigrations(db);
   await runCursorUsage(db, { cookie: 'c', util: UTIL as any,
-    metered: { usd: 5, eventsScanned: 1, eventsTotal: 1, truncated: false } });
+    metered: { usd: 5, byDay: {}, eventsScanned: 1, eventsTotal: 1, truncated: false } });
   const r = await runCursorUsage(db, { cookie: 'c', util: null, metered: null });
   assert.equal(r, 'stale');
   const row: any = db.prepare('SELECT metered_usd, stale FROM cursor_usage WHERE id=1').get();
@@ -109,7 +133,7 @@ test('runCursorUsage skips with no cookie', async () => {
 test('runCursorUsage preserves last-good metered value on a partial (metered-only) failure', async () => {
   const db = new Database(':memory:'); runMigrations(db);
   await runCursorUsage(db, { cookie: 'c', util: UTIL as any,
-    metered: { usd: 12.4, eventsScanned: 210, eventsTotal: 13481, truncated: false } });
+    metered: { usd: 12.4, byDay: {}, eventsScanned: 210, eventsTotal: 13481, truncated: false } });
   const r = await runCursorUsage(db, { cookie: 'c', util: UTIL as any, metered: null });
   assert.equal(r, 'stale');
   const row: any = db.prepare('SELECT * FROM cursor_usage WHERE id=1').get();

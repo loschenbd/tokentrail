@@ -1,11 +1,14 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import Database from 'better-sqlite3';
 import {
   parseUsageSummary,
   fetchUsageSummary,
   sumMeteredUsd,
   fetchMeteredUsd,
 } from '../src/services/cursor-cloud.js';
+import { runMigrations } from '../src/db/migrations.js';
+import { runCursorUsage } from '../src/commands/cursor.js';
 
 describe('parseUsageSummary', () => {
   test('maps the confirmed usage-summary shape', () => {
@@ -70,4 +73,35 @@ describe('fetch*', () => {
     assert.equal(out?.truncated, false);
     assert.equal(out?.eventsTotal, 3);
   });
+});
+
+const UTIL = { cycleStart: 'a', cycleEnd: 'b', membershipType: 'pro', planUsed: 3,
+  planLimit: 500, planPctUsed: 0.6, ondemandEnabled: false, ondemandUsed: 0 };
+
+test('runCursorUsage writes a fresh row folding both endpoints', async () => {
+  const db = new Database(':memory:'); runMigrations(db);
+  const r = await runCursorUsage(db, { cookie: 'c', util: UTIL as any,
+    metered: { usd: 12.4, eventsScanned: 210, eventsTotal: 13481, truncated: false } });
+  assert.equal(r, 'updated');
+  const row: any = db.prepare('SELECT * FROM cursor_usage WHERE id=1').get();
+  assert.equal(row.membership_type, 'pro');
+  assert.equal(row.metered_usd, 12.4);
+  assert.equal(row.plan_pct_used, 0.6);
+  assert.equal(row.stale, 0);
+});
+
+test('runCursorUsage marks stale + keeps last-good when fetch fails', async () => {
+  const db = new Database(':memory:'); runMigrations(db);
+  await runCursorUsage(db, { cookie: 'c', util: UTIL as any,
+    metered: { usd: 5, eventsScanned: 1, eventsTotal: 1, truncated: false } });
+  const r = await runCursorUsage(db, { cookie: 'c', util: null, metered: null });
+  assert.equal(r, 'stale');
+  const row: any = db.prepare('SELECT metered_usd, stale FROM cursor_usage WHERE id=1').get();
+  assert.equal(row.metered_usd, 5);
+  assert.equal(row.stale, 1);
+});
+
+test('runCursorUsage skips with no cookie', async () => {
+  const db = new Database(':memory:'); runMigrations(db);
+  assert.equal(await runCursorUsage(db, { cookie: null }), 'skipped');
 });

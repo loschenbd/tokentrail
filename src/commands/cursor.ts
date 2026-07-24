@@ -234,6 +234,23 @@ export async function runCursorUsage(
       for (const [date, usd] of entries) upsertDay.run({ date, usd, now });
     });
     tx(Object.entries(metered.byDay));
+
+    // Prune rows from prior billing cycles. cursor_daily_cost is a
+    // current-cycle-only rollup (spec §4): bucketMeteredByDay stops at the
+    // current cycle start, so rows written in a past cycle are never
+    // revisited and would otherwise linger and inflate the 30d Cursor
+    // figure for ~a month after each rollover. Delete anything dated before
+    // the cycle start (UTC date, matching the byDay keys). When util is
+    // absent this run (partial), fall back to the last-good cycle_start we
+    // just COALESCE-preserved into cursor_usage.
+    const cycleStartIso = util?.cycleStart
+      ?? (db.prepare('SELECT cycle_start AS cs FROM cursor_usage WHERE id=1').get() as { cs: string | null } | undefined)?.cs
+      ?? null;
+    const cycleStartMs = cycleStartIso ? Date.parse(cycleStartIso) : NaN;
+    if (Number.isFinite(cycleStartMs)) {
+      const cycleStartDate = new Date(cycleStartMs).toISOString().slice(0, 10);
+      db.prepare('DELETE FROM cursor_daily_cost WHERE date < ?').run(cycleStartDate);
+    }
   }
 
   const plan = util?.membershipType ?? 'unknown';

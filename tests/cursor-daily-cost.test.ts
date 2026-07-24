@@ -38,3 +38,16 @@ test('partial run (metered null) leaves existing daily rows intact', async () =>
   const rows = db.prepare('SELECT date, usd FROM cursor_daily_cost').all();
   assert.deepEqual(rows, [{ date: '2026-07-10', usd: 3 }]);
 });
+
+test('runCursorUsage prunes prior-cycle daily rows outside the current cycle', async () => {
+  const db = new Database(':memory:'); runMigrations(db);
+  // Orphaned row from a previous billing cycle.
+  db.prepare(`INSERT INTO cursor_daily_cost (date, usd, updated_at) VALUES ('2026-06-10', 99, 'x')`).run();
+  const UTIL = { cycleStart: '2026-07-01T00:00:00Z', cycleEnd: 'b', membershipType: 'pro',
+    planUsed: 1, planLimit: 10, planPctUsed: 10, ondemandEnabled: false, ondemandUsed: 0 };
+  await runCursorUsage(db, { cookie: 'c', util: UTIL as any, metered: {
+    usd: 5, byDay: { '2026-07-10': 3, '2026-07-11': 2 }, eventsScanned: 2, eventsTotal: 2, truncated: false } });
+  const rows = db.prepare('SELECT date, usd FROM cursor_daily_cost ORDER BY date').all();
+  // The 2026-06-10 orphan is pruned (< 2026-07-01); current-cycle rows remain.
+  assert.deepEqual(rows, [{ date: '2026-07-10', usd: 3 }, { date: '2026-07-11', usd: 2 }]);
+});

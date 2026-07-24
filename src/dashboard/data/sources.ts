@@ -20,7 +20,9 @@ export function buildSources(
     { key: 'claude', label: 'Claude Code', usd: round2(opts.claudeUsd) },
   ];
 
-  // Cursor windowed dollars from the daily rollup (UTC dates). days=1 -> today.
+  // Cursor windowed dollars from the daily rollup. Stored dates are UTC; the
+  // window boundary uses localtime to match the app's "today" convention
+  // (minor accepted skew). days=1 -> today.
   const cutoff = `date('now','localtime','-${Math.max(0, opts.days - 1)} days')`;
   const cursorUsd = (db
     .prepare(`SELECT COALESCE(SUM(usd), 0) AS u FROM cursor_daily_cost WHERE date >= ${cutoff}`)

@@ -204,3 +204,11 @@ export async function runCursorUsage(
     (metered?.truncated ? ' (partial — event history truncated)' : '') + '.');
   return 'updated';
 }
+
+export async function runCursor(
+  opts: { ingest?: boolean; spend?: boolean }
+): Promise<void> {
+  const both = !opts.ingest && !opts.spend;
+  if (both || opts.ingest) await runCursorIngest();
+  if (both || opts.spend) await runCursorUsage();
+}

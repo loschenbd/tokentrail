@@ -53,7 +53,7 @@ describe('resolveCommitRepo', () => {
 
 import Database from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';
-import { runCursorIngest, knownProjectDirs } from '../src/commands/cursor.js';
+import { runCursorIngest, knownProjectDirs, reresolveParkedCommits } from '../src/commands/cursor.js';
 import { cursorTrackingDbPath } from '../src/services/cursor-tracking-reader.js';
 import { getConfig, resetConfigCache } from '../src/lib/config.js';
 
@@ -85,4 +85,19 @@ test('runCursorIngest stores rows, resolving repo where a commit is known', asyn
   assert.ok(row.repo && row.repo.startsWith('local/'));
   assert.equal(row.ai_lines, 10);
   assert.equal(row.branch, 'main');
+});
+
+test('reresolveParkedCommits fills repo once the dir is known', () => {
+  const { dir, sha } = makeRepoWithCommit();
+  const db = new Database(':memory:');
+  runMigrations(db);
+  db.prepare(`INSERT INTO cursor_code_attribution
+    (commit_hash, repo, branch, ai_lines, composer_lines, tab_lines, human_lines, scored_at)
+    VALUES (?, NULL, 'main', 5, 5, 0, 0, 1)`).run(sha);
+  db.prepare(`INSERT INTO sessions (session_id, project_dir, first_seen_at, last_seen_at)
+    VALUES ('s', ?, '2026-01-01','2026-01-01')`).run(dir);
+  const n = reresolveParkedCommits(db);
+  assert.equal(n, 1);
+  const row: any = db.prepare('SELECT repo FROM cursor_code_attribution WHERE commit_hash=?').get(sha);
+  assert.ok(row.repo.startsWith('local/'));
 });

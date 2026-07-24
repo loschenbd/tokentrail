@@ -41,6 +41,30 @@ export function knownProjectDirs(db: DatabaseType.Database): string[] {
   return rows.map((r) => r.project_dir).filter((d) => d && existsSync(d));
 }
 
+export function reresolveParkedCommits(db: DatabaseType.Database): number {
+  const parked = db
+    .prepare('SELECT commit_hash FROM cursor_code_attribution WHERE repo IS NULL')
+    .all() as Array<{ commit_hash: string }>;
+  if (parked.length === 0) return 0;
+  const dirs = knownProjectDirs(db);
+  const cache = new Map<string, string | null>();
+  const setRepo = db.prepare(
+    'UPDATE cursor_code_attribution SET repo = ? WHERE commit_hash = ?'
+  );
+  let fixed = 0;
+  const tx = db.transaction(() => {
+    for (const { commit_hash } of parked) {
+      const repo = resolveCommitRepo(commit_hash, dirs, cache);
+      if (repo !== null) {
+        setRepo.run(repo, commit_hash);
+        fixed++;
+      }
+    }
+  });
+  tx();
+  return fixed;
+}
+
 const WATERMARK_KEY = 'scored_commits';
 
 export async function runCursorIngest(
@@ -112,6 +136,11 @@ export async function runCursorIngest(
     ).run(WATERMARK_KEY, maxScored);
   });
   tx();
+
+  const refixed = reresolveParkedCommits(db);
+  if (refixed > 0) {
+    console.log(`Cursor: attributed ${refixed} previously-parked commit${refixed === 1 ? '' : 's'} to a now-known repo.`);
+  }
 
   console.log(
     `Cursor: ingested ${inserted} scored commit${inserted === 1 ? '' : 's'}` +

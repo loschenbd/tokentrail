@@ -31,3 +31,22 @@ describe('commitExistsIn', () => {
     assert.equal(commitExistsIn('/tmp', 'deadbeef'), false);
   });
 });
+
+import { resolveCommitRepo } from '../src/commands/cursor.js';
+
+describe('resolveCommitRepo', () => {
+  test('returns the local/<base> slug of the repo containing the sha', () => {
+    const { dir, sha } = makeRepoWithCommit();
+    const cache = new Map<string, string | null>();
+    const repo = resolveCommitRepo(sha, [dir], cache);
+    // no remote configured -> local/<basename>
+    assert.ok(repo && repo.startsWith('local/'));
+  });
+
+  test('caches misses so repeat lookups do not re-shell git', () => {
+    const cache = new Map<string, string | null>();
+    const r1 = resolveCommitRepo('deadbeef', ['/tmp'], cache);
+    assert.equal(r1, null);
+    assert.equal(cache.has('deadbeef'), true);
+  });
+});

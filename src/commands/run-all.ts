@@ -31,6 +31,14 @@ export async function runAll(opts: RunAllOptions = {}): Promise<void> {
     await runEnrich();
   }
 
+  try {
+    console.log('\n→ cursor');
+    const { runCursor } = await import('./cursor.js');
+    await runCursor({});
+  } catch (err) {
+    console.warn(`Cursor stage failed (non-fatal): ${(err as Error).message}`);
+  }
+
   console.log('\n→ infer-mainline');
   const { runInferMainline } = await import('./infer-mainline.js');
   await runInferMainline();

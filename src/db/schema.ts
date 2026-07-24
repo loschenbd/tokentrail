@@ -220,4 +220,45 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     mtime_ms      INTEGER NOT NULL,
     scan_version  INTEGER NOT NULL
   )`,
+
+  `CREATE TABLE IF NOT EXISTS cursor_code_attribution (
+    commit_hash    TEXT PRIMARY KEY,
+    repo           TEXT,
+    branch         TEXT NOT NULL,
+    ai_lines       INTEGER NOT NULL DEFAULT 0,
+    composer_lines INTEGER NOT NULL DEFAULT 0,
+    tab_lines      INTEGER NOT NULL DEFAULT 0,
+    human_lines    INTEGER NOT NULL DEFAULT 0,
+    ai_pct         REAL,
+    committed_at   TEXT,
+    message        TEXT,
+    scored_at      INTEGER NOT NULL,
+    source         TEXT NOT NULL DEFAULT 'cursor'
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_cursor_attr_repo_branch
+    ON cursor_code_attribution (repo, branch)`,
+
+  `CREATE TABLE IF NOT EXISTS cursor_usage (
+    id                 INTEGER PRIMARY KEY CHECK (id = 1),
+    cycle_start        TEXT,
+    cycle_end          TEXT,
+    membership_type    TEXT,
+    plan_used          REAL,
+    plan_limit         REAL,
+    plan_pct_used      REAL,
+    ondemand_enabled   INTEGER,
+    ondemand_used      REAL,
+    metered_usd        REAL,
+    events_scanned     INTEGER,
+    events_total       INTEGER,
+    truncated          INTEGER NOT NULL DEFAULT 0,
+    fetched_at         TEXT NOT NULL,
+    stale              INTEGER NOT NULL DEFAULT 0
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS cursor_ingest_state (
+    key            TEXT PRIMARY KEY,
+    last_scored_at INTEGER NOT NULL
+  )`,
 ];

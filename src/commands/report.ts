@@ -1,3 +1,4 @@
+import type DatabaseType from 'better-sqlite3';
 import { getDb } from '../db/db.js';
 
 export type ReportOptions = {
@@ -52,6 +53,10 @@ export async function runReport(opts: ReportOptions): Promise<void> {
 
   if (rows.length === 0) {
     console.log('No trail found for this filter.');
+    const cursorLane = renderCursorLane(db);
+    if (cursorLane) {
+      console.log(cursorLane);
+    }
     return;
   }
 
@@ -91,6 +96,51 @@ export async function runReport(opts: ReportOptions): Promise<void> {
       pad(String(totalSessions), 10) +
       pad(String(allBranches.size), 10)
   );
+
+  const cursorLane = renderCursorLane(db);
+  if (cursorLane) {
+    console.log(cursorLane);
+  }
+}
+
+export function renderCursorLane(db: DatabaseType.Database): string {
+  const byFeature = db
+    .prepare(
+      `SELECT repo, branch, SUM(ai_lines) AS ai, SUM(human_lines) AS human,
+              COUNT(*) AS commits
+       FROM cursor_code_attribution
+       WHERE repo IS NOT NULL
+       GROUP BY repo, branch
+       ORDER BY ai DESC
+       LIMIT 20`
+    )
+    .all() as Array<{ repo: string; branch: string; ai: number; human: number; commits: number }>;
+  const usage = db
+    .prepare(`SELECT membership_type, plan_pct_used, metered_usd, truncated, stale
+              FROM cursor_usage WHERE id = 1`)
+    .get() as {
+      membership_type: string | null; plan_pct_used: number | null;
+      metered_usd: number | null; truncated: number; stale: number;
+    } | undefined;
+
+  if (byFeature.length === 0 && !usage) return '';
+
+  const lines: string[] = ['', 'Cursor (all-time)'];
+  if (usage) {
+    const plan = usage.membership_type ?? 'unknown';
+    const usd = usage.metered_usd != null ? `$${usage.metered_usd.toFixed(2)}` : 'n/a';
+    const pct = usage.plan_pct_used != null ? ` · ${usage.plan_pct_used}% of included usage` : '';
+    const partial = usage.truncated ? ' (partial)' : '';
+    const staleTag = usage.stale ? ' (stale)' : '';
+    lines.push(
+      `  Usage (account-wide, estimated): ${plan} · ${usd} metered this cycle${partial}${pct}${staleTag} — not attributable per-feature.`
+    );
+  }
+  for (const r of byFeature) {
+    const pct = r.ai + r.human > 0 ? Math.round((r.ai / (r.ai + r.human)) * 100) : 0;
+    lines.push(`  ${r.repo} ${r.branch}: ${r.ai} AI lines across ${r.commits} commit${r.commits === 1 ? '' : 's'} (${pct}% AI)`);
+  }
+  return lines.join('\n');
 }
 
 function buildTitle(days: number, opts: ReportOptions): string {

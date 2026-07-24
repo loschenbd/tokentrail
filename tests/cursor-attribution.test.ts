@@ -50,3 +50,39 @@ describe('resolveCommitRepo', () => {
     assert.equal(cache.has('deadbeef'), true);
   });
 });
+
+import Database from 'better-sqlite3';
+import { runMigrations } from '../src/db/migrations.js';
+import { runCursorIngest, knownProjectDirs } from '../src/commands/cursor.js';
+import { cursorTrackingDbPath } from '../src/services/cursor-tracking-reader.js';
+import { getConfig, resetConfigCache } from '../src/lib/config.js';
+
+test('runCursorIngest stores rows, resolving repo where a commit is known', async () => {
+  const { dir, sha } = makeRepoWithCommit();
+  // fixture cursor db with one scored commit matching the real sha
+  const cur = new Database('/tmp/tt-cursor-ingest.db');
+  cur.exec(`CREATE TABLE scored_commits (commitHash TEXT, branchName TEXT, scoredAt INTEGER,
+    composerLinesAdded INTEGER, tabLinesAdded INTEGER, humanLinesAdded INTEGER,
+    v2AiPercentage TEXT, commitMessage TEXT, commitDate TEXT,
+    PRIMARY KEY (commitHash, branchName));`);
+  cur.prepare(`INSERT INTO scored_commits VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(sha, 'main', 1234, 10, 0, 0, '100.00', 'm', 'd');
+  cur.close();
+
+  const db = new Database(':memory:');
+  runMigrations(db);
+  // seed a session whose project_dir is the real repo so knownProjectDirs finds it
+  db.prepare(`INSERT INTO sessions (session_id, project_dir, first_seen_at, last_seen_at)
+    VALUES ('s1', ?, '2026-01-01', '2026-01-01')`).run(dir);
+
+  // point config at the fixture cursor db
+  resetConfigCache();
+  (getConfig() as any).cursorTrackingDbPath = '/tmp/tt-cursor-ingest.db';
+
+  const res = await runCursorIngest(db);
+  assert.equal(res.inserted, 1);
+  const row: any = db.prepare('SELECT * FROM cursor_code_attribution WHERE commit_hash=?').get(sha);
+  assert.ok(row.repo && row.repo.startsWith('local/'));
+  assert.equal(row.ai_lines, 10);
+  assert.equal(row.branch, 'main');
+});

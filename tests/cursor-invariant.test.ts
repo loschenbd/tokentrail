@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';
 import { renderCursorLane } from '../src/commands/report.js';
+import { runCursorIngest } from '../src/commands/cursor.js';
+import { resetConfigCache, getConfig } from '../src/lib/config.js';
 
 test('renderCursorLane shows lines and account usage, never mixed', () => {
   const db = new Database(':memory:'); runMigrations(db);
@@ -23,4 +25,23 @@ test('renderCursorLane shows lines and account usage, never mixed', () => {
 test('empty cursor data renders nothing', () => {
   const db = new Database(':memory:'); runMigrations(db);
   assert.equal(renderCursorLane(db), '');
+});
+
+test('cursor ingest never writes to usage_events / never changes USD totals', async () => {
+  const db = new Database(':memory:');
+  runMigrations(db);
+  db.prepare(`INSERT INTO usage_events (id, session_id, timestamp, model, estimated_cost_usd)
+    VALUES ('e1','s','2026-07-01T00:00:00Z','opus', 3.50)`).run();
+  const before = (db.prepare('SELECT SUM(estimated_cost_usd) AS t FROM usage_events').get() as any).t;
+  const beforeCount = (db.prepare('SELECT COUNT(*) AS c FROM usage_events').get() as any).c;
+
+  // empty cursor db -> ingest is a no-op, but even a populated one must not touch usage_events
+  resetConfigCache();
+  (getConfig() as any).cursorTrackingDbPath = '/no/such.db';
+  await runCursorIngest(db);
+
+  const after = (db.prepare('SELECT SUM(estimated_cost_usd) AS t FROM usage_events').get() as any).t;
+  const afterCount = (db.prepare('SELECT COUNT(*) AS c FROM usage_events').get() as any).c;
+  assert.equal(after, before);
+  assert.equal(afterCount, beforeCount);
 });

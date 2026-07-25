@@ -1,6 +1,6 @@
 {
   "name": "tokentrail",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "A local ledger and trail-map for Claude Code spend.",
   "license": "MIT",
   "repository": {

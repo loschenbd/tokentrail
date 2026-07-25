@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { findGitRoot, runInstallHook } from '../src/commands/install-hook.js';
+import { findGitRoot, runInstallHook, resolveHookScriptPath } from '../src/commands/install-hook.js';
 
 const FAKE_HOOK = '/abs/path/to/tokentrail/src/hooks/session-end.sh';
 
@@ -98,6 +98,32 @@ describe('runInstallHook', () => {
     const r = runInstallHook({ repo, hookPath: FAKE_HOOK, dryRun: true });
     assert.equal(r.action, 'added');
     assert.equal(existsSync(join(repo, '.claude', 'settings.json')), false);
+  });
+});
+
+describe('resolveHookScriptPath', () => {
+  const CELLAR = '/opt/homebrew/Cellar/tokentrail/0.6.0/libexec';
+
+  test('rewrites a versioned Cellar libexec to the stable opt symlink path', () => {
+    const p = resolveHookScriptPath(CELLAR, () => true);
+    assert.equal(p, '/opt/homebrew/opt/tokentrail/libexec/src/hooks/session-end.sh');
+  });
+
+  test('falls back to the versioned path when the opt symlink does not resolve', () => {
+    const p = resolveHookScriptPath(CELLAR, () => false);
+    assert.equal(p, '/opt/homebrew/Cellar/tokentrail/0.6.0/libexec/src/hooks/session-end.sh');
+  });
+
+  test('returns a dev/npm checkout path verbatim (no Cellar segment)', () => {
+    const dev = '/Users/me/Projects/tokentrail';
+    const p = resolveHookScriptPath(dev, () => true);
+    assert.equal(p, '/Users/me/Projects/tokentrail/src/hooks/session-end.sh');
+  });
+
+  test('is version-independent — different Cellar versions map to the same stable path', () => {
+    const a = resolveHookScriptPath('/opt/homebrew/Cellar/tokentrail/0.4.0/libexec', () => true);
+    const b = resolveHookScriptPath('/opt/homebrew/Cellar/tokentrail/9.9.9/libexec', () => true);
+    assert.equal(a, b);
   });
 });
 

@@ -26,6 +26,31 @@ export type InstallHookOptions = {
   hookPath?: string;
 };
 
+/**
+ * The session-end hook's stable absolute path.
+ *
+ * On brew installs pkgRoot() is the VERSIONED Cellar libexec
+ * (…/Cellar/tokentrail/X.Y.Z/libexec). Writing that into a repo's
+ * settings.json pins the hook to one version, so every `brew upgrade`
+ * removes the old Cellar dir and the hook dangles ("No such file or
+ * directory" on session end). Rewrite it to the version-independent
+ * /opt/homebrew/opt/tokentrail symlink — the same trick resolveTokentrailBin
+ * uses for the daemon binary — when that resolves. Dev/npm runs (pkgRoot()
+ * is the repo checkout, no Cellar segment) are returned verbatim, and a
+ * missing symlink falls back to the versioned path rather than a broken one.
+ */
+export function resolveHookScriptPath(
+  root: string = pkgRoot(),
+  exists: (p: string) => boolean = existsSync
+): string {
+  const m = root.match(/^(.*)\/Cellar\/tokentrail\/[^/]+\/libexec$/);
+  if (m) {
+    const stable = join(m[1]!, 'opt', 'tokentrail', 'libexec', 'src', 'hooks', 'session-end.sh');
+    if (exists(stable)) return stable;
+  }
+  return join(root, 'src', 'hooks', 'session-end.sh');
+}
+
 export type InstallHookResult = {
   action: 'noop' | 'added' | 'updated';
   settingsPath: string;
@@ -39,7 +64,7 @@ type Settings = { hooks?: { Stop?: StopGroup[]; [k: string]: unknown }; [k: stri
 export function runInstallHook(opts: InstallHookOptions = {}): InstallHookResult {
   const repo = resolve(opts.repo ?? process.cwd());
   const settingsPath = join(repo, '.claude', 'settings.json');
-  const hookPath = opts.hookPath ?? join(pkgRoot(), 'src', 'hooks', 'session-end.sh');
+  const hookPath = opts.hookPath ?? resolveHookScriptPath();
 
   let settings: Settings = {};
   if (existsSync(settingsPath)) {

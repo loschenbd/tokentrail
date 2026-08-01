@@ -38,6 +38,12 @@ story ("where did my subscription value go") is stronger than the *reconciliatio
 ## Ranked roadmap
 
 ### 🥇 Bet 1 — Budgets, burn-rate forecast, and alerts (the wedge)
+> **Status: core shipped in v0.9.0** — global monthly budget (`monthlyBudgetUsd` +
+> `budgetCycleStartDay`), cycle-to-date blended spend, run-rate forecast (with honest
+> early-cycle suppression), `tokentrail budget`, and the menu-bar budget bar. **Still
+> open:** per-dev/repo/branch budgets + a `budgets` table, and native push
+> notifications when a threshold trips (deferred fast-follow).
+
 Most-wanted, cheap on this foundation, and it lands on Tokentrail's unique surface (the
 menu bar = the perfect ambient alert channel). Own the "don't blow your budget" job.
 - **Monthly billing-cycle view** alongside the rolling windows (align to the 1st, or a

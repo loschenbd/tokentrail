@@ -9,6 +9,14 @@ Status: proposal · Author: research + codebase map + **on-machine schema captur
 
 ## Implementation status (2026-08-01)
 
+**SHIPPED: v0.7.0 (feature) + v0.7.1 (fallback-pricing fix). Phase 0 value-verification
+DONE against a real `gpt-5-mini` turn** — AIU→USD constant confirmed exact
+(`300830000 × 1e-11 = $0.0030083`), model string is bare/lowercased (`gpt-5-mini`), and the
+row exposed one real bug (now fixed in 0.7.1): Copilot's `input_tokens` is INCLUSIVE of
+cached tokens, so the rate-card fallback must subtract `cache_read`/`cache_write` from input.
+The real turn ingests and flows through the pipeline end-to-end.
+
+
 **Built + tested + tsc-clean (411 tests green), smoke-tested against the live store:**
 - Phase 1 — `src/services/copilot-store-reader.ts` (read-only SQLite, `schema_version`
   guard, non-fatal). Phase 2 — `src/commands/copilot.ts` (→ `usage_events` `source='copilot'`,

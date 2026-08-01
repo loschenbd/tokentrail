@@ -116,6 +116,28 @@ describe('copilotCostUsd', () => {
     });
     assert.equal(usd, 0.017);
   });
+
+  // Regression: Copilot's input_tokens INCLUDES cached tokens. The fallback
+  // must subtract cache_read/cache_write from input or it double-bills them.
+  // Numbers + expected value are from a real captured gpt-5-mini turn.
+  test('fallback treats input_tokens as inclusive of cache (real gpt-5-mini row)', () => {
+    const usd = copilotCostUsd({
+      model: 'gpt-5-mini',
+      inputTokens: 14494, outputTokens: 182, cacheReadTokens: 4352, cacheWriteTokens: 0,
+      totalNanoAiu: null,
+    });
+    // (14494-4352)*0.25 + 4352*0.025 + 182*2, per 1e6 = 0.0030083
+    assert.equal(usd, 0.003008);
+  });
+
+  test('nano path reproduces the real row exactly', () => {
+    const usd = copilotCostUsd({
+      model: 'gpt-5-mini',
+      inputTokens: 14494, outputTokens: 182, cacheReadTokens: 4352, cacheWriteTokens: 0,
+      totalNanoAiu: 300830000,
+    });
+    assert.equal(usd, 0.003008); // 300830000 * 1e-11 = 0.0030083 → round6
+  });
 });
 
 describe('runCopilot', () => {

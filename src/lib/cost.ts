@@ -29,7 +29,17 @@ export function copilotCostUsd(
   if (inputs.totalNanoAiu != null && inputs.totalNanoAiu > 0) {
     return round6(inputs.totalNanoAiu * NANO_AIU_TO_USD);
   }
-  return priceTokens(inputs, copilotPricingFor(inputs.model));
+  // Copilot's input_tokens is INCLUSIVE of the cached buckets — verified
+  // against a real row (gpt-5-mini: 14494 in / 4352 cache_read / 182 out,
+  // total_nano_aiu 300830000 → only input−cache_read reproduces the exact
+  // $0.0030083). This differs from Anthropic's API (where input_tokens
+  // EXCLUDES cache, so estimateCostUsd adds them). Subtract the cache buckets
+  // here so the fallback doesn't bill cached tokens twice.
+  const billableInput = Math.max(
+    0,
+    inputs.inputTokens - inputs.cacheReadTokens - inputs.cacheWriteTokens
+  );
+  return priceTokens({ ...inputs, inputTokens: billableInput }, copilotPricingFor(inputs.model));
 }
 
 function priceTokens(

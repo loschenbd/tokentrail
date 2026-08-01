@@ -13,7 +13,7 @@ export type UsageEvent = {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   estimatedCostUsd: number;
-  source: 'jsonl' | 'hook';
+  source: 'jsonl' | 'hook' | 'copilot';
 };
 
 export type WorkUnit = {

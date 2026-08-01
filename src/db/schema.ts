@@ -267,4 +267,14 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     usd         REAL NOT NULL DEFAULT 0,
     updated_at  TEXT NOT NULL
   )`,
+
+  // Watermark for GitHub Copilot ingest. last_row_id is the highest
+  // assistant_usage_events.id (a global AUTOINCREMENT in Copilot's
+  // ~/.copilot/session-store.db) we've ingested; the next run reads only
+  // rows with a larger id. Copilot usage lands in usage_events with
+  // source='copilot'.
+  `CREATE TABLE IF NOT EXISTS copilot_ingest_state (
+    key          TEXT PRIMARY KEY,
+    last_row_id  INTEGER NOT NULL
+  )`,
 ];

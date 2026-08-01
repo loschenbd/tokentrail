@@ -12,6 +12,7 @@ const EMPTY_CONFIG: TokentrailConfig = {
   cursorStateDbPath: null,
   cursorSessionCookie: null,
   cursorCloudSpend: true,
+  copilotStorePath: null,
   source: null,
 };
 

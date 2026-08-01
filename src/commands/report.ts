@@ -5,7 +5,18 @@ export type ReportOptions = {
   days?: number;
   repo?: string;
   feature?: string;
+  /** Scope the whole report to one usage source: 'copilot' | 'claude'. */
+  source?: string;
 };
+
+// Map a friendly --source name to the usage_events.source values it covers.
+// Claude spans two source tags (JSONL ingest + Stop-hook snapshots).
+function sourceFilter(name: string): string[] | null {
+  const n = name.toLowerCase();
+  if (n === 'copilot') return ['copilot'];
+  if (n === 'claude') return ['jsonl', 'hook'];
+  return null;
+}
 
 type Row = {
   feature_key: string;
@@ -18,6 +29,19 @@ type Row = {
 export async function runReport(opts: ReportOptions): Promise<void> {
   const db = getDb();
   const days = Math.max(1, opts.days ?? 30);
+
+  // A --source scope reports directly from usage_events (feature_rollups has no
+  // source column), grouped by repo/branch with a per-model breakdown — the
+  // dedicated per-source view.
+  if (opts.source) {
+    const sources = sourceFilter(opts.source);
+    if (!sources) {
+      console.log(`Unknown source "${opts.source}". Try: copilot | claude.`);
+      return;
+    }
+    runSourceReport(db, opts.source, sources, days, opts.repo);
+    return;
+  }
 
   const params: Record<string, string | number> = { days };
   let where = `date >= date('now', '-' || @days || ' days')`;
@@ -100,6 +124,78 @@ export async function runReport(opts: ReportOptions): Promise<void> {
   const cursorLane = renderCursorLane(db);
   if (cursorLane) {
     console.log(cursorLane);
+  }
+}
+
+// Dedicated per-source view. Reads usage_events (filtered by source) rather
+// than feature_rollups: spend by repo/branch plus a per-model breakdown —
+// Copilot's distinguishing dimension (it routes GPT/Gemini/Claude).
+export function runSourceReport(
+  db: DatabaseType.Database,
+  sourceLabel: string,
+  sources: string[],
+  days: number,
+  repo?: string
+): void {
+  const placeholders = sources.map(() => '?').join(',');
+  const params: Array<string | number> = [...sources, days];
+  let where = `source IN (${placeholders}) AND date(timestamp) >= date('now', '-' || ? || ' days')`;
+  if (repo) {
+    where += ` AND repo LIKE '%' || ? || '%'`;
+    params.push(repo);
+  }
+
+  const byBranch = db
+    .prepare(
+      `SELECT COALESCE(repo, '(unattributed)') AS repo,
+              COALESCE(branch, '(none)')       AS branch,
+              SUM(estimated_cost_usd)          AS cost,
+              COUNT(DISTINCT session_id)       AS sessions,
+              COUNT(*)                         AS events
+       FROM usage_events
+       WHERE ${where}
+       GROUP BY repo, branch
+       ORDER BY cost DESC`
+    )
+    .all(...params) as Array<{ repo: string; branch: string; cost: number; sessions: number; events: number }>;
+
+  const byModel = db
+    .prepare(
+      `SELECT model, SUM(estimated_cost_usd) AS cost, COUNT(*) AS events
+       FROM usage_events
+       WHERE ${where}
+       GROUP BY model
+       ORDER BY cost DESC`
+    )
+    .all(...params) as Array<{ model: string; cost: number; events: number }>;
+
+  const sep = '─'.repeat(64);
+  console.log(`Tokentrail — Last ${days} day${days === 1 ? '' : 's'} · source=${sourceLabel} (estimated)`);
+  console.log(sep);
+
+  if (byBranch.length === 0) {
+    console.log(`No ${sourceLabel} usage found for this window.`);
+    return;
+  }
+
+  console.log(pad('Repo · Branch', 40) + pad('Cost', 12) + pad('Sessions', 10));
+  let totalCost = 0;
+  let totalSessions = 0;
+  for (const r of byBranch) {
+    const label = `${r.repo} · ${r.branch}`;
+    const shown = label.length > 38 ? label.slice(0, 37) + '…' : label;
+    console.log(pad(shown, 40) + pad('$' + r.cost.toFixed(2), 12) + pad(String(r.sessions), 10));
+    totalCost += r.cost;
+    totalSessions += r.sessions;
+  }
+  console.log(sep);
+  console.log(pad('Total', 40) + pad('$' + totalCost.toFixed(2), 12) + pad(String(totalSessions), 10));
+
+  console.log('\nBy model');
+  for (const m of byModel) {
+    console.log(
+      `  ${pad(m.model, 30)} $${m.cost.toFixed(2)} · ${m.events} turn${m.events === 1 ? '' : 's'}`
+    );
   }
 }
 

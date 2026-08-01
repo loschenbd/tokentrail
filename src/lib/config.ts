@@ -63,6 +63,8 @@ export type TokentrailConfig = {
   cursorSessionCookie: string | null;
   /** When false, skip the cursor.com network call entirely (local Source B still runs). */
   cursorCloudSpend: boolean;
+  /** Override path to Copilot CLI's ~/.copilot/session-store.db. Null = default (honors $COPILOT_HOME). */
+  copilotStorePath: string | null;
 };
 
 const EMPTY_CONFIG: TokentrailConfig = {
@@ -75,6 +77,7 @@ const EMPTY_CONFIG: TokentrailConfig = {
   cursorStateDbPath: null,
   cursorSessionCookie: null,
   cursorCloudSpend: true,
+  copilotStorePath: null,
 };
 
 let cached: TokentrailConfig | null = null;
@@ -141,6 +144,7 @@ function normalize(raw: unknown, source: string): TokentrailConfig {
     cursorStateDbPath: typeof obj.cursorStateDbPath === 'string' ? obj.cursorStateDbPath : null,
     cursorSessionCookie: typeof obj.cursorSessionCookie === 'string' ? obj.cursorSessionCookie : null,
     cursorCloudSpend: obj.cursorCloudSpend !== false,
+    copilotStorePath: typeof obj.copilotStorePath === 'string' ? obj.copilotStorePath : null,
   };
 }
 

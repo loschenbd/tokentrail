@@ -61,6 +61,14 @@ program
   });
 
 program
+  .command('budget')
+  .description('Show cycle-to-date spend vs your monthly budget, with a burn-rate forecast.')
+  .action(async () => {
+    const { runBudget } = await import('./commands/budget.js');
+    await runBudget();
+  });
+
+program
   .command('report')
   .description('Follow token usage across recent work.')
   .option('--days <n>', 'Number of days to include (default 30)', '30')

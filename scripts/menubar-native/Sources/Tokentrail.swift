@@ -26,6 +26,21 @@ struct TodayResponse: Decodable {
     let menubar: Menubar
     let sourcesToday: SourcesResponse?
     let sources30d: SourcesResponse?
+    let budget: Budget?
+}
+
+struct Budget: Decodable {
+    let budgetUsd: Double
+    let cycleStart: String
+    let cycleEnd: String
+    let spentUsd: Double
+    let projectedUsd: Double
+    let pctUsed: Double
+    let projectedPct: Double
+    let daysElapsed: Int
+    let daysInCycle: Int
+    let projectionReliable: Bool
+    let state: String   // "ok" | "warn" | "over"
 }
 
 struct SourceCost: Decodable, Identifiable {
@@ -528,6 +543,7 @@ struct PanelView: View {
                     header(t)
                     Divider()
                     statBlock(t)
+                    if sourceTab == .all, let b = t.budget { budgetView(b) }
                     if sourceTab == .all { sourceSplit(t) }
                     if t.menubar.trend.days.count >= 2 {
                         TrendChart(trend: t.menubar.trend, focused: $focused)
@@ -649,6 +665,52 @@ struct PanelView: View {
             statRow("Yesterday", Fmt.usd(t.menubar.yesterdayUsd))
             statRow("Last 7d", Fmt.usd(t.menubar.last7Usd))
             statRow("Last 30d", Fmt.usd(t.menubar.last30Usd))
+        }
+    }
+
+    // Cycle-to-date spend vs the configured monthly budget, with a run-rate
+    // forecast. The bar fills to spent%; a caret marks the projected month-end
+    // position. Color tracks `state` (ok/warn/over). Only rendered when a
+    // budget is configured server-side (t.budget non-nil).
+    private func budgetView(_ b: Budget) -> some View {
+        let tint: Color = b.state == "over" ? Color(hex: "#b5533f")
+            : b.state == "warn" ? Color(hex: "#b88a3a")
+            : Color(hex: "#5f6f5e")
+        let spentFrac = min(1.0, max(0.0, b.pctUsed / 100.0))
+        // A day-1 projection extrapolates one spendy day into a wild month, so
+        // hide the marker + figure until the server marks it reliable.
+        let projFrac = b.projectionReliable ? min(1.0, max(0.0, b.projectedPct / 100.0)) : spentFrac
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Budget").font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text("\(Fmt.usd(b.spentUsd)) / \(Fmt.usd(b.budgetUsd))")
+                    .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.18))
+                    Capsule().fill(tint).frame(width: max(2, geo.size.width * spentFrac))
+                    // Projected month-end marker (only when it exceeds spend so far).
+                    if projFrac > spentFrac {
+                        Rectangle().fill(tint.opacity(0.9))
+                            .frame(width: 2)
+                            .offset(x: min(geo.size.width - 2, geo.size.width * projFrac))
+                    }
+                }
+            }
+            .frame(height: 6)
+            HStack {
+                Text(b.projectionReliable
+                     ? "Projected \(Fmt.usd(b.projectedUsd)) · \(Int(b.projectedPct.rounded()))%"
+                     : "Too early to forecast")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                Spacer()
+                if b.state != "ok" {
+                    Text(b.state == "over" ? "over" : "trending over")
+                        .font(.system(size: 11, weight: .medium)).foregroundStyle(tint)
+                }
+            }
         }
     }
 

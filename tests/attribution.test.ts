@@ -14,6 +14,8 @@ const EMPTY_CONFIG: TokentrailConfig = {
   cursorCloudSpend: true,
   copilotStorePath: null,
   source: null,
+  monthlyBudgetUsd: null,
+  budgetCycleStartDay: 1,
 };
 
 describe('attribute()', () => {

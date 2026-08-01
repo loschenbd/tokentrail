@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import type DatabaseType from 'better-sqlite3';
-import { commitExistsIn, repoContextFor } from '../services/git.js';
+import { commitExistsIn, commitsPresentIn, isGitRepo, repoContextFor } from '../services/git.js';
 import { getDb } from '../db/db.js';
 import { getConfig } from '../lib/config.js';
 import {
@@ -34,6 +34,50 @@ export function resolveCommitRepo(
   return resolved;
 }
 
+// Injectable git seam for resolveCommitRepos (defaults to the real git funcs;
+// tests pass fakes to assert the O(dirs) spawn budget without shelling git).
+export type ResolveDeps = {
+  isRepo: (dir: string) => boolean;
+  present: (dir: string, shas: string[]) => Set<string>;
+  slug: (dir: string) => string | null;
+};
+
+// Batched commit->repo resolution — the many-hashes counterpart to
+// resolveCommitRepo. For each candidate dir (in order) that is a git repo, ONE
+// `git cat-file --batch-check` tests every still-unresolved hash at once, so
+// the whole run costs O(dirs) git spawns instead of O(commits × dirs). First
+// containing repo wins (dirs are tried in order; a resolved hash is dropped
+// from the remaining set so a later dir can't reclaim it). Unknown hashes map
+// to null (parked). This is what the ingest + re-resolve hot paths use.
+export function resolveCommitRepos(
+  commitHashes: string[],
+  candidateDirs: string[],
+  deps: ResolveDeps = {
+    isRepo: isGitRepo,
+    present: commitsPresentIn,
+    slug: (dir) => repoContextFor(dir).repo,
+  }
+): Map<string, string | null> {
+  const result = new Map<string, string | null>();
+  for (const h of commitHashes) result.set(h, null);
+  let remaining = [...new Set(commitHashes)];
+  for (const dir of candidateDirs) {
+    if (remaining.length === 0) break;
+    if (!deps.isRepo(dir)) continue;
+    const present = deps.present(dir, remaining);
+    if (present.size === 0) continue;
+    const repo = deps.slug(dir);
+    remaining = remaining.filter((h) => {
+      if (present.has(h)) {
+        result.set(h, repo);
+        return false;
+      }
+      return true;
+    });
+  }
+  return result;
+}
+
 // Real filesystem dirs Tokentrail already knows about — the search space for
 // commit->repo resolution. Distinct, existing dirs from sessions + usage.
 export function knownProjectDirs(db: DatabaseType.Database): string[] {
@@ -52,14 +96,14 @@ export function reresolveParkedCommits(db: DatabaseType.Database): number {
     .all() as Array<{ commit_hash: string }>;
   if (parked.length === 0) return 0;
   const dirs = knownProjectDirs(db);
-  const cache = new Map<string, string | null>();
+  const repoByHash = resolveCommitRepos(parked.map((p) => p.commit_hash), dirs);
   const setRepo = db.prepare(
     'UPDATE cursor_code_attribution SET repo = ? WHERE commit_hash = ?'
   );
   let fixed = 0;
   const tx = db.transaction(() => {
     for (const { commit_hash } of parked) {
-      const repo = resolveCommitRepo(commit_hash, dirs, cache);
+      const repo = repoByHash.get(commit_hash) ?? null;
       if (repo !== null) {
         setRepo.run(repo, commit_hash);
         fixed++;
@@ -91,7 +135,9 @@ export async function runCursorIngest(
     console.log('Cursor: no new scored commits.');
   } else {
     const dirs = knownProjectDirs(db);
-    const cache = new Map<string, string | null>();
+    // Resolve every commit's repo up front in O(dirs) git spawns (batched),
+    // then look each up inside the write transaction.
+    const repoByHash = resolveCommitRepos(commits.map((c) => c.commitHash), dirs);
 
     const upsert = db.prepare(`
       INSERT INTO cursor_code_attribution
@@ -116,7 +162,7 @@ export async function runCursorIngest(
     let maxScored = since;
     const tx = db.transaction(() => {
       for (const c of commits) {
-        const repo = resolveCommitRepo(c.commitHash, dirs, cache);
+        const repo = repoByHash.get(c.commitHash) ?? null;
         if (repo === null) parked++;
         upsert.run({
           commit_hash: c.commitHash,

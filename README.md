@@ -155,6 +155,7 @@ land, so you don't want it committed.
 tokentrail init        # One-shot setup: SwiftBar + daemon + Claude skills + hook + Tokentrail.app.
 tokentrail ingest      # Load new usage events into the local ledger.
 tokentrail cursor      # Track Cursor AI usage (local lines + cloud account spend).
+tokentrail copilot     # Ingest GitHub Copilot CLI usage into the ledger.
 tokentrail enrich      # Pull PR metadata for branches we've seen.
 tokentrail rollup      # Aggregate events into daily feature rollups.
 tokentrail report      # Follow token usage across recent work.
@@ -345,6 +346,49 @@ tokentrail cursor --spend  # Source A only (cloud account usage)
 non-fatal stage — if Cursor isn't installed or the cloud call fails, the
 rest of the pipeline is unaffected. To turn off the network path, set
 `cursorCloudSpend: false` (local line attribution still runs).
+
+## GitHub Copilot integration
+
+`tokentrail copilot` tracks usage from the [GitHub Copilot CLI](https://github.com/features/copilot/cli)
+(the standalone `copilot`, not the older `gh copilot` extension).
+
+### What it captures
+
+Copilot's CLI records every model turn in a local SQLite store
+(`~/.copilot/session-store.db`, honoring `$COPILOT_HOME`). Tokentrail reads it
+**read-only** and writes each turn into `usage_events` with `source='copilot'` —
+the same table as Claude Code — so Copilot spend **blends into your total cost**
+and attributes to repo/branch/feature just like Claude. Metric: dollars
+(estimated).
+
+- **Cost** comes from Copilot's own per-turn figure (`total_nano_aiu`;
+  1 AI credit = $0.01), falling back to GitHub's published per-model token rates
+  for any turn missing it.
+- **Attribution** uses the branch Copilot recorded at session time, resolved to a
+  repo via the session's working directory (same git resolution as Claude).
+- Unlike Cursor, Copilot **is** token/cost-based, so it rolls up into the
+  `Total Cost USD` column and the per-source breakdown.
+
+### Configuration
+
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `copilotStorePath` | string | `~/.copilot/session-store.db` (honors `$COPILOT_HOME`) | Override the Copilot CLI session-store path. |
+
+### Running the command
+
+```bash
+tokentrail copilot                 # Ingest new Copilot turns into the ledger
+tokentrail report --source copilot # Dedicated view: Copilot spend by branch + model
+```
+
+`tokentrail run-all` includes Copilot automatically as a non-fatal stage — if the
+Copilot CLI isn't installed (no `~/.copilot`), the rest of the pipeline is
+unaffected.
+
+> Note: some GitHub organizations disable the Copilot CLI via policy ("not
+> authorized… requires an enterprise or organization policy"). In that case no
+> usage is recorded locally and there is nothing to ingest.
 
 ## Automation
 

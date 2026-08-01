@@ -39,6 +39,14 @@ export async function runAll(opts: RunAllOptions = {}): Promise<void> {
     console.warn(`Cursor stage failed (non-fatal): ${(err as Error).message}`);
   }
 
+  try {
+    console.log('\n→ copilot');
+    const { runCopilot } = await import('./copilot.js');
+    await runCopilot();
+  } catch (err) {
+    console.warn(`Copilot stage failed (non-fatal): ${(err as Error).message}`);
+  }
+
   console.log('\n→ infer-mainline');
   const { runInferMainline } = await import('./infer-mainline.js');
   await runInferMainline();

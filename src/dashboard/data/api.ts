@@ -4,6 +4,8 @@ import { buildOverview, bucketProject } from './overview.js';
 import { colorForProject } from '../lib/feature-colors.js';
 import { hiddenFeatureKeys, rollupVisiblePredicate, shownAnomalyPredicate } from '../lib/hidden-projects.js';
 import { buildSources, type SourcesResponse } from './sources.js';
+import { buildBudget, type BudgetStatus } from './budget.js';
+import { getConfig } from '../../lib/config.js';
 
 const DASHBOARD_BASE_URL = 'http://127.0.0.1:4920';
 const MAX_PROJECTS = 3;
@@ -62,6 +64,9 @@ export type TodayResponse = {
   menubar: MenubarSummary;
   sourcesToday: SourcesResponse;
   sources30d: SourcesResponse;
+  // Current billing-cycle budget status + burn-rate forecast. Null when no
+  // budget is configured (monthlyBudgetUsd unset).
+  budget: BudgetStatus | null;
 };
 
 // Cache the full payload between menubar polls (every 60 s). Between
@@ -95,9 +100,10 @@ export function buildToday(
   opts: { hidden?: string[] } = {}
 ): TodayResponse {
   const hidden = opts.hidden ?? [];
-  // Hidden patterns join the cache key so editing settings.json takes
-  // effect on the next poll without waiting for a DB write.
-  const cacheKey = `${todayCacheKey(db)};hidden=${hidden.join(',')}`;
+  const cfg = getConfig();
+  // Hidden patterns + budget config join the cache key so editing settings.json
+  // takes effect on the next poll without waiting for a DB write.
+  const cacheKey = `${todayCacheKey(db)};hidden=${hidden.join(',')};budget=${cfg.monthlyBudgetUsd}:${cfg.budgetCycleStartDay}`;
   const cached = todayCache.get(db);
   if (cached && cached.key === cacheKey) return cached.value;
 
@@ -168,6 +174,10 @@ export function buildToday(
     menubar,
     sourcesToday: buildSources(db, { days: 1, claudeUsd: overview.totalUsd }),
     sources30d: buildSources(db, { days: 30, claudeUsd: menubar.last30Usd }),
+    budget: buildBudget(db, {
+      budgetUsd: cfg.monthlyBudgetUsd,
+      cycleStartDay: cfg.budgetCycleStartDay,
+    }),
   };
   todayCache.set(db, { key: cacheKey, value });
   return value;

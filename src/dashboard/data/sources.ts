@@ -21,20 +21,22 @@ export function buildSources(
   // back out so the "Claude Code" line isn't overstated, WITHOUT changing the
   // combined total (claude line drops by exactly what the copilot line adds).
   const cutoff = `date('now','localtime','-${Math.max(0, opts.days - 1)} days')`;
-  const copilotUsd = round2(
-    (db
-      .prepare(
-        `SELECT COALESCE(SUM(estimated_cost_usd), 0) AS u FROM usage_events
-          WHERE source = 'copilot' AND date(timestamp) >= ${cutoff}`
-      )
-      .get() as { u: number }).u
-  );
+  const copilotRow = db
+    .prepare(
+      `SELECT COALESCE(SUM(estimated_cost_usd), 0) AS u, COUNT(*) AS n FROM usage_events
+        WHERE source = 'copilot' AND date(timestamp) >= ${cutoff}`
+    )
+    .get() as { u: number; n: number };
+  const copilotUsd = round2(copilotRow.u);
   const claudeUsd = round2(Math.max(0, opts.claudeUsd - copilotUsd));
 
   const sources: SourceCost[] = [
     { key: 'claude', label: 'Claude Code', usd: claudeUsd },
   ];
-  if (copilotUsd > 0) {
+  // Include Copilot whenever there's ANY Copilot activity in the window (even
+  // sub-cent, which rounds to $0.00) so it stays selectable in the picker —
+  // mirrors how Cursor rides along on lines even at $0 spend.
+  if (copilotRow.n > 0) {
     sources.push({ key: 'copilot', label: 'GitHub Copilot', usd: copilotUsd });
   }
 

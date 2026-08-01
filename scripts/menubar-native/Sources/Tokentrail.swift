@@ -508,20 +508,22 @@ struct PanelView: View {
     @State private var sourceTab: SourceTab =
         SourceTab(rawValue: ProcessInfo.processInfo.environment["TT_SOURCE"] ?? "") ?? .all
 
-    enum SourceTab: String, CaseIterable { case all = "All", claude = "Claude", cursor = "Cursor" }
+    enum SourceTab: String, CaseIterable { case all = "All", claude = "Claude", copilot = "Copilot", cursor = "Cursor" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let t = store.today {
-                if hasCursor(t) {
+                if hasCursor(t) || hasCopilot(t) {
                     Picker("", selection: $sourceTab) {
-                        ForEach(SourceTab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        ForEach(visibleTabs(t), id: \.self) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
                 }
                 if sourceTab == .cursor {
                     cursorView(t)
+                } else if sourceTab == .copilot {
+                    copilotView(t)
                 } else {
                     header(t)
                     Divider()
@@ -554,6 +556,20 @@ struct PanelView: View {
         || (t.sources30d?.sources.contains { $0.key == "cursor" } ?? false)
     }
 
+    private func hasCopilot(_ t: TodayResponse) -> Bool {
+        (t.sourcesToday?.sources.contains { $0.key == "copilot" } ?? false)
+        || (t.sources30d?.sources.contains { $0.key == "copilot" } ?? false)
+    }
+
+    // Only offer tabs that have data: All + Claude always; Copilot / Cursor
+    // only when present. Keeps the segmented control from listing empty sources.
+    private func visibleTabs(_ t: TodayResponse) -> [SourceTab] {
+        var tabs: [SourceTab] = [.all, .claude]
+        if hasCopilot(t) { tabs.append(.copilot) }
+        if hasCursor(t) { tabs.append(.cursor) }
+        return tabs
+    }
+
     @ViewBuilder private func sourceSplit(_ t: TodayResponse) -> some View {
         if let s = t.sources30d, s.sources.count > 1 {
             HStack(spacing: 8) {
@@ -576,6 +592,18 @@ struct PanelView: View {
                 Text("\(lines) AI-authored lines (all-time)")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    @ViewBuilder private func copilotView(_ t: TodayResponse) -> some View {
+        let today = t.sourcesToday?.sources.first { $0.key == "copilot" }
+        let d30 = t.sources30d?.sources.first { $0.key == "copilot" }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("GitHub Copilot").font(.headline)
+            Text("\(Fmt.usd(today?.usd ?? 0)) today · \(Fmt.usd(d30?.usd ?? 0)) last 30d (est.)")
+                .font(.callout)
+            Text("Token cost from the Copilot CLI, attributed to repo/branch like Claude Code.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 

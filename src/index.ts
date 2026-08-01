@@ -53,17 +53,27 @@ program
   });
 
 program
+  .command('copilot')
+  .description('Ingest GitHub Copilot CLI usage from ~/.copilot/session-store.db.')
+  .action(async () => {
+    const { runCopilot } = await import('./commands/copilot.js');
+    await runCopilot();
+  });
+
+program
   .command('report')
   .description('Follow token usage across recent work.')
   .option('--days <n>', 'Number of days to include (default 30)', '30')
   .option('--repo <slug>', 'Filter to a specific repo (substring match).')
   .option('--feature <key>', 'Filter to a specific feature (substring match).')
-  .action(async (opts: { days?: string; repo?: string; feature?: string }) => {
+  .option('--source <name>', 'Scope to one source: copilot | claude.')
+  .action(async (opts: { days?: string; repo?: string; feature?: string; source?: string }) => {
     const { runReport } = await import('./commands/report.js');
     await runReport({
       days: Number.parseInt(opts.days ?? '30', 10),
       repo: opts.repo,
       feature: opts.feature,
+      source: opts.source,
     });
   });
 
@@ -73,12 +83,14 @@ program
   .option('--days <n>', 'Number of days to include (default 30)', '30')
   .option('--repo <slug>', 'Filter to a specific repo (substring match).')
   .option('--feature <key>', 'Filter to a specific feature (substring match).')
-  .action(async (opts: { days?: string; repo?: string; feature?: string }) => {
+  .option('--source <name>', 'Scope to one source: copilot | claude.')
+  .action(async (opts: { days?: string; repo?: string; feature?: string; source?: string }) => {
     const { runReport } = await import('./commands/report.js');
     await runReport({
       days: Number.parseInt(opts.days ?? '30', 10),
       repo: opts.repo,
       feature: opts.feature,
+      source: opts.source,
     });
   });
 

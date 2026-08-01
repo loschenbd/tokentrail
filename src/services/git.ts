@@ -131,3 +131,35 @@ export function commitExistsIn(dir: string, sha: string): boolean {
   if (!isGitRepo(dir)) return false;
   return runGit(dir, ['cat-file', '-e', `${sha}^{commit}`]) !== null;
 }
+
+// Batched membership test: which of `shas` are commit objects in the repo at
+// `dir`. Resolves ALL shas in a SINGLE `git cat-file --batch-check` process
+// (hashes piped on stdin, one output line per input line, in order) instead
+// of one `commitExistsIn` spawn per sha — the difference between O(1) and
+// O(commits) git spawns per repo. Returns the subset present; empty set on
+// empty input, a non-repo dir, or any git failure.
+export function commitsPresentIn(dir: string, shas: string[]): Set<string> {
+  const present = new Set<string>();
+  if (shas.length === 0) return present;
+  // `<sha>^{commit}` forces commit-type resolution; %(objecttype) prints
+  // "commit" for a present commit and the special "<input> missing" line
+  // otherwise — so a line equal to "commit" means input[i] is present.
+  const input = shas.map((s) => `${s}^{commit}`).join('\n') + '\n';
+  let out: string;
+  try {
+    out = execFileSync('git', ['cat-file', '--batch-check=%(objecttype)'], {
+      cwd: dir,
+      input,
+      stdio: ['pipe', 'pipe', 'ignore'],
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch {
+    return present;
+  }
+  const lines = out.split('\n');
+  for (let i = 0; i < shas.length; i++) {
+    if ((lines[i] ?? '').trim() === 'commit') present.add(shas[i]!);
+  }
+  return present;
+}

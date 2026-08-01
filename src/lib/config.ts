@@ -65,6 +65,10 @@ export type TokentrailConfig = {
   cursorCloudSpend: boolean;
   /** Override path to Copilot CLI's ~/.copilot/session-store.db. Null = default (honors $COPILOT_HOME). */
   copilotStorePath: string | null;
+  /** Monthly spend budget in USD for burn-rate/forecast. Null = no budget set (feature off). */
+  monthlyBudgetUsd: number | null;
+  /** Day-of-month (1-28) the budget cycle resets. Default 1. Clamped to 1-28 to avoid short-month drift. */
+  budgetCycleStartDay: number;
 };
 
 const EMPTY_CONFIG: TokentrailConfig = {
@@ -78,6 +82,8 @@ const EMPTY_CONFIG: TokentrailConfig = {
   cursorSessionCookie: null,
   cursorCloudSpend: true,
   copilotStorePath: null,
+  monthlyBudgetUsd: null,
+  budgetCycleStartDay: 1,
 };
 
 let cached: TokentrailConfig | null = null;
@@ -145,7 +151,18 @@ function normalize(raw: unknown, source: string): TokentrailConfig {
     cursorSessionCookie: typeof obj.cursorSessionCookie === 'string' ? obj.cursorSessionCookie : null,
     cursorCloudSpend: obj.cursorCloudSpend !== false,
     copilotStorePath: typeof obj.copilotStorePath === 'string' ? obj.copilotStorePath : null,
+    monthlyBudgetUsd:
+      typeof obj.monthlyBudgetUsd === 'number' && obj.monthlyBudgetUsd > 0
+        ? obj.monthlyBudgetUsd
+        : null,
+    budgetCycleStartDay: clampCycleDay(obj.budgetCycleStartDay),
   };
+}
+
+// Budget cycle reset day, clamped to 1-28 so it exists in every month.
+function clampCycleDay(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 1;
+  return Math.min(28, Math.max(1, Math.trunc(value)));
 }
 
 function asStringArray(value: unknown, key: string, source: string): string[] {

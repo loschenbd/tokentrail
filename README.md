@@ -390,6 +390,46 @@ unaffected.
 > authorized… requires an enterprise or organization policy"). In that case no
 > usage is recorded locally and there is nothing to ingest.
 
+## Budget & burn rate
+
+Set a monthly budget and Tokentrail tracks cycle-to-date spend against it, with
+a run-rate forecast to cycle end. The budget covers **all sources you see in your
+total** — Claude Code, Copilot, and Cursor combined.
+
+```bash
+tokentrail budget
+```
+
+```
+Budget — cycle 2026-08-01 → 2026-09-01 (day 15/31)
+────────────────────────────────────────────────────────────────
+  [██████████████▸░░░░░░░░░]
+  Spent      $126.40 of $200.00  (63.2%)
+  Projected  $261.31 by cycle end  (130.7%) ⚠ trending over
+  (estimated · Claude + Copilot + Cursor)
+```
+
+The same status surfaces in the menu-bar app as a budget bar (a caret marks the
+projected month-end position; color shifts green → amber → red). All figures are
+estimated.
+
+### Configuration
+
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `monthlyBudgetUsd` | number | `null` (feature off) | Your monthly spend budget in USD. Omit or set `null` to hide the budget UI. |
+| `budgetCycleStartDay` | number | `1` | Day of month the cycle resets (1–28; clamped to avoid short-month drift). |
+
+```jsonc
+// .tokentrail.json (or ~/.config/tokentrail/config.json)
+{ "monthlyBudgetUsd": 200, "budgetCycleStartDay": 1 }
+```
+
+The forecast is a linear run-rate (spend-so-far ÷ days-elapsed × days-in-cycle).
+For the first few days of a cycle that projection is too noisy to trust, so it's
+suppressed ("too early to forecast") and the status reflects actual spend alone
+until a few days of data accumulate.
+
 ## Automation
 
 `tokentrail run-all` walks the full trail in one command: ingest, enrich,

@@ -355,6 +355,19 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 }
 .chart-tooltip-more { font-size: 11px; color: var(--color-ink-muted); margin-top: 2px; }
 
+/* --- project detail: page layout (asymmetric 2-col → 1-col) --- */
+.pp-page { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-l); }
+.pp-layout { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--space-l); align-items: start; }
+.pp-main, .pp-rail { display: flex; flex-direction: column; gap: var(--space-l); min-width: 0; }
+@media (max-width: 900px) {
+  .pp-layout { display: flex; flex-direction: column; gap: var(--space-l); }
+  .pp-main, .pp-rail { display: contents; }
+  .pp-page section[data-section="worth-reconciling"] { order: 1; }
+  .pp-page section[data-section="velocity"] { order: 2; }
+  .pp-page section[data-section="features"] { order: 3; }
+  .pp-page section[data-section="active-work"] { order: 4; }
+}
+
 .single-col { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-l); }
 .session-row {
   display: grid;

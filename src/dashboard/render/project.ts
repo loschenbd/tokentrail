@@ -10,12 +10,18 @@ export function renderProject(vm: ProjectDetailVM): string {
   // could disagree with the overview/menubar when hue rotation kicks in.
   const color = vm.color;
   return `
-<div class="project-page single-col" data-project-key="${escapeHtml(vm.projectKey)}" data-project-color="${escapeHtml(color)}">
+<div class="project-page pp-page" data-project-key="${escapeHtml(vm.projectKey)}" data-project-color="${escapeHtml(color)}">
   ${renderHero(vm)}
-  ${renderVelocity(vm, color)}
-  ${renderFeatures(vm, color)}
-  ${renderActiveWork(vm)}
-  ${renderWorthReconciling(vm)}
+  <div class="pp-layout">
+    <div class="pp-main">
+      ${renderVelocity(vm, color)}
+      ${renderActiveWork(vm)}
+    </div>
+    <div class="pp-rail">
+      ${renderWorthReconciling(vm)}
+      ${renderFeatures(vm, color)}
+    </div>
+  </div>
 </div>
   `;
 }

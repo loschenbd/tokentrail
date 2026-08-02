@@ -40,17 +40,15 @@ function baseVm(overrides: Partial<ProjectDetailVM> = {}): ProjectDetailVM {
 }
 
 describe('renderProject skeleton', () => {
-  test('renders five sections in order: hero, velocity, features, active-work, worth-reconciling', () => {
-    // Provide an anomaly so the worth-reconciling section renders as a card
-    // (empty unattributed + empty anomalies collapses to a note without a data-section).
+  test('renders sections in order: hero, velocity, active-work, worth-reconciling, features', () => {
     const html = renderProject(baseVm({
       anomalies: [{ id: 1, kind: 'spike_day', date: '2026-06-15', featureKey: 'f', sessionId: null, amount: 100, reason: 'test', cause: null }],
     }));
-    const order = ['hero', 'velocity', 'features', 'active-work', 'worth-reconciling'];
+    const order = ['hero', 'velocity', 'active-work', 'worth-reconciling', 'features'];
     let last = -1;
     for (const s of order) {
       const idx = html.indexOf(`data-section="${s}"`);
-      assert.ok(idx > last, `section ${s} should appear (found idx=${idx}, last=${last})`);
+      assert.ok(idx > last, `section ${s} should appear in order (found idx=${idx}, last=${last})`);
       last = idx;
     }
   });

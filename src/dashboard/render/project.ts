@@ -10,30 +10,39 @@ export function renderProject(vm: ProjectDetailVM): string {
   // could disagree with the overview/menubar when hue rotation kicks in.
   const color = vm.color;
   return `
-<div class="project-page single-col" data-project-key="${escapeHtml(vm.projectKey)}" data-project-color="${escapeHtml(color)}">
+<div class="project-page pp-page" data-project-key="${escapeHtml(vm.projectKey)}" data-project-color="${escapeHtml(color)}">
   ${renderHero(vm)}
-  ${renderVelocity(vm, color)}
-  ${renderFeatures(vm, color)}
-  ${renderActiveWork(vm)}
-  ${renderWorthReconciling(vm)}
+  <div class="pp-layout">
+    <div class="pp-main">
+      ${renderVelocity(vm, color)}
+      ${renderActiveWork(vm)}
+    </div>
+    <div class="pp-rail">
+      ${renderWorthReconciling(vm)}
+      ${renderFeatures(vm, color)}
+    </div>
+  </div>
 </div>
   `;
 }
 
 function renderHero(vm: ProjectDetailVM): string {
   const label = renderRepoLabel(vm.projectKey);
-  const deltaLine = renderDeltaLine(vm);
+  const win = vm.dailySeries.length;
   const mostActive = vm.features.length > 0
-    ? `<div class="hero-most-active">most active: <a href="/feature/${encodeURIComponent(vm.features[0]!.featureKey)}">${escapeHtml(vm.features[0]!.featureName || vm.features[0]!.featureKey)}</a> <span class="muted">($${vm.features[0]!.totalUsd.toFixed(0)})</span></div>`
+    ? `<div class="pp-stat pp-stat-active"><div class="pp-stat-k">Most active</div><div class="pp-stat-v"><a href="/feature/${encodeURIComponent(vm.features[0]!.featureKey)}">${escapeHtml(vm.features[0]!.featureName || vm.features[0]!.featureKey)}</a> · $${vm.features[0]!.totalUsd.toFixed(0)}</div></div>`
     : '';
   return `
     <section class="card project-hero" data-section="hero">
       <div class="label">${label}</div>
       <div class="hero">${escapeHtml(vm.projectName)}</div>
-      <div class="hero-amount">$${formatUsdCommas(vm.totalUsd)}</div>
-      ${deltaLine}
-      <div class="hero-meta">${vm.sessionCount} sessions · ${vm.featureCount} features</div>
-      ${mostActive}
+      <div class="pp-statstrip">
+        <div class="pp-stat"><div class="pp-stat-k">Total · ${win}d</div><div class="pp-stat-v pp-stat-total">$${formatUsdCommas(vm.totalUsd)}</div></div>
+        ${renderDeltaCell(vm)}
+        <div class="pp-stat"><div class="pp-stat-k">Sessions</div><div class="pp-stat-v">${vm.sessionCount}</div></div>
+        <div class="pp-stat"><div class="pp-stat-k">Features</div><div class="pp-stat-v">${vm.featureCount}</div></div>
+        ${mostActive}
+      </div>
     </section>`;
 }
 
@@ -43,15 +52,16 @@ function renderRepoLabel(projectKey: string): string {
   return escapeHtml(projectKey);
 }
 
-function renderDeltaLine(vm: ProjectDetailVM): string {
+function renderDeltaCell(vm: ProjectDetailVM): string {
+  const win = vm.dailySeries.length;
   if (vm.priorUsd === 0 && vm.totalUsd > 0) {
-    return `<div class="hero-delta up">(new project)</div>`;
+    return `<div class="pp-stat pp-stat-delta"><div class="pp-stat-k">vs prior ${win}d</div><div class="pp-stat-v up">new project</div></div>`;
   }
   const arrow = vm.deltaPct >= 0 ? '▲' : '▼';
   const cls = vm.deltaPct >= 0 ? 'up' : 'down';
   const diff = vm.totalUsd - vm.priorUsd;
-  const diffStr = `$${formatUsdCommas(Math.abs(diff))} ${diff >= 0 ? 'more' : 'less'}`;
-  return `<div class="hero-delta ${cls}">${arrow}${Math.abs(vm.deltaPct)}% vs prior · <span class="muted">${diffStr}</span></div>`;
+  const diffStr = `${diff >= 0 ? '+' : '−'}$${formatUsdCommas(Math.abs(diff))}`;
+  return `<div class="pp-stat pp-stat-delta"><div class="pp-stat-k">vs prior ${win}d</div><div class="pp-stat-v ${cls}">${arrow}${Math.abs(vm.deltaPct)}% <span class="pp-delta-diff">${diffStr}</span></div></div>`;
 }
 
 function formatUsdCommas(n: number): string {
@@ -131,19 +141,19 @@ function renderActiveWork(vm: ProjectDetailVM): string {
 function renderBranchSummary(bg: NonNullable<ProjectDetailVM['branchGraph']>): string {
   const branches: BranchLifecycle[] = bg.branches ?? [];
   const bucket = (status: BranchLifecycle['status']) => branches.filter((b) => b.status === status);
-  const rowFor = (label: string, status: BranchLifecycle['status']) => {
+  const col = (label: string, status: BranchLifecycle['status']) => {
     const items = bucket(status);
     if (items.length === 0) return '';
-    const inline = items.map((b) => {
-      const usd = b.totalUsd > 0 ? ` <span class="muted">$${b.totalUsd.toFixed(0)}</span>` : '';
-      return `<span class="bsum-name">${escapeHtml(b.branch)}${usd}</span>`;
-    }).join(' · ');
-    return `<div class="bsum-row"><span class="bsum-k">${label} ${items.length}</span><span class="bsum-v">${inline}</span></div>`;
+    const rows = items.map((b) => {
+      const zero = b.totalUsd > 0 ? '' : ' zero';
+      return `<div class="bsum-item"><span class="bsum-branch">${escapeHtml(b.branch)}</span><span class="bsum-usd${zero}">$${b.totalUsd.toFixed(0)}</span></div>`;
+    }).join('');
+    return `<div class="bsum-col"><div class="bsum-col-head">${label} <span class="bsum-count">${items.length}</span></div><div class="bsum-items">${rows}</div></div>`;
   };
   return `<div class="branch-summary">
-    ${rowFor('Open',   'open')}
-    ${rowFor('Merged', 'merged')}
-    ${rowFor('Stale',  'stale')}
+    ${col('Open',   'open')}
+    ${col('Merged', 'merged')}
+    ${col('Stale',  'stale')}
   </div>`;
 }
 
@@ -221,30 +231,54 @@ function renderFeatures(vm: ProjectDetailVM, color: string): string {
     </section>`;
   }
   const denom = vm.totalUsd > 0 ? vm.totalUsd : 1;
-  const rows = vm.features.map((f, i) => {
+  const leader = vm.features[0]!.totalUsd || 1;
+  const THRESHOLD = 10;
+
+  // Fold: rows >= $10 stay expanded; if that leaves < 5 visible, fall back to
+  // the top 8 so the block never collapses to almost nothing.
+  let visibleCount = vm.features.filter((f) => f.totalUsd >= THRESHOLD).length;
+  if (visibleCount < 5) visibleCount = Math.min(8, vm.features.length);
+  const head = vm.features.slice(0, visibleCount);
+  const tail = vm.features.slice(visibleCount);
+
+  const row = (f: ProjectDetailVM['features'][number], i: number): string => {
     const share = Math.round((f.totalUsd / denom) * 100);
+    const barPct = Math.max((f.totalUsd / leader) * 100, 1.5);
     const shade = shadeForFeature(color, f.featureKey);
-    const spark = renderSparkline({
-      points: f.daily,
-      color: shade,
-      width: 96,
-      height: 18,
-      ariaLabel: `${f.featureKey} 30d`,
-    });
     const rawName = f.featureName || f.featureKey;
     const displayName = rawName.length > 40 ? rawName.slice(0, 39) + '…' : rawName;
     return `
       <a class="pfeat-row" href="/feature/${encodeURIComponent(f.featureKey)}" title="${escapeHtml(rawName)}">
         <span class="pfeat-rank">${i + 1}</span>
         <span class="pfeat-name">${escapeHtml(displayName)}</span>
-        <span class="pfeat-amt">$${formatUsdCommas(f.totalUsd)} · ${share}%</span>
         <span class="pfeat-meta"><span class="pfeat-sess">${f.sessionCount} sess</span> · <span class="pfeat-last">last ${formatMonDay(f.lastActive)}</span></span>
-        <span class="pfeat-spark">${spark}</span>
+        <span class="pfeat-barline">
+          <span class="pfeat-track"><span class="pfeat-fill" style="width:${barPct.toFixed(1)}%;background:${escapeHtml(shade)}"></span></span>
+          <span class="pfeat-amt"><b>$${formatUsdCommas(f.totalUsd)}</b> · ${share}%</span>
+        </span>
       </a>`;
-  }).join('');
+  };
+
+  const headRows = head.map((f, i) => row(f, i)).join('');
+  let tailBlock = '';
+  if (tail.length > 0) {
+    const tailSum = tail.reduce((s, f) => s + f.totalUsd, 0);
+    const allBelow = tail.every((f) => f.totalUsd < THRESHOLD);
+    const label = allBelow
+      ? `+ ${tail.length} more under $${THRESHOLD} · $${formatUsdCommas(tailSum)} total`
+      : `+ ${tail.length} more · $${formatUsdCommas(tailSum)} total`;
+    const tailRows = tail.map((f, i) => row(f, visibleCount + i)).join('');
+    tailBlock = `
+      <button class="pfeat-tail-toggle" type="button" data-pfeat-tail aria-expanded="false">
+        <span class="pfeat-tail-label">${label}</span><span class="pfeat-tail-caret">›</span>
+      </button>
+      <div class="pfeat-tail" hidden>${tailRows}</div>`;
+  }
+
   return `
     <section class="card" data-section="features">
       <div class="label">Features · ${vm.features.length}</div>
-      <div class="pfeat-list">${rows}</div>
+      <div class="pfeat-list">${headRows}</div>
+      ${tailBlock}
     </section>`;
 }

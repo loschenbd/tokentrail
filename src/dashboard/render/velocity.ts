@@ -20,14 +20,19 @@ export function renderVelocityChart(opts: {
     return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"></svg>`;
   }
 
-  const max = Math.max(1, ...opts.days.map((d) => d.total));
-  const slot = drawW / opts.days.length;
+  // Trim leading zero-spend days so the chart doesn't open with a dead gap.
+  let firstSpend = 0;
+  while (firstSpend < opts.days.length - 1 && opts.days[firstSpend]!.total <= 0) firstSpend++;
+  const days = opts.days.slice(firstSpend);
+
+  const max = Math.max(1, ...days.map((d) => d.total));
+  const slot = drawW / days.length;
   const barW = Math.max(2, slot * 0.7);
 
   const peakFill = darken(opts.color, 0.15);
   const bars: string[] = [];
-  for (let i = 0; i < opts.days.length; i++) {
-    const d = opts.days[i]!;
+  for (let i = 0; i < days.length; i++) {
+    const d = days[i]!;
     if (d.total <= 0) continue;
     const barH = Math.max(1, (d.total / max) * drawH);
     const x = padLeft + i * slot + (slot - barW) / 2;
@@ -38,15 +43,22 @@ export function renderVelocityChart(opts: {
 
   // X-axis: label every ~7th day, always including the first and last day.
   const labels: string[] = [];
-  const labelIndices = new Set<number>([0, opts.days.length - 1]);
-  for (let i = 7; i < opts.days.length - 3; i += 7) labelIndices.add(i);
+  const labelIndices = new Set<number>([0, days.length - 1]);
+  for (let i = 7; i < days.length - 3; i += 7) labelIndices.add(i);
   for (const i of labelIndices) {
-    const d = opts.days[i]!;
+    const d = days[i]!;
     const cx = padLeft + i * slot + slot / 2;
     labels.push(`<text x="${cx.toFixed(1)}" y="${(h - 4).toFixed(1)}" font-size="10" style="fill:var(--color-chart-axis)" text-anchor="middle">${formatShortDate(d.date)}</text>`);
   }
 
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">${bars.join('')}${labels.join('')}</svg>`;
+  const gridEls: string[] = [];
+  for (const lvl of [max, (max * 2) / 3, max / 3]) {
+    const gy = padTop + (drawH - (lvl / max) * drawH);
+    gridEls.push(`<line x1="${padLeft}" x2="${(w - padRight).toFixed(1)}" y1="${gy.toFixed(1)}" y2="${gy.toFixed(1)}" style="stroke:var(--color-chart-grid)" stroke-dasharray="2 3" />`);
+    gridEls.push(`<text x="${padLeft}" y="${(gy - 2).toFixed(1)}" font-size="9" style="fill:var(--color-chart-axis)" text-anchor="start">$${Math.round(lvl)}</text>`);
+  }
+
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">${gridEls.join('')}${bars.join('')}${labels.join('')}</svg>`;
 }
 
 function formatShortDate(iso: string): string {

@@ -232,6 +232,25 @@ describe('buildProjectDetail', () => {
     assert.equal(feat.status, 'closed');   // durable: merged PR wins over the recent-activity age fallback
   });
 
+  test('feature is "closed" via attribution even when its branch was never recorded in the branches CSV', () => {
+    const db = makeDb();
+    const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;
+    // Feature bucket keyed like the branch slug, but its rollup has NO branches CSV
+    // (older repos never populated it) — the CSV path alone would miss this.
+    db.prepare(
+      `INSERT INTO feature_rollups (id, date, feature_key, feature_name, repo, total_input_tokens, total_output_tokens, total_cost_usd, sessions_count, session_ids, branches)
+       VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, NULL)`
+    ).run('r-ob', day(2), 'onboarding-wizard', 'Onboarding wizard', 'loschenbd/archi', 40, 1, 'sess-ob');
+    // A merged PR whose head branch attributes (branch-slug) back to that feature key.
+    db.prepare(
+      `INSERT INTO session_prs (session_id, repo, pr_number, pr_state, head_branch, merged_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('sess-ob', 'loschenbd/archi', 4, 'merged', 'onboarding-wizard', `${day(40)}T00:00:00Z`);
+
+    const vm = buildProjectDetail(db, { projectKey: 'repo:loschenbd/archi', days: 30 })!;
+    const feat = vm.features.find((f) => f.featureKey === 'onboarding-wizard')!;
+    assert.equal(feat.status, 'closed');
+  });
+
   test('anomalies expose a session cause when the anomaly is tied to a session', () => {
     const db = makeDb();
     const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;

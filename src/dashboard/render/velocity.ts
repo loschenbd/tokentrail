@@ -43,7 +43,7 @@ export function renderVelocityChart(opts: {
   for (const i of labelIndices) {
     const d = opts.days[i]!;
     const cx = padLeft + i * slot + slot / 2;
-    labels.push(`<text x="${cx.toFixed(1)}" y="${(h - 4).toFixed(1)}" font-size="10" fill="#524d46" text-anchor="middle">${formatShortDate(d.date)}</text>`);
+    labels.push(`<text x="${cx.toFixed(1)}" y="${(h - 4).toFixed(1)}" font-size="10" style="fill:var(--color-chart-axis)" text-anchor="middle">${formatShortDate(d.date)}</text>`);
   }
 
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">${bars.join('')}${labels.join('')}</svg>`;

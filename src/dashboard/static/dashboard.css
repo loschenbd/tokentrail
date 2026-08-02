@@ -14,7 +14,7 @@ body {
 /* Unclassed links: sage with a soft underline (classed rows override). */
 a {
   color: var(--color-accent);
-  text-decoration-color: rgba(95,111,94,0.4);
+  text-decoration-color: var(--color-rule-accent);
   text-underline-offset: 3px;
 }
 a:hover {
@@ -25,10 +25,7 @@ a:hover {
 body::before {
   content: "";
   position: fixed; inset: 0;
-  background-image:
-    radial-gradient(ellipse 100% 55% at 50% -15%, rgb(255 252 247 / 0.95), transparent 52%),
-    radial-gradient(ellipse 55% 40% at 0% 100%, rgb(236 233 224 / 0.55), transparent 50%),
-    radial-gradient(ellipse 45% 45% at 100% 60%, rgb(232 236 229 / 0.4), transparent 48%);
+  background-image: var(--color-glow);
   pointer-events: none;
   z-index: -2;
 }
@@ -38,7 +35,7 @@ body::after {
   background-image: radial-gradient(circle at 50% 50%, var(--color-dot) 1px, transparent 1.35px);
   background-size: 24px 24px;
   background-position: 0 12px;
-  opacity: 0.46;
+  opacity: var(--color-dot-opacity);
   pointer-events: none;
   z-index: -1;
 }
@@ -56,6 +53,12 @@ body::after {
 .brand-link { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
 .brand-link:hover .brand { color: var(--color-accent-hover); }
 .brand-mark { display: block; width: 36px; height: 36px; border-radius: 6px; mix-blend-mode: multiply; }
+/* multiply darkens the mark into the cream paper; on the dark ground it would
+   erase a dark logo, so drop the blend there. */
+:root[data-theme="dark"] .brand-mark { mix-blend-mode: normal; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand-mark { mix-blend-mode: normal; }
+}
 .brand { font-family: var(--font-serif); font-size: var(--size-h1); font-weight: 400; }
 .brand-tag { color: var(--color-ink-muted); font-style: italic; margin-left: var(--space-s); }
 .header-left { display: flex; align-items: center; gap: var(--space-s); }
@@ -81,6 +84,28 @@ body::after {
   .header-center { order: 3; flex-basis: 100%; justify-content: flex-start; }
 }
 
+/* Theme toggle: ghost icon button. Shows the icon of the theme you'd switch
+   TO — a moon in light mode, a sun in dark — using the same
+   system-default-with-override logic as the tokens. */
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0;
+  color: var(--color-ink-muted);
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.theme-toggle:hover { color: var(--color-accent); border-color: var(--color-rule-accent); }
+.theme-toggle .ic-sun { display: none; }
+.theme-toggle .ic-moon { display: block; }
+:root[data-theme="dark"] .theme-toggle .ic-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .ic-moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .ic-sun { display: block; }
+  :root:not([data-theme="light"]) .theme-toggle .ic-moon { display: none; }
+}
+
 .range-form { display: flex; gap: var(--space-s); align-items: center; }
 .range-form select {
   font-family: var(--font-sans);
@@ -103,7 +128,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   border: 1px solid var(--color-card-border);
   border-radius: 2px;
   padding: var(--space-m);
-  box-shadow: 0 1px 0 rgba(60,58,54,0.04);
+  box-shadow: var(--color-shadow-card);
 }
 
 .label {
@@ -132,7 +157,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   font-family: var(--font-serif);
   font-weight: 400;
 }
-.feature-row:hover { background: rgba(95,111,94,0.07); }
+.feature-row:hover { background: var(--color-hover-bg); }
 .feature-row.sub {
   grid-template-columns: 1fr auto;
   padding: 4px 0 4px 36px;
@@ -155,7 +180,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   font-weight: 400;
   border-bottom: 1px solid var(--color-card-border);
 }
-.project-row:hover { background: rgba(95,111,94,0.07); }
+.project-row:hover { background: var(--color-hover-bg); }
 .project-row .rank { grid-column: 1; grid-row: 1; }
 .project-row .swatch { grid-column: 2; grid-row: 1; }
 .project-row .name-col { grid-column: 3; grid-row: 1; }
@@ -175,7 +200,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 .feature-row .share { font-weight: 400; margin-left: 4px; }
 .bar {
   height: 4px;
-  background: rgba(60,58,54,0.08);
+  background: var(--color-fill-muted);
   border-radius: 2px;
   margin-left: 24px;
   margin-bottom: 4px;
@@ -227,7 +252,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   font-family: var(--font-sans);
   font-size: var(--size-small);
   color: var(--color-ink);
-  box-shadow: 0 12px 40px -16px rgba(60,58,54,0.25), 0 1px 0 rgba(60,58,54,0.04);
+  box-shadow: var(--color-shadow-pop);
   /* Above the sticky .header (z-index: 10) — a tip placed just below the
      header's edge must paint over it, not be hidden behind its opaque
      paper background. */
@@ -251,7 +276,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
      is a hover-preview; navigation is via the chart click (project drill-down)
      and the burn-paths section below. */
 }
-.chart-tooltip-link:hover { background: rgba(95,111,94,0.08); }
+.chart-tooltip-link:hover { background: var(--color-hover-bg-soft); }
 .chart-tooltip-label {
   font-size: 10px;
   text-transform: uppercase;
@@ -261,7 +286,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   margin-bottom: 2px;
 }
 .chart-tooltip-row--active {
-  background: rgba(95,111,94,0.12);
+  background: var(--color-hover-bg-mid);
   border-radius: 2px;
 }
 .chart-tooltip-subhead {
@@ -285,11 +310,11 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   border-bottom: 1px solid var(--color-card-border);
   font-size: var(--size-body);
 }
-.session-row:hover { background: rgba(95,111,94,0.07); }
+.session-row:hover { background: var(--color-hover-bg); }
 .session-details {
   display: none;
   padding: var(--space-s) var(--space-m) var(--space-m) var(--space-m);
-  background: rgba(250,249,246,0.7);
+  background: var(--color-card-bg);
   border-bottom: 1px solid var(--color-card-border);
 }
 .session-details.open { display: block; }
@@ -327,9 +352,9 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   font-size: var(--size-small);
 }
 .cluster-row .bar { grid-area: bar; margin-left: 0; }
-.cluster-row:hover { background: rgba(95,111,94,0.07); }
+.cluster-row:hover { background: var(--color-hover-bg); }
 /* Highlighter swipe — matches the site's yellow marker strips. */
-.session-row.flash { background: rgba(250,204,21,0.35); transition: background 1.2s ease-out; }
+.session-row.flash { background: var(--color-flash-bg); transition: background 1.2s ease-out; }
 
 .anomaly-full {
   display: grid;
@@ -371,7 +396,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   cursor: pointer;
   padding: 2px 6px;
   text-decoration: underline;
-  text-decoration-color: rgba(60,58,54,0.25);
+  text-decoration-color: var(--color-border);
   text-underline-offset: 3px;
 }
 .anomaly-action:hover { color: var(--color-accent-hover); text-decoration-color: var(--color-accent); }
@@ -394,7 +419,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 /* Trail elevation chart — cumulative $ over time with mile-markers */
 .trail-elevation { display: block; font-family: var(--font-sans); }
 .trail-grid {
-  stroke: rgba(60,58,54,0.09);
+  stroke: var(--color-hairline);
   stroke-width: 1;
   shape-rendering: crispEdges;
 }
@@ -404,7 +429,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   font-family: var(--font-mono);
 }
 .trail-area {
-  fill: rgba(95,111,94,0.14);
+  fill: var(--color-hover-bg-strong);
   stroke: none;
 }
 .trail-line {
@@ -433,7 +458,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   shape-rendering: crispEdges;
 }
 .branch-graph-grid {
-  stroke: rgba(60,58,54,0.09);
+  stroke: var(--color-hairline);
   stroke-width: 1;
   stroke-dasharray: 2 3;
   shape-rendering: crispEdges;
@@ -509,7 +534,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   cursor: default;
 }
 .trend-legend-row[data-clickable="1"] { cursor: pointer; }
-.trend-legend-row:hover { background: rgba(95,111,94,0.08); }
+.trend-legend-row:hover { background: var(--color-hover-bg-soft); }
 .trend-legend-row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trend-legend-row .amt { color: var(--color-ink-muted); font-variant-numeric: tabular-nums; }
 .trend-legend-row .chevron { color: var(--color-ink-subtle); font-size: 11px; }
@@ -524,7 +549,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   color: var(--color-ink-muted);
 }
 .trend-legend.other-expanded .trend-legend-subrow { display: grid; }
-.trend-legend-subrow:hover { background: rgba(95,111,94,0.08); }
+.trend-legend-subrow:hover { background: var(--color-hover-bg-soft); }
 .trend-legend-subrow .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trend-legend-subrow .amt { font-variant-numeric: tabular-nums; }
 .swatch {
@@ -532,13 +557,13 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #a8a29a;
+  background: var(--color-swatch-fallback);
 }
 .swatch--striped {
   background: repeating-linear-gradient(
     45deg,
-    #78716a 0 4px,
-    rgba(255,255,255,0.35) 4px 6px
+    var(--color-stripe-fg) 0 4px,
+    var(--color-stripe-hi) 4px 6px
   );
 }
 .chart-tooltip-rows {
@@ -562,24 +587,24 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 }
 .tooltip-swatch.swatch--striped {
   background: repeating-linear-gradient(
-    45deg, #78716a 0 3px, rgba(255,255,255,0.35) 3px 5px
+    45deg, var(--color-stripe-fg) 0 3px, var(--color-stripe-hi) 3px 5px
   );
 }
 
 /* Hover-highlight: dim the whole canvas when a band/legend row is active */
 canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
-.trend-legend-row.active { background: rgba(95,111,94,0.16); }
+.trend-legend-row.active { background: var(--color-hover-bg-strong); }
 .trend-legend-row.inactive { opacity: 0.45; }
 
 .chart-hint {
   margin-top: 12px;
   padding: 8px 12px;
   border-radius: 2px;
-  background: rgba(95,111,94,0.07);
+  background: var(--color-hover-bg);
   color: var(--color-ink-muted);
   font-size: 13px;
 }
-.chart-hint code { background: rgba(60,58,54,0.09); padding: 1px 5px; border-radius: 2px; font-family: var(--font-code); }
+.chart-hint code { background: var(--color-hairline); padding: 1px 5px; border-radius: 2px; font-family: var(--font-code); }
 
 /* Burn-paths inline feature sub-bars */
 /*
@@ -593,7 +618,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   margin-top: 4px;
   border-radius: 2px;
   overflow: hidden;
-  background: rgba(60,58,54,0.05);
+  background: var(--color-fill-track);
   width: calc(var(--pct, 100) * 1%);
   min-width: 12px;
 }
@@ -621,8 +646,8 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .subbar-segment--striped {
   background: repeating-linear-gradient(
     45deg,
-    #78716a 0 4px,
-    rgba(255,255,255,0.35) 4px 6px
+    var(--color-stripe-fg) 0 4px,
+    var(--color-stripe-hi) 4px 6px
   );
 }
 
@@ -636,15 +661,15 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .unatt-project-head { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .unatt-project-head .name { flex: 1; }
 .unatt-project-head .amt { color: var(--color-ink-muted); font-variant-numeric: tabular-nums; }
-.unatt-project-bar { height: 4px; background: rgba(60,58,54,0.06); border-radius: 2px; overflow: hidden; }
-.unatt-project-bar > div { height: 100%; background: repeating-linear-gradient(45deg, #78716a 0 4px, rgba(255,255,255,0.35) 4px 6px); }
+.unatt-project-bar { height: 4px; background: var(--color-fill-track); border-radius: 2px; overflow: hidden; }
+.unatt-project-bar > div { height: 100%; background: repeating-linear-gradient(45deg, var(--color-stripe-fg) 0 4px, var(--color-stripe-hi) 4px 6px); }
 .unatt-cta {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 10px; border: 1px solid rgba(95,111,94,0.4); background: transparent;
+  padding: 6px 10px; border: 1px solid var(--color-rule-accent); background: transparent;
   color: var(--color-accent);
   border-radius: 2px; cursor: pointer; font-family: var(--font-sans); font-size: 12px;
   font-weight: 500;
-  box-shadow: 0 1px 0 rgba(60,58,54,0.04);
+  box-shadow: var(--color-shadow-card);
 }
 .unatt-cta:hover { border-color: var(--color-accent); background: rgba(95,111,94,0.1); color: var(--color-accent-hover); }
 .unatt-hero-empty { font-family: var(--font-serif); font-size: 20px; font-weight: 400; margin-top: 4px; color: var(--color-accent); }
@@ -701,7 +726,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   text-decoration: none;
   color: inherit;
 }
-.project-page .pfeat-row:hover { background: rgba(95,111,94,0.06); }
+.project-page .pfeat-row:hover { background: var(--color-hover-bg); }
 .project-page .pfeat-rank {
   grid-area: rank;
   color: var(--color-ink-subtle);
@@ -806,7 +831,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   align-items: end;
   margin-top: var(--space-s);
 }
-.hour-bar { height: 100%; display: flex; align-items: flex-end; background: rgba(60,58,54,0.05); border-radius: 2px; }
+.hour-bar { height: 100%; display: flex; align-items: flex-end; background: var(--color-fill-track); border-radius: 2px; }
 .hour-bar span {
   display: block;
   width: 100%;
@@ -854,7 +879,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   border-radius: 2px;
   padding: var(--space-m);
   margin: 0 0 var(--space-m);
-  box-shadow: 0 1px 0 rgba(60,58,54,0.04);
+  box-shadow: var(--color-shadow-card);
 }
 .settings legend {
   font-family: var(--font-sans);
@@ -873,7 +898,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   font-family: var(--font-sans);
   font-size: var(--size-body);
   color: var(--color-ink);
-  background: #fff;
+  background: var(--color-card-bg);
   border: 1px solid var(--color-card-border);
   border-radius: 2px;
   padding: 4px 8px;
@@ -889,11 +914,11 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   font-weight: 500;
   color: var(--color-accent);
   background: transparent;
-  border: 1px solid rgba(95,111,94,0.4);
+  border: 1px solid var(--color-rule-accent);
   border-radius: 2px;
   padding: 5px 14px;
   cursor: pointer;
-  box-shadow: 0 1px 0 rgba(60,58,54,0.04);
+  box-shadow: var(--color-shadow-card);
 }
 .settings button:hover { border-color: var(--color-accent); background: rgba(95,111,94,0.1); color: var(--color-accent-hover); }
 .settings button[type="submit"] {
@@ -923,7 +948,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   font-family: var(--font-sans);
   font-size: var(--size-small);
   color: var(--color-ink);
-  background: rgba(95,111,94,0.08);
+  background: var(--color-hover-bg-soft);
   border: 1px solid var(--color-card-border);
   border-radius: 2px;
   padding: 3px 6px 3px 10px;

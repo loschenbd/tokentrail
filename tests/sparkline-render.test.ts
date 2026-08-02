@@ -21,8 +21,10 @@ describe('renderSparkline', () => {
     });
     assert.match(svg, /<polyline\b/);
     // Baseline y-coordinate is at (height - pad). Verify at least one point
-    // near that y, and the stroke uses the supplied color.
-    assert.match(svg, /stroke="#abcdef"/);
+    // near that y, and the stroke uses the supplied color. Stroke is applied
+    // via the style attribute (not the presentation attr) so callers can pass
+    // a themeable CSS var.
+    assert.match(svg, /style="stroke:#abcdef"/);
   });
 
   test('non-zero points scale to the specified height', () => {

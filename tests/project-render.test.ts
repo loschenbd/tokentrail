@@ -57,7 +57,7 @@ describe('renderProject skeleton', () => {
 
   test('hero shows repo label, name, total, delta, session/feature counts, most-active feature', () => {
     const html = renderProject(baseVm());
-    assert.match(html, /REPO:LOSCHENBD\/ARCHI/);
+    assert.match(html, /repo:loschenbd\/archi/);   // repo label in natural case (Spectral naming voice)
     assert.match(html, />archi</);
     assert.match(html, /\$2,?203/);
     assert.match(html, /▲649% vs prior/);

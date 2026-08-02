@@ -1,5 +1,9 @@
 import type DatabaseType from 'better-sqlite3';
 
+// A branch (or feature) with no activity for this many days reads as stale.
+// Shared so the project page's per-feature status uses the same cutoff.
+export const STALE_DAYS = 7;
+
 export type BranchLifecycle = {
   branch: string;
   firstEventAt: string;
@@ -201,7 +205,7 @@ export function buildBranchGraph(
     for (const row of gmRows) gitMergedAtByBranch.set(row.branch, row.mergedAt);
   }
 
-  const STALE_THRESHOLD_MS = 7 * 86400000;
+  const STALE_THRESHOLD_MS = STALE_DAYS * 86400000;
   const now = Date.now();
 
   // featureKey lookup: scan feature_rollups in the same window for rows

@@ -501,6 +501,21 @@ Tokentrail overview. Flags:
 Anomalies on `/worth-a-look` can be dismissed and restored inline. Labeling
 and sync stay on the CLI for now. Stop the dashboard with Ctrl-C.
 
+### Per-harness views
+
+The Overview has a **Source** picker (top-right, beside the time Window) that
+re-scopes the whole page — trend chart, burn-path projects, this-week, and
+unattributed — to a single harness: **Claude Code**, **GitHub Copilot**, or
+**Cursor**. **All sources** (the default) shows the blended total. The picker
+only lists sources that have data, and the choice rides in the URL
+(`/?source=claude&days=30`) so scoped views are linkable.
+
+Claude and Copilot are re-aggregated from `usage_events` with the *same*
+attribution the blended rollup uses (so a project's scoped spend always sums
+back to its share of the total). Cursor is metered per day, so its scoped view
+is a single "Cursor (metered)" spend band over time. Anomalies aren't
+source-tagged, so the "Worth a look" panel only populates on **All sources**.
+
 ### Menu bar app (native)
 
 Put today's spend in your macOS menu bar. `tokentrail init` installs a

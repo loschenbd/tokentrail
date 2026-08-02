@@ -503,9 +503,11 @@ and sync stay on the CLI for now. Stop the dashboard with Ctrl-C.
 
 ### Light / dark theme
 
-The dashboard follows your OS light/dark preference out of the box, and the
-sun/moon button in the header toggles it manually (the choice persists in
-`localStorage` and applies before first paint, so there's no flash on reload).
+The dashboard follows your OS light/dark preference out of the box. To pin it,
+open **Settings → Appearance** and choose **System**, **Light**, or **Dark** —
+**System** tracks your OS (updating live when it flips), while **Light** and
+**Dark** force a fixed theme. The choice persists per device in `localStorage`
+and applies before first paint, so there's no flash on reload.
 The whole palette is driven by CSS custom properties in
 [`src/dashboard/tokens.ts`](src/dashboard/tokens.ts) — one place to adjust
 either theme. Both the light "paper" and dark palettes mirror

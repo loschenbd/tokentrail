@@ -185,7 +185,7 @@ function renderUnattSubblock(vm: ProjectDetailVM, u: NonNullable<ProjectDetailVM
   // the project's hue — visually distinguishes "reconcile" from "spend".
   const svg = renderSparkline({
     points: u.sparkline.map((p) => ({ date: p.date, totalUsd: p.usd })),
-    color: '#78716a',
+    color: 'var(--color-stripe-fg)',
     width: 220,
     height: 40,
     ariaLabel: 'Unattributed sparkline',

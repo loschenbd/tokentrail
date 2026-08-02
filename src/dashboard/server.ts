@@ -237,10 +237,15 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
       monthlyBudgetUsd?: unknown; budgetCycleStartDay?: unknown;
       sourceBudgets?: { claude?: unknown; copilot?: unknown; cursor?: unknown };
     };
+    // Maps blank/whitespace/null/undefined/0 -> null (no cap), matching the
+    // config's canonical meaning (lib/config.ts positiveOrNull collapses
+    // 0 -> null on load, so persisting 0 as a literal would silently
+    // "reset" on the next read). Negative/NaN -> undefined (invalid -> 400).
     const posOrNull = (v: unknown): number | null | undefined => {
-      if (v === null || v === undefined || v === '') return null;
+      if (v === null || v === undefined || String(v).trim() === '') return null;
       const n = Number(v);
       if (!Number.isFinite(n) || n < 0) return undefined; // undefined = invalid
+      if (n === 0) return null; // 0 means "no cap", same as blank
       return n;
     };
     const patch: BudgetPatch = {};

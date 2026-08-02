@@ -247,9 +247,10 @@ export type BudgetPatch = {
   sourceBudgets?: Partial<SourceBudgets>;
 };
 
-// Where a write should land: an existing config file if one is resolvable,
-// else the user-level path (created on demand). Never invents a project-local
-// file that doesn't already exist.
+// Where a write should land: $TOKENTRAIL_CONFIG first if set (returned even
+// when that file doesn't exist yet — writes create it), else an existing
+// resolvable config file, else the user-level path (created on demand).
+// Never invents a project-local file that doesn't already exist.
 function configTargetPath(): string {
   if (process.env.TOKENTRAIL_CONFIG) {
     return resolve(process.env.TOKENTRAIL_CONFIG);

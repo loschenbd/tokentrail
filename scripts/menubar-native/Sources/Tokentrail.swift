@@ -759,39 +759,47 @@ struct PanelView: View {
         // A day-1 projection extrapolates one spendy day into a wild month, so
         // hide the marker + figure until the server marks it reliable.
         let projFrac = b.projectionReliable ? min(1.0, max(0.0, b.projectedPct / 100.0)) : spentFrac
+        // No global monthly budget configured (per-source caps only) — a
+        // supported config where the server sends budgetUsd: 0. Skip the
+        // global figure/bar/projection/cycle-day line, but keep a plain
+        // header so the per-source rows below aren't headerless.
         return VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Budget").font(.system(size: 12, weight: .semibold))
-                Spacer()
-                Text("\(Fmt.usd(b.spentUsd)) / \(Fmt.usd(b.budgetUsd))")
-                    .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.secondary.opacity(0.18))
-                    Capsule().fill(tint).frame(width: max(2, geo.size.width * spentFrac))
-                    // Projected month-end marker (only when it exceeds spend so far).
-                    if projFrac > spentFrac {
-                        Rectangle().fill(tint.opacity(0.9))
-                            .frame(width: 2)
-                            .offset(x: min(geo.size.width - 2, geo.size.width * projFrac))
+            if b.budgetUsd > 0 {
+                HStack {
+                    Text("Budget").font(.system(size: 12, weight: .semibold))
+                    Spacer()
+                    Text("\(Fmt.usd(b.spentUsd)) / \(Fmt.usd(b.budgetUsd))")
+                        .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.secondary.opacity(0.18))
+                        Capsule().fill(tint).frame(width: max(2, geo.size.width * spentFrac))
+                        // Projected month-end marker (only when it exceeds spend so far).
+                        if projFrac > spentFrac {
+                            Rectangle().fill(tint.opacity(0.9))
+                                .frame(width: 2)
+                                .offset(x: min(geo.size.width - 2, geo.size.width * projFrac))
+                        }
                     }
                 }
-            }
-            .frame(height: 6)
-            HStack {
-                Text(b.projectionReliable
-                     ? "Projected \(Fmt.usd(b.projectedUsd)) · \(Int(b.projectedPct.rounded()))%"
-                     : "Too early to forecast")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                Spacer()
-                if b.state != "ok" {
-                    Text(b.state == "over" ? "over" : "trending over")
-                        .font(.system(size: 11, weight: .medium)).foregroundStyle(tint)
+                .frame(height: 6)
+                HStack {
+                    Text(b.projectionReliable
+                         ? "Projected \(Fmt.usd(b.projectedUsd)) · \(Int(b.projectedPct.rounded()))%"
+                         : "Too early to forecast")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    Spacer()
+                    if b.state != "ok" {
+                        Text(b.state == "over" ? "over" : "trending over")
+                            .font(.system(size: 11, weight: .medium)).foregroundStyle(tint)
+                    }
                 }
+                Text("\(Fmt.monthDay(b.cycleStart)) – \(Fmt.monthDay(b.cycleEnd)) · day \(b.daysElapsed)/\(b.daysInCycle)")
+                    .font(.system(size: 10)).foregroundStyle(.tertiary)
+            } else {
+                Text("Budget").font(.system(size: 12, weight: .semibold))
             }
-            Text("\(Fmt.monthDay(b.cycleStart)) – \(Fmt.monthDay(b.cycleEnd)) · day \(b.daysElapsed)/\(b.daysInCycle)")
-                .font(.system(size: 10)).foregroundStyle(.tertiary)
             ForEach((b.sources ?? [])) { s in sourceBudgetRow(s) }
         }
     }

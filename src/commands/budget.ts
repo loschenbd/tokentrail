@@ -25,9 +25,9 @@ export async function runBudget(): Promise<void> {
   const bar = renderBar(b.pctUsed, b.projectedPct);
   const tag = b.state === 'over' ? ' ⚠ over' : b.state === 'warn' ? ' ⚠ trending over' : '';
 
-  console.log(`Budget — cycle ${b.cycleStart} → ${b.cycleEnd} (day ${b.daysElapsed}/${b.daysInCycle})`);
-  console.log('─'.repeat(64));
   if (b.budgetUsd > 0) {
+    console.log(`Budget — cycle ${b.cycleStart} → ${b.cycleEnd} (day ${b.daysElapsed}/${b.daysInCycle})`);
+    console.log('─'.repeat(64));
     console.log(`  ${bar}`);
     console.log(`  Spent      ${usd(b.spentUsd)} of ${usd(b.budgetUsd)}  (${b.pctUsed}%)`);
     if (b.projectionReliable) {
@@ -36,7 +36,8 @@ export async function runBudget(): Promise<void> {
       console.log(`  Projected  — too early in the cycle to forecast${tag}`);
     }
   } else {
-    console.log('Budget — per-source caps only (no global budget)');
+    console.log(`Budget — per-source caps only · cycle ${b.cycleStart} → ${b.cycleEnd} (day ${b.daysElapsed}/${b.daysInCycle})`);
+    console.log('─'.repeat(64));
   }
   if (b.sources.length) {
     console.log('');

@@ -75,4 +75,15 @@ describe('POST /api/budget', () => {
     assert.equal(raw.sourceBudgets.cursor, 25);
     await app.close();
   });
+
+  test('treats monthlyBudgetUsd 0 as no budget (matches config normalize)', async () => {
+    const app = buildServer({ defaultDays: 30 });
+    const res = await app.inject({ method: 'POST', url: '/api/budget',
+      payload: { monthlyBudgetUsd: 0 } });
+    assert.equal(res.statusCode, 200);
+    resetConfigCache();
+    const raw = JSON.parse(readFileSync(cfg, 'utf-8'));
+    assert.equal(raw.monthlyBudgetUsd, null);
+    await app.close();
+  });
 });

@@ -206,11 +206,11 @@ describe('renderProject active-work section', () => {
     ],
   };
 
-  test('branch table renders a row per branch with name, spend fill, activity segment, sessions', () => {
+  test('branch table renders a row per branch with name, spend fill, last-active date, sessions', () => {
     const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');
     assert.match(seg, /worktree-local-semantic-search/);
     assert.match(seg, /bwork-fill/);       // spend bar
-    assert.match(seg, /bwork-seg/);         // activity-window segment
+    assert.match(seg, /bwork-last/);        // last-active date cell
     assert.match(seg, /bwork-row bwork-open/);
   });
 
@@ -221,16 +221,11 @@ describe('renderProject active-work section', () => {
     assert.match(seg, /bwork-row bwork-stale/);
   });
 
-  test('activity segment left/width stay within 0–100%', () => {
+  test('each row shows a "last <date>" from mergedAt/lastEventAt, not an activity bar', () => {
     const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');
-    const styles = [...seg.matchAll(/style="left:([\d.]+)%;width:([\d.]+)%"/g)];
-    assert.ok(styles.length >= 1, 'expected at least one segment');
-    for (const m of styles) {
-      const left = Number(m[1]); const width = Number(m[2]);
-      assert.ok(left >= 0 && left <= 100, `left ${left} in range`);
-      assert.ok(width >= 0 && width <= 100, `width ${width} in range`);
-      assert.ok(left + width <= 100.5, `left+width ${left + width} within bounds`);
-    }
+    assert.match(seg, /last Jun 29/);       // open worktree branch, lastEventAt 2026-06-29
+    assert.match(seg, /last Jun 9/);         // merged onboarding-wizard, mergedAt 2026-06-09
+    assert.doesNotMatch(seg, /bwork-seg/);   // no activity-window segment anymore
   });
 
   test('the SVG branch-graph mount and JSON payload are gone', () => {

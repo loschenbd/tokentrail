@@ -73,7 +73,7 @@ describe('renderProject skeleton', () => {
 
   test('hero omits most-active line when features is empty', () => {
     const html = renderProject(baseVm({ features: [] }));
-    assert.doesNotMatch(html, /most active:/i);
+    assert.doesNotMatch(html, /Most active/i);
   });
 });
 

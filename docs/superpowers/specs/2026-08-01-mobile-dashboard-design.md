@@ -29,16 +29,19 @@ list all stack cleanly) — it is the model the other views should meet.
 ## Goals
 
 - A genuine mobile-first experience for the web dashboard viewed on a phone.
-- Desktop rendering unchanged (all mobile rules behind `@media (max-width:700px)`).
+- An installable, standalone PWA (add-to-home-screen).
+- Desktop rendering unchanged except the nav tab order (Today leftmost); all
+  mobile layout rules live behind `@media (max-width:700px)`.
 - Reuse the existing Midori design system — no new colors, fonts, or deps. The
   calm/precise/lightly-fantasy voice is untouched.
 - No data-layer changes.
 
 ## Non-goals
 
-- Full installable PWA / web app manifest / standalone mode (deferred, YAGNI).
 - Native app changes (the SwiftUI menu-bar app is out of scope).
 - Redesigning views that already work at phone width beyond the shared shell.
+- Offline caching of live financial data (the service worker never serves stale
+  HTML/API responses — see §6).
 
 ## Design
 
@@ -46,7 +49,14 @@ list all stack cleanly) — it is the model the other views should meet.
 
 The desktop top tabs (`.nav-tabs` in `shell.ts`) stay on desktop but are
 **hidden below 700px**. In their place a **fixed bottom tab bar** renders the
-same four links (Overview · Today · Worth · Settings) as icon + label:
+same four links as icon + label.
+
+**Tab order — Today leftmost.** The shared nav order becomes
+**Today · Overview · Worth · Settings** (Today moves to first position). This
+applies to both the desktop top tabs and the mobile bottom bar, from one nav
+source, so the two never diverge. The brand-mark still links to `/` (Overview),
+which remains the home/root — leftmost tab (Today) and home (Overview) are
+deliberately distinct.
 
 - Fixed to viewport bottom, full width, thumb-reachable.
 - Honors the iPhone home-indicator via `padding-bottom: env(safe-area-inset-bottom)`.
@@ -99,57 +109,91 @@ No markup change required — this is a media-query override of the existing
 spans. (If a cleaner DOM is warranted during implementation it stays within
 `renderRow`, but the grid-to-card flip alone fixes the break.)
 
-### 5. Home = Today on mobile
+### 5. Home stays Overview
 
-On `/` only, a tiny inline script in `shell.ts` (or served static) runs before
-paint:
+`/` remains the Overview (home). **No redirect** — the previous
+Today-on-mobile redirect is dropped. Today is instead surfaced as the
+**leftmost tab** in the nav (see §1), one tap away and visually primary,
+without hijacking the root URL. Simpler, no `sessionStorage` guard, no
+bookmark/back-button edge cases.
 
-```js
-try {
-  if (window.matchMedia('(max-width: 700px)').matches &&
-      !sessionStorage.getItem('tt-landed')) {
-    sessionStorage.setItem('tt-landed', '1');
-    location.replace('/today');
-  }
-} catch (e) {}
+### 6. Full PWA (installable, standalone)
+
+Make the dashboard an installable, standalone-capable PWA — "Add to Home
+Screen" on iOS/Android launches it chromeless like a native app.
+
+**Web app manifest** — served at `/manifest.webmanifest` (new Fastify route,
+`Content-Type: application/manifest+json`), linked via `<link rel="manifest">`:
+
+```json
+{
+  "name": "Tokentrail",
+  "short_name": "Tokentrail",
+  "description": "The trail-map and ledger for AI spend.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "<Midori paper bg>",
+  "theme_color": "<Midori card bg>",
+  "icons": [
+    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/static/icon-512-maskable.png", "sizes": "512x512",
+      "type": "image/png", "purpose": "maskable" }
+  ]
+}
 ```
 
-- Fires only on a **cold open** (first `/` hit of a session), guarded by a
-  `sessionStorage` flag so tapping the Overview tab afterward does **not**
-  bounce back to Today.
-- `location.replace` (not `assign`) so Back doesn't loop.
-- Desktop and deep links (`/today`, `/worth-a-look`, `/feature/...`) untouched.
-- Only added on the Overview render path so it never runs elsewhere.
+**Icons** — generated from the canonical 1024×1024 `logo.png`:
+`icon-192.png`, `icon-512.png` (standard), and `icon-512-maskable.png` (with
+~15% safe-zone padding so Android's mask doesn't clip the mark). Written to
+`src/dashboard/static/` and added to the static-serving allowlist. Generated via
+`sips` (standard sizes) and a padded composite for the maskable variant.
 
-**Accepted tradeoff:** because the guard is per-session, closing and reopening
-the tab cold-lands on Today again — which is the intended "Today is home"
-behavior. A user who bookmarks `/` specifically wanting Overview on mobile will
-be redirected on each fresh session; this is deemed acceptable and Overview is
-one tab-tap away.
+**Service worker** — served at **`/sw.js`** (root scope; new Fastify route,
+`Content-Type: text/javascript`), registered from an inline script guarded by
+`'serviceWorker' in navigator`:
 
-### 6. Lightweight PWA polish
+- **App-shell precache, cache-first** for versioned static assets only — CSS,
+  JS (uPlot + dashboard.js), fonts, logo, icons. Cache name carries the app
+  version so a release busts it.
+- **Network-only pass-through** for HTML pages (`/`, `/today`, …) and every
+  `/api/*` route — live spend data is **never** served stale. This is the
+  deliberate boundary: installability + fast static loads, without ever showing
+  outdated financial figures.
+- No offline fallback page for MVP (the daemon is local/Tailscale; offline has
+  little value). The SW exists to satisfy installability and speed static
+  delivery, not offline browsing.
 
-- `theme-color` meta matched to the card background (light + dark variants).
-- `apple-mobile-web-app-capable` / `apple-mobile-web-app-status-bar-style`.
+**iOS/meta** (also covers browsers that ignore the manifest):
+
+- `theme-color` meta (light + dark variants) matched to the card background.
+- `apple-mobile-web-app-capable` = yes / `apple-mobile-web-app-status-bar-style`.
+- `apple-mobile-web-app-title` = "Tokentrail".
+- Existing `logo.png` stays as `apple-touch-icon`.
 - Safe-area insets top (sticky header) and bottom (tab bar).
-- Existing `logo.png` already linked as `apple-touch-icon` — no change.
-- No `manifest.json` / standalone mode (deferred).
 
 ## Technical shape
 
-- **`src/dashboard/render/shell.ts`**: hide-on-mobile top tabs; add bottom-nav
-  markup (shared link set with icons); restructure the top bar for the slim
-  sticky layout; add PWA meta tags; add the Overview-only home-redirect script.
-  (~30 lines.)
+- **`src/dashboard/render/shell.ts`**: reorder shared nav (Today leftmost);
+  hide-on-mobile top tabs; add bottom-nav markup (shared link set with icons);
+  restructure the top bar for the slim sticky layout; add PWA/manifest/meta tags
+  and the service-worker registration script.
 - **`src/dashboard/static/dashboard.css`**: one consolidated
   `@media (max-width: 700px)` block covering the bottom nav, slim sticky top
   bar, `.trend-layout` stack, `.anomaly-full` card flip, and safe-area padding.
   Plus the always-present bottom-nav element hidden by default on desktop.
-- **No changes** to `src/dashboard/data/*`, no new dependencies, no build
-  changes.
-- **Desktop output is byte-for-byte unchanged** apart from the always-present
-  (but `display:none` on desktop) bottom-nav element and the added `<head>`
-  meta — all visual mobile rules live behind the media query.
+- **`src/dashboard/server.ts`**: two new routes — `/manifest.webmanifest` and
+  `/sw.js` — plus the three new icon files added to the static allowlist.
+- **New static files**: `manifest.webmanifest` content (inline or file),
+  `sw.js`, `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`.
+- **No changes** to `src/dashboard/data/*`, no new dependencies. The `build`
+  script already `cp -R`s `static/` so new assets ship automatically.
+- **Desktop rendering** is unchanged except the nav tab order (Today now
+  leftmost) and the added `<head>` meta/manifest link; the bottom-nav element is
+  `display:none` on desktop and all other mobile rules live behind the media
+  query.
 
 ## Verification
 
@@ -163,5 +207,11 @@ in both light and dark themes, and confirm:
   highlights the active tab.
 - Trend chart is full-width and legible; legend reads below it.
 - Worth a look renders as clean stacked cards — no letter-per-line wrapping.
-- `/` cold-loads Today on mobile; tapping Overview stays on Overview.
-- Desktop (>900px) is visually identical to before.
+- Nav shows Today leftmost; brand-mark still lands on Overview (`/`).
+- `/manifest.webmanifest` and `/sw.js` return 200 with correct content-types;
+  the service worker registers (DevTools → Application → Service Workers) and
+  precaches static assets; HTML/`/api` responses are **not** cached.
+- "Add to Home Screen" installs a standalone icon (correct maskable icon, no
+  browser chrome on launch, portrait).
+- Desktop (>900px) is visually identical to before apart from Today being the
+  leftmost tab.

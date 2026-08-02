@@ -22,7 +22,7 @@ export function renderOverview(vm: OverviewVM): string {
       <script type="application/json" id="trend-data">${jsonForScriptTag({ days: vm.days, projects: vm.projects, unattributed: vm.unattributed, projectColors: vm.projectColors })}</script>
     </div>
 
-    <div class="card">
+    <div class="card burn-card">
       <div class="label">Top burn paths</div>
       <script type="application/json" id="burn-paths-data">${jsonForScriptTag(vm.projectFeatureMix)}</script>
       ${renderTopProjects(vm.topProjects)}
@@ -38,7 +38,7 @@ export function renderOverview(vm: OverviewVM): string {
 
     ${renderBudgetCard(vm.budget)}
 
-    <div class="card">
+    <div class="card week-card">
       <div class="label">This week</div>
       <div class="kicker">$${vm.weekUsd.toFixed(0)}</div>
       <div class="muted">${vm.weekSessions} sessions</div>
@@ -46,13 +46,13 @@ export function renderOverview(vm: OverviewVM): string {
 
     <div class="card unatt-card" id="unattributed-card"></div>
 
-    <div class="card">
+    <div class="card worth-card">
       <div class="label">Worth a look</div>
       ${vm.anomalies.length === 0 ? '<div class="muted">No anomalies in window.</div>' : renderAnomalies(vm.anomalies)}
       ${vm.anomalies.length > 0 ? '<div class="footer-link"><a href="/worth-a-look">See all →</a></div>' : ''}
     </div>
 
-    <div class="card">
+    <div class="card commits-card">
       <div class="label">Recent commits</div>
       ${renderCommits(vm.recentCommits)}
     </div>

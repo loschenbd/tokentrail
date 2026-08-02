@@ -15,6 +15,10 @@ describe('serviceWorkerJs', () => {
     assert.match(src, /tt-static-v\d+\.\d+\.\d+/, 'cache name must embed the semver');
     assert.match(src, /method\s*!==\s*['"]GET['"]/, 'fetch handler must bypass non-GET requests');
     assert.match(src, /startsWith\(\s*['"]\/static\/['"]\s*\)/, 'fetch handler must gate caching on the /static/ path prefix');
+    // Network-first: fetch is attempted first, cache is only the offline
+    // fallback (via .catch → caches.match). Guards against regressing to
+    // cache-first, which pins users to stale bundles after an upgrade.
+    assert.match(src, /\.catch\(\s*\(\)\s*=>\s*caches\.match/, 'fetch handler must fall back to cache only on network failure (network-first)');
   });
 });
 

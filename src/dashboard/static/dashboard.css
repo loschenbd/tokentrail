@@ -271,7 +271,7 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.chart-tooltip-date { color: var(--color-ink-subtle); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 2px; }
+.chart-tooltip-date { font-family: var(--font-serif); color: var(--color-ink-subtle); font-size: 12px; letter-spacing: 0; margin-bottom: 2px; }
 .chart-tooltip-value { font-weight: 600; font-size: var(--size-body); }
 .chart-tooltip-meta { color: var(--color-ink-muted); font-size: 11px; margin-top: 2px; font-family: var(--font-sans); }
 .chart-tooltip-link {
@@ -289,9 +289,9 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 }
 .chart-tooltip-link:hover { background: var(--color-hover-bg-soft); }
 .chart-tooltip-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  font-family: var(--font-serif);
+  font-size: 11px;
+  letter-spacing: 0;
   color: var(--color-ink-subtle);
   margin-top: 4px;
   margin-bottom: 2px;
@@ -301,9 +301,9 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   border-radius: 2px;
 }
 .chart-tooltip-subhead {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  font-family: var(--font-serif);
+  font-size: 11px;
+  letter-spacing: 0;
   color: var(--color-ink-subtle);
   margin-top: 8px;
   border-top: 1px solid var(--color-card-border);
@@ -330,11 +330,11 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 }
 .session-details.open { display: block; }
 .sub-label {
-  font-family: var(--font-sans);
-  font-size: var(--size-label);
+  /* Sub-section label = naming voice → Spectral, mixed-case. */
+  font-family: var(--font-serif);
+  font-size: var(--size-small);
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0;
   color: var(--color-ink-subtle);
   margin-top: var(--space-s);
   margin-bottom: 4px;
@@ -719,9 +719,9 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .project-page .velocity-row .k {
   min-width: 90px;
   color: var(--color-ink-subtle);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 10px;
+  font-family: var(--font-serif);
+  letter-spacing: 0;
+  font-size: var(--size-small);
   padding-top: 1px;
 }
 .project-page .velocity-row .v { flex: 1; }
@@ -790,9 +790,9 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 }
 .project-page .bsum-k {
   color: var(--color-ink-subtle);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 10px;
+  font-family: var(--font-serif);
+  letter-spacing: 0;
+  font-size: var(--size-small);
 }
 .project-page .bsum-v .bsum-name { display: inline; }
 .project-page .commits-inline { margin-top: 14px; }
@@ -808,9 +808,9 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .project-page .wr-block { margin-top: 12px; }
 .project-page .wr-block:first-of-type { margin-top: 4px; }
 .project-page .wr-sub-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  font-family: var(--font-serif);
+  font-size: var(--size-small);
+  letter-spacing: 0;
   color: var(--color-ink-subtle);
   margin-bottom: 4px;
 }

@@ -508,8 +508,11 @@ sun/moon button in the header toggles it manually (the choice persists in
 `localStorage` and applies before first paint, so there's no flash on reload).
 The whole palette is driven by CSS custom properties in
 [`src/dashboard/tokens.ts`](src/dashboard/tokens.ts) — one place to adjust
-either theme. (The illustrated onboarding map at `/welcome` keeps its
-parchment look in both themes by design.)
+either theme. Both the light "paper" and dark palettes mirror
+benjaminloschen.com's canonical values, and the trend-chart / burn-path band
+hues are lifted on dark (raised HSL lightness) to stay luminous on the dark
+ground. (The illustrated onboarding map at `/welcome` keeps its parchment look
+in both themes by design.)
 
 ### Per-harness views
 

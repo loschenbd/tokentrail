@@ -1,20 +1,16 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join, parse } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { pkgRoot } from '../lib/pkg-root.js';
 
-// Walk upward to the nearest package.json (same proven pattern as src/index.ts):
-// a hardcoded ../../ offset only holds for the compiled dist layout.
+// Read the app version from package.json via the shared pkgRoot() walk-up
+// (works in dev and from the installed dist/ layout). Falls back to '0.0.0'
+// rather than throwing — a service worker should still generate.
 function appVersion(): string {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  const { root } = parse(dir);
-  while (dir !== root) {
-    const candidate = join(dir, 'package.json');
-    if (existsSync(candidate)) {
-      return (JSON.parse(readFileSync(candidate, 'utf8')) as { version: string }).version;
-    }
-    dir = dirname(dir);
+  try {
+    return (JSON.parse(readFileSync(join(pkgRoot(), 'package.json'), 'utf8')) as { version: string }).version;
+  } catch {
+    return '0.0.0';
   }
-  return '0.0.0';
 }
 
 // Cache-first for /static/* only; everything else (HTML pages, /api/*) is

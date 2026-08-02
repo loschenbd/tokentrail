@@ -88,7 +88,7 @@ describe('renderProject velocity section', () => {
     assert.match(seg, /▲649% vs prior 30d/);
   });
 
-  test('velocity section embeds an svg bar chart', () => {
+  test('velocity section embeds an svg bar chart with y-gridlines', () => {
     const vm = baseVm({
       dailySeries: [
         { date: '2026-06-14', total: 0, commits: 0, prs: 0 },
@@ -99,6 +99,7 @@ describe('renderProject velocity section', () => {
     const seg = extractSection(renderProject(vm), 'velocity');
     assert.match(seg, /<svg\b[^>]*viewBox/);
     assert.match(seg, /<rect\b/);
+    assert.match(seg, /stroke-dasharray/);   // gridlines present
   });
 
   test('week callouts render both totals and their delta arrows', () => {

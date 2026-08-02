@@ -143,3 +143,47 @@ describe('buildBudget', () => {
     assert.ok(b.projectedPct < 80);
   });
 });
+
+describe('buildBudget per-source', () => {
+  function freshDb() {
+    const db = new Database(':memory:');
+    runMigrations(db);
+    return db;
+  }
+
+  test('returns sources[] only for configured caps, cycle-scoped', () => {
+    const db = freshDb();
+    seedEvent(db, 'a', '2026-08-02', 40);   // claude (source jsonl)
+    db.prepare(`INSERT INTO usage_events (id, session_id, timestamp, model, estimated_cost_usd, source)
+                VALUES ('c1','s','2026-08-02T12:00:00.000Z','gpt','10','copilot')`).run();
+    seedCursorDay(db, '2026-08-02', 5);
+    const r = buildBudget(db, {
+      budgetUsd: 200, cycleStartDay: 1, today: '2026-08-10',
+      sourceBudgets: { claude: 150, copilot: null, cursor: 20 },
+    })!;
+    assert.equal(r.spentUsd, 55);                 // global blends all three
+    const keys = r.sources.map((s) => s.key);
+    assert.deepEqual(keys, ['claude', 'cursor']); // copilot has no cap → omitted
+    const claude = r.sources.find((s) => s.key === 'claude')!;
+    assert.equal(claude.spentUsd, 40);
+    assert.equal(claude.budgetUsd, 150);
+    const cursor = r.sources.find((s) => s.key === 'cursor')!;
+    assert.equal(cursor.spentUsd, 5);
+  });
+
+  test('null when neither global nor any source cap is set', () => {
+    const db = freshDb();
+    assert.equal(buildBudget(db, { budgetUsd: null, cycleStartDay: 1,
+      sourceBudgets: { claude: null, copilot: null, cursor: null } }), null);
+  });
+
+  test('source cap with no global budget still returns a report', () => {
+    const db = freshDb();
+    seedEvent(db, 'a', '2026-08-02', 40);
+    const r = buildBudget(db, { budgetUsd: null, cycleStartDay: 1, today: '2026-08-10',
+      sourceBudgets: { claude: 150, copilot: null, cursor: null } });
+    assert.ok(r);
+    assert.equal(r!.budgetUsd, 0);          // no global → 0 (UI hides global bar)
+    assert.equal(r!.sources.length, 1);
+  });
+});

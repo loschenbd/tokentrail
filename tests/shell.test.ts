@@ -79,6 +79,15 @@ describe('renderShell bottom nav', () => {
   });
 });
 
+describe('renderShell PWA head', () => {
+  test('links the manifest and declares iOS standalone', () => {
+    const html = renderShell({ title: 't', activeTab: 'overview', days: 30 }, '');
+    assert.match(html, /<link rel="manifest" href="\/manifest\.webmanifest">/);
+    assert.match(html, /<meta name="apple-mobile-web-app-capable" content="yes">/);
+    assert.match(html, /<meta name="theme-color"/);
+  });
+});
+
 describe('jsonForScriptTag', () => {
   test('escapes < so payloads cannot close the script tag', async () => {
     const { jsonForScriptTag } = await import('../src/dashboard/render/shell.js');

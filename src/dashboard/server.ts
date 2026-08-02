@@ -356,6 +356,26 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     }
   });
 
+  app.get('/manifest.webmanifest', async (_req, reply) => {
+    reply.type('application/manifest+json; charset=utf-8');
+    return {
+      name: 'Tokentrail',
+      short_name: 'Tokentrail',
+      description: 'The trail-map and ledger for AI spend.',
+      start_url: '/',
+      scope: '/',
+      display: 'standalone',
+      orientation: 'portrait',
+      background_color: '#f3f1eb',
+      theme_color: '#f3f1eb',
+      icons: [
+        { src: '/static/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/static/icon-512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/static/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
+    };
+  });
+
   // Static asset serving — small bespoke handler instead of @fastify/static
   // to keep dep count low. Only allows files whose basename matches a
   // whitelist (no path traversal).

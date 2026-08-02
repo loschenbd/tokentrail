@@ -85,6 +85,12 @@ export function renderShell(opts: ShellOptions, body: string): string {
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="icon" type="image/png" href="/static/logo.png">
 <link rel="apple-touch-icon" href="/static/logo.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f3f1eb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a1917" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Tokentrail">
 <link rel="stylesheet" href="/static/fonts.css">
 <link rel="stylesheet" href="/static/uPlot.min.css">
 <link rel="stylesheet" href="/static/dashboard.css">

@@ -176,6 +176,43 @@ describe('buildProjectDetail', () => {
     assert.equal(byDate[day(0)], 0);
   });
 
+  test('feature status falls back to activity age when no branch links it', () => {
+    const db = makeDb();
+    const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;
+    // No PR/commit rows → no branches, so every feature uses the age fallback.
+    insertRollup(db, { date: day(1), featureKey: 'fresh', featureName: 'Fresh', repo: 'loschenbd/x', cost: 50, sessionIds: 's1', sessions: 1 });
+    insertRollup(db, { date: day(20), featureKey: 'dormant', featureName: 'Dormant', repo: 'loschenbd/x', cost: 30, sessionIds: 's2', sessions: 1 });
+    const vm = buildProjectDetail(db, { projectKey: 'repo:loschenbd/x', days: 30 })!;
+    const status = new Map(vm.features.map((f) => [f.featureKey, f.status]));
+    assert.equal(status.get('fresh'), 'opened');   // active within the 7-day cutoff
+    assert.equal(status.get('dormant'), 'stale');   // last active 20 days ago
+    // Age fallback never invents a "closed" state (only a merged branch closes).
+    assert.ok(![...status.values()].includes('closed'));
+  });
+
+  test('feature status is "closed" when its linked branch has a merged PR', () => {
+    const db = makeDb();
+    const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;
+    const ts = (n: number) => `${day(n)}T12:00:00Z`;
+    // feature_rollup carries the branch→feature link via its `branches` CSV.
+    db.prepare(
+      `INSERT INTO feature_rollups (id, date, feature_key, feature_name, repo, total_input_tokens, total_output_tokens, total_cost_usd, sessions_count, session_ids, branches)
+       VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`
+    ).run('r-shipped', day(2), 'shipped-feat', 'Shipped', 'loschenbd/x', 80, 1, 'sess-1', 'feat/shipped');
+    // a usage_event so the branch surfaces inside the window
+    db.prepare(
+      `INSERT INTO usage_events (id, session_id, timestamp, repo, branch, model) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('u-shipped', 'sess-1', ts(2), 'loschenbd/x', 'feat/shipped', 'claude');
+    // a merged PR for that branch → branch status 'merged' → feature 'closed'
+    db.prepare(
+      `INSERT INTO session_prs (session_id, repo, pr_number, pr_state, head_branch, merged_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('sess-1', 'loschenbd/x', 42, 'merged', 'feat/shipped', ts(2));
+
+    const vm = buildProjectDetail(db, { projectKey: 'repo:loschenbd/x', days: 30 })!;
+    const feat = vm.features.find((f) => f.featureKey === 'shipped-feat')!;
+    assert.equal(feat.status, 'closed');
+  });
+
   test('anomalies expose a session cause when the anomaly is tied to a session', () => {
     const db = makeDb();
     const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;

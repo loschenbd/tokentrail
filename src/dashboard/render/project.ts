@@ -244,6 +244,14 @@ function renderAnomalyRows(items: ProjectDetailVM['anomalies']): string {
   }).join('');
 }
 
+// Glyphs for a feature's lifecycle status — a distinct mark per state:
+// an open waypoint (opened), a check (closed/merged), a resting moon (stale).
+const FEATURE_STATUS: Record<'opened' | 'closed' | 'stale', { glyph: string; label: string }> = {
+  opened: { glyph: '◇', label: 'opened' },
+  closed: { glyph: '✓', label: 'closed' },
+  stale: { glyph: '☾', label: 'stale' },
+};
+
 function renderFeatures(vm: ProjectDetailVM, color: string): string {
   if (vm.features.length === 0) {
     return `
@@ -269,10 +277,11 @@ function renderFeatures(vm: ProjectDetailVM, color: string): string {
     const shade = shadeForFeature(color, f.featureKey);
     const rawName = f.featureName || f.featureKey;
     const displayName = rawName.length > 40 ? rawName.slice(0, 39) + '…' : rawName;
+    const st = FEATURE_STATUS[f.status] ?? FEATURE_STATUS.opened;
     return `
       <a class="pfeat-row" href="/feature/${encodeURIComponent(f.featureKey)}" title="${escapeHtml(rawName)}">
         <span class="pfeat-rank">${i + 1}</span>
-        <span class="pfeat-name">${escapeHtml(displayName)}</span>
+        <span class="pfeat-name"><span class="pfeat-status pfeat-status-${f.status}" title="${st.label}" aria-label="${st.label}">${st.glyph}</span>${escapeHtml(displayName)}</span>
         <span class="pfeat-meta"><span class="pfeat-sess">${f.sessionCount} sess</span> · <span class="pfeat-last">last ${formatMonDay(f.lastActive)}</span></span>
         <span class="pfeat-barline">
           <span class="pfeat-track"><span class="pfeat-fill" style="width:${barPct.toFixed(1)}%;background:${escapeHtml(shade)}"></span></span>

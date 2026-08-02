@@ -28,7 +28,7 @@ function baseVm(overrides: Partial<ProjectDetailVM> = {}): ProjectDetailVM {
     peakDay: { date: '2026-06-15', totalUsd: 412, featureKey: 'local-rag-chatbot', featureName: 'Local RAG + chatbot' },
     dailySeries,
     features: [
-      { featureKey: 'local-rag-chatbot', featureName: 'Local RAG + chatbot', totalUsd: 765, sessionCount: 5, lastActive: '2026-06-27', daily: [] },
+      { featureKey: 'local-rag-chatbot', featureName: 'Local RAG + chatbot', totalUsd: 765, sessionCount: 5, lastActive: '2026-06-27', status: 'opened' as const, daily: [] },
     ],
     sessions: [],
     recentCommits: [],
@@ -129,8 +129,8 @@ describe('renderProject features section', () => {
     return baseVm({
       totalUsd: 1000,
       features: [
-        { featureKey: 'local-rag-chatbot', featureName: 'Local RAG + chatbot', totalUsd: 765, sessionCount: 5, lastActive: '2026-06-27', daily: [{date:'2026-06-20', totalUsd:0},{date:'2026-06-21', totalUsd:200},{date:'2026-06-27', totalUsd:565}] },
-        { featureKey: 'archi-homepage-redesign', featureName: 'Archi homepage redesign', totalUsd: 235, sessionCount: 3, lastActive: '2026-06-21', daily: [{date:'2026-06-20', totalUsd:100},{date:'2026-06-21', totalUsd:135}] },
+        { featureKey: 'local-rag-chatbot', featureName: 'Local RAG + chatbot', totalUsd: 765, sessionCount: 5, lastActive: '2026-06-27', status: 'opened' as const, daily: [{date:'2026-06-20', totalUsd:0},{date:'2026-06-21', totalUsd:200},{date:'2026-06-27', totalUsd:565}] },
+        { featureKey: 'archi-homepage-redesign', featureName: 'Archi homepage redesign', totalUsd: 235, sessionCount: 3, lastActive: '2026-06-21', status: 'opened' as const, daily: [{date:'2026-06-20', totalUsd:100},{date:'2026-06-21', totalUsd:135}] },
       ],
     });
   }
@@ -166,16 +166,30 @@ describe('renderProject features section', () => {
     assert.doesNotMatch(seg, /<svg\b/);
   });
 
+  test('each row carries a lifecycle status glyph reflecting opened/closed/stale', () => {
+    const seg = extractSection(renderProject(baseVm({
+      features: [
+        { featureKey: 'a', featureName: 'Alpha', totalUsd: 200, sessionCount: 2, lastActive: '2026-06-27', status: 'opened' as const, daily: [] },
+        { featureKey: 'b', featureName: 'Bravo', totalUsd: 150, sessionCount: 1, lastActive: '2026-06-20', status: 'closed', daily: [] },
+        { featureKey: 'c', featureName: 'Charlie', totalUsd: 100, sessionCount: 1, lastActive: '2026-05-30', status: 'stale', daily: [] },
+      ],
+    })), 'features');
+    assert.match(seg, /pfeat-status-opened[^>]*>◇/);   // opened → open-waypoint glyph
+    assert.match(seg, /pfeat-status-closed[^>]*>✓/);    // closed → check
+    assert.match(seg, /pfeat-status-stale[^>]*>☾/);     // stale → moon
+    assert.match(seg, /aria-label="opened"/);            // accessible label present
+  });
+
   test('long tail folds behind a toggle naming count + summed dollars', () => {
     const many = [
-      { featureKey: 'a', featureName: 'Alpha', totalUsd: 262, sessionCount: 2, lastActive: '2026-06-27', daily: [] },
-      { featureKey: 'b', featureName: 'Bravo', totalUsd: 149, sessionCount: 3, lastActive: '2026-06-23', daily: [] },
-      { featureKey: 'c', featureName: 'Charlie', totalUsd: 129, sessionCount: 1, lastActive: '2026-06-25', daily: [] },
-      { featureKey: 'd', featureName: 'Delta', totalUsd: 80, sessionCount: 1, lastActive: '2026-06-22', daily: [] },
-      { featureKey: 'e', featureName: 'Echo', totalUsd: 42, sessionCount: 1, lastActive: '2026-06-21', daily: [] },
-      { featureKey: 'f', featureName: 'Foxtrot', totalUsd: 4, sessionCount: 1, lastActive: '2026-06-20', daily: [] },
-      { featureKey: 'g', featureName: 'Golf', totalUsd: 3, sessionCount: 1, lastActive: '2026-06-19', daily: [] },
-      { featureKey: 'h', featureName: 'Hotel', totalUsd: 1, sessionCount: 1, lastActive: '2026-06-18', daily: [] },
+      { featureKey: 'a', featureName: 'Alpha', totalUsd: 262, sessionCount: 2, lastActive: '2026-06-27', status: 'opened' as const, daily: [] },
+      { featureKey: 'b', featureName: 'Bravo', totalUsd: 149, sessionCount: 3, lastActive: '2026-06-23', status: 'opened' as const, daily: [] },
+      { featureKey: 'c', featureName: 'Charlie', totalUsd: 129, sessionCount: 1, lastActive: '2026-06-25', status: 'opened' as const, daily: [] },
+      { featureKey: 'd', featureName: 'Delta', totalUsd: 80, sessionCount: 1, lastActive: '2026-06-22', status: 'opened' as const, daily: [] },
+      { featureKey: 'e', featureName: 'Echo', totalUsd: 42, sessionCount: 1, lastActive: '2026-06-21', status: 'opened' as const, daily: [] },
+      { featureKey: 'f', featureName: 'Foxtrot', totalUsd: 4, sessionCount: 1, lastActive: '2026-06-20', status: 'opened' as const, daily: [] },
+      { featureKey: 'g', featureName: 'Golf', totalUsd: 3, sessionCount: 1, lastActive: '2026-06-19', status: 'opened' as const, daily: [] },
+      { featureKey: 'h', featureName: 'Hotel', totalUsd: 1, sessionCount: 1, lastActive: '2026-06-18', status: 'opened' as const, daily: [] },
     ];
     const seg = extractSection(renderProject(baseVm({ totalUsd: 670, features: many })), 'features');
     // 5 features >= $10 stay visible; 3 (<$10) fold.

@@ -370,6 +370,9 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     'trail-map.js',
     'settings.js',
     'fonts.css',
+    'icon-192.png',
+    'icon-512.png',
+    'icon-512-maskable.png',
   ]);
 
   app.get('/static/fonts/:name', async (req, reply) => {

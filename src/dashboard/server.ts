@@ -28,6 +28,7 @@ import { renderSettings } from './render/settings.js';
 import { readSettings, writeSettings, type Settings } from '../lib/settings.js';
 import { hiddenProjectPatterns } from './lib/hidden-projects.js';
 import { getLLMClient } from '../lib/llm.js';
+import { saveBudgetConfig, type BudgetPatch, type SourceBudgets } from '../lib/config.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
 
@@ -227,6 +228,55 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
     writeSettings({ llm, hiddenProjects });
     return { ok: true };
+  });
+
+  // Budget config lives in the Tokentrail config file, not settings.json —
+  // kept as a separate endpoint so the two forms save independently.
+  app.post('/api/budget', async (req, reply) => {
+    const body = req.body as {
+      monthlyBudgetUsd?: unknown; budgetCycleStartDay?: unknown;
+      sourceBudgets?: { claude?: unknown; copilot?: unknown; cursor?: unknown };
+    };
+    // Maps blank/whitespace/null/undefined/0 -> null (no cap), matching the
+    // config's canonical meaning (lib/config.ts positiveOrNull collapses
+    // 0 -> null on load, so persisting 0 as a literal would silently
+    // "reset" on the next read). Negative/NaN -> undefined (invalid -> 400).
+    const posOrNull = (v: unknown): number | null | undefined => {
+      if (v === null || v === undefined || String(v).trim() === '') return null;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) return undefined; // undefined = invalid
+      if (n === 0) return null; // 0 means "no cap", same as blank
+      return n;
+    };
+    const patch: BudgetPatch = {};
+    if ('monthlyBudgetUsd' in body) {
+      const m = posOrNull(body.monthlyBudgetUsd);
+      if (m === undefined) { reply.code(400); return { error: 'monthlyBudgetUsd must be >= 0 or blank' }; }
+      patch.monthlyBudgetUsd = m;
+    }
+    if ('budgetCycleStartDay' in body && body.budgetCycleStartDay != null) {
+      const d = Number(body.budgetCycleStartDay);
+      if (!Number.isInteger(d) || d < 1 || d > 28) { reply.code(400); return { error: 'budgetCycleStartDay must be 1-28' }; }
+      patch.budgetCycleStartDay = d;
+    }
+    if (body.sourceBudgets) {
+      const sb: Partial<SourceBudgets> = {};
+      for (const k of ['claude', 'copilot', 'cursor'] as const) {
+        if (k in body.sourceBudgets) {
+          const v = posOrNull((body.sourceBudgets as Record<string, unknown>)[k]);
+          if (v === undefined) { reply.code(400); return { error: `${k} cap must be >= 0 or blank` }; }
+          sb[k] = v;
+        }
+      }
+      patch.sourceBudgets = sb;
+    }
+    try {
+      const { path } = saveBudgetConfig(patch);
+      return { ok: true, path };
+    } catch (err) {
+      reply.code(500);
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
   });
 
   app.get('/api/infer-mainline/stream', async (_req, reply) => {

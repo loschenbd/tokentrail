@@ -16,6 +16,7 @@ const EMPTY_CONFIG: TokentrailConfig = {
   source: null,
   monthlyBudgetUsd: null,
   budgetCycleStartDay: 1,
+  sourceBudgets: { claude: null, copilot: null, cursor: null },
 };
 
 describe('attribute()', () => {

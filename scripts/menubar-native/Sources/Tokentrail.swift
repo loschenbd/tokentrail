@@ -41,6 +41,20 @@ struct Budget: Decodable {
     let daysInCycle: Int
     let projectionReliable: Bool
     let state: String   // "ok" | "warn" | "over"
+    let sources: [SourceBudget]?
+}
+
+struct SourceBudget: Decodable, Identifiable {
+    let key: String
+    let label: String
+    let budgetUsd: Double
+    let spentUsd: Double
+    let projectedUsd: Double
+    let pctUsed: Double
+    let projectedPct: Double
+    let projectionReliable: Bool
+    let state: String
+    var id: String { key }
 }
 
 struct SourceCost: Decodable, Identifiable {
@@ -543,7 +557,9 @@ struct PanelView: View {
                     header(t)
                     Divider()
                     statBlock(t)
-                    if sourceTab == .all, let b = t.budget { budgetView(b) }
+                    if sourceTab == .all {
+                        if let b = t.budget { budgetView(b) } else { budgetEmptyView() }
+                    }
                     if sourceTab == .all { sourceSplit(t) }
                     if t.menubar.trend.days.count >= 2 {
                         TrendChart(trend: t.menubar.trend, focused: $focused)
@@ -711,7 +727,38 @@ struct PanelView: View {
                         .font(.system(size: 11, weight: .medium)).foregroundStyle(tint)
                 }
             }
+            Text("\(Fmt.monthDay(b.cycleStart)) – \(Fmt.monthDay(b.cycleEnd)) · day \(b.daysElapsed)/\(b.daysInCycle)")
+                .font(.system(size: 10)).foregroundStyle(.tertiary)
+            ForEach((b.sources ?? [])) { s in sourceBudgetRow(s) }
         }
+    }
+
+    private func sourceBudgetRow(_ s: SourceBudget) -> some View {
+        let tint: Color = s.state == "over" ? Color(hex: "#b5533f")
+            : s.state == "warn" ? Color(hex: "#b88a3a") : Color(hex: "#5f6f5e")
+        let frac = min(1.0, max(0.0, s.pctUsed / 100.0))
+        return HStack(spacing: 6) {
+            Text(s.label).font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 78, alignment: .leading)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.18))
+                    Capsule().fill(tint).frame(width: max(2, geo.size.width * frac))
+                }
+            }.frame(height: 4)
+            Text("\(Fmt.usd(s.spentUsd))/\(Fmt.usd(s.budgetUsd))")
+                .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+        }
+    }
+
+    private func budgetEmptyView() -> some View {
+        Link(destination: URL(string: Api.base + "/settings#budget")!) {
+            HStack(spacing: 6) {
+                Image(systemName: "target").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("Set a budget in Settings").font(.system(size: 12)).foregroundStyle(.secondary)
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(.tertiary)
+            }
+        }.buttonStyle(.plain)
     }
 
     private func worthALook(_ t: TodayResponse) -> some View {

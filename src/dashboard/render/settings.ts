@@ -50,6 +50,13 @@ export function renderSettings(vm: SettingsViewModel): string {
   return `
 <section class="settings">
   <h1>Settings</h1>
+  <fieldset class="appearance">
+    <legend>Appearance</legend>
+    <p class="appearance-hint">Theme for this device. System follows your OS light/dark setting.</p>
+    <label><input type="radio" name="theme-pref" value="system" checked> System</label>
+    <label><input type="radio" name="theme-pref" value="light"> Light</label>
+    <label><input type="radio" name="theme-pref" value="dark"> Dark</label>
+  </fieldset>
   ${hiddenProjectsUI}
   ${renderBudgetFieldset(vm)}
   <form id="llm-form">

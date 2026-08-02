@@ -1,5 +1,5 @@
 import type DatabaseType from 'better-sqlite3';
-import { buildBranchGraph, type BranchGraphVM } from './branches.js';
+import { buildBranchGraph, STALE_DAYS, type BranchGraphVM } from './branches.js';
 import { canonicalProjectColors } from './overview.js';
 import { colorForProject } from '../lib/feature-colors.js';
 import { shownAnomalyPredicate } from '../lib/hidden-projects.js';
@@ -47,6 +47,10 @@ export type ProjectDetailVM = {
     totalUsd: number;
     sessionCount: number;
     lastActive: string;
+    // Lifecycle status, taken from the feature's linked branch (open→opened,
+    // merged→closed, stale→stale); features with no branch fall back to
+    // activity age (stale past the cutoff, else opened — never closed).
+    status: 'opened' | 'closed' | 'stale';
     daily: Array<{ date: string; totalUsd: number }>;
   }>;
   sessions: Array<{
@@ -279,6 +283,34 @@ export function buildProjectDetail(
 
   const branchGraph = buildBranchGraph(db, { projectKey: opts.projectKey, days });
 
+  // Per-feature lifecycle status. Prefer the linked branch's state; among
+  // several branches for one feature, the most-alive wins (opened > closed >
+  // stale). Features with no branch fall back to activity age.
+  const statusRank = (s: 'opened' | 'closed' | 'stale'): number =>
+    s === 'opened' ? 2 : s === 'closed' ? 1 : 0;
+  const branchStatusByFeature = new Map<string, 'opened' | 'closed' | 'stale'>();
+  for (const b of branchGraph?.branches ?? []) {
+    if (!b.featureKey) continue;
+    const mapped: 'opened' | 'closed' | 'stale' =
+      b.status === 'open' ? 'opened' : b.status === 'merged' ? 'closed' : 'stale';
+    const prev = branchStatusByFeature.get(b.featureKey);
+    if (prev === undefined || statusRank(mapped) > statusRank(prev)) {
+      branchStatusByFeature.set(b.featureKey, mapped);
+    }
+  }
+  const staleBefore = (db
+    .prepare(`SELECT date('now', 'localtime', '-${STALE_DAYS} days') AS d`)
+    .get() as { d: string }).d;
+  const featureStatus = (featureKey: string, lastActive: string): 'opened' | 'closed' | 'stale' => {
+    const fromBranch = branchStatusByFeature.get(featureKey);
+    if (fromBranch) return fromBranch;
+    return lastActive && lastActive < staleBefore ? 'stale' : 'opened';
+  };
+  const featuresWithStatus = featuresWithSparkline.map((f) => ({
+    ...f,
+    status: featureStatus(f.featureKey, f.lastActive),
+  }));
+
   // SUM(sessions_count) double-counts sessions active on multiple days;
   // the distinct session_ids set is the right number.
   const distinctSessionCount = sessionIds.length;
@@ -400,7 +432,7 @@ export function buildProjectDetail(
     sessionCount: distinctSessionCount,
     featureCount: features.length,
     dailySeries,
-    features: featuresWithSparkline,
+    features: featuresWithStatus,
     sessions,
     recentCommits,
     anomalies,

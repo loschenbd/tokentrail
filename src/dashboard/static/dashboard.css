@@ -762,6 +762,11 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   padding-top: 2px;
 }
 .project-page .pfeat-name { grid-area: name; font-weight: 600; color: var(--color-ink); font-size: 13.5px; }
+/* Feature lifecycle glyph: opened ◇ / closed ✓ / stale ☾ — hue carries the state. */
+.project-page .pfeat-status { margin-right: 6px; font-size: 11px; font-weight: 400; font-variant-emoji: text; }
+.project-page .pfeat-status-opened { color: var(--color-accent); }
+.project-page .pfeat-status-closed { color: var(--color-accent); }
+.project-page .pfeat-status-stale { color: var(--color-ink-subtle); }
 .project-page .pfeat-meta { grid-area: meta; color: var(--color-ink-subtle); font-size: 11px; }
 .project-page .pfeat-barline {
   grid-area: bar;

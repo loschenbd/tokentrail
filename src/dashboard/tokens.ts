@@ -67,41 +67,45 @@ export const TOKENS = {
   },
 } as const;
 
-// Dark "ink" palette — a warm charcoal (never pure black) so the paper
-// warmth survives. Sage/clay accents are lifted so they read on the dark
-// ground; hover/hairline washes switch to light-on-dark alphas.
+// Dark "ink" palette — synced to benjaminloschen.com's canonical `.dark`
+// block (app/globals.css) so the two stay pixel-identical. The base colors,
+// borders, page-glow, dot, and card shadow are the site's exact values; the
+// tokentrail-only semantic composites (hover washes, chart grid, stripes) are
+// derived from those same site colors (accent = #9aab97 = rgb(154,171,151)).
+// A warm charcoal, never pure black, with the sage/clay accents lifted so
+// they read on the dark ground.
 const DARK_COLORS: Record<keyof typeof TOKENS.color, string> = {
-  paper:         '#1a1815',
-  ink:           '#e8e4db',
-  inkMuted:      '#a9a298',
-  inkSubtle:     '#8a8175',
-  border:        'rgba(255,252,245,0.12)',
-  accent:        '#93a891',            // lifted sage
-  accentHover:   '#b0c2ad',
-  warm:          '#d4a683',
-  warmDeep:      '#e0946f',
-  dot:           '#3a4a44',            // dim mint on charcoal
-  cardBg:        '#232019',
-  cardBorder:    'rgba(255,252,245,0.09)',
-  hairline:      'rgba(255,252,245,0.10)',
-  hoverBg:       'rgba(147,168,145,0.10)',
-  hoverBgSoft:   'rgba(147,168,145,0.10)',
-  hoverBgMid:    'rgba(147,168,145,0.16)',
-  hoverBgStrong: 'rgba(147,168,145,0.24)',
-  fillTrack:     'rgba(255,252,245,0.06)',
-  fillMuted:     'rgba(255,252,245,0.11)',
+  paper:         '#1a1917',            // site --background
+  ink:           '#ebe8e2',            // site --foreground
+  inkMuted:      '#9c958a',            // site --muted
+  inkSubtle:     '#857e73',            // derived: tertiary text (site has no direct token), dimmer than muted
+  border:        'rgba(235,232,226,0.1)',  // site --border
+  accent:        '#9aab97',            // site --accent (lifted sage)
+  accentHover:   '#b4c0b0',            // site --accent-hover
+  warm:          '#d4a07a',            // site --accent-warm
+  warmDeep:      '#b87d5c',            // site --accent-warm-deep
+  dot:           'rgb(154 189 179 / 0.38)', // site --page-dot (dimmed mint)
+  cardBg:        '#22211e',            // site --card
+  cardBorder:    'rgba(235,232,226,0.08)',  // site --card-border
+  hairline:      'rgba(235,232,226,0.09)',  // site border family, one step under --border
+  hoverBg:       'rgba(154,171,151,0.10)',  // accent wash
+  hoverBgSoft:   'rgba(154,171,151,0.10)',
+  hoverBgMid:    'rgba(154,171,151,0.16)',
+  hoverBgStrong: 'rgba(154,171,151,0.24)',
+  fillTrack:     'rgba(235,232,226,0.06)',
+  fillMuted:     'rgba(235,232,226,0.11)',
   stripeFg:      '#6b6459',
   stripeHi:      'rgba(255,255,255,0.10)',
   flashBg:       'rgba(250,204,21,0.20)',
   swatchFallback:'#6b6459',
-  chartAxis:     '#a9a298',
-  chartGrid:     'rgba(255,252,245,0.09)',
-  ruleAccent:    'rgba(147,168,145,0.45)',
-  shadowCard:    '0 1px 0 rgba(0,0,0,0.35)',
-  shadowPop:     '0 14px 44px -16px rgba(0,0,0,0.65), 0 1px 0 rgba(0,0,0,0.35)',
-  // Faint warm halos instead of bright cream washes; dimmer dot grid.
-  glow:          'radial-gradient(ellipse 100% 55% at 50% -15%, rgb(80 76 66 / 0.35), transparent 55%), radial-gradient(ellipse 55% 40% at 0% 100%, rgb(45 55 50 / 0.30), transparent 52%), radial-gradient(ellipse 45% 45% at 100% 60%, rgb(60 55 48 / 0.28), transparent 50%)',
-  dotOpacity:    '0.30',
+  chartAxis:     '#9c958a',            // site --muted
+  chartGrid:     'rgba(235,232,226,0.09)',
+  ruleAccent:    'rgba(154,171,151,0.45)',
+  shadowCard:    '0 1px 0 rgba(0,0,0,0.35)',                                   // site --shadow-card
+  shadowPop:     '0 12px 40px -16px rgba(0,0,0,0.55), 0 1px 0 rgba(0,0,0,0.35)', // site --shadow-card-hover
+  // Site --page-glow (dark): faint warm halos on charcoal.
+  glow:          'radial-gradient(ellipse 100% 55% at 50% -15%, rgb(45 44 40 / 0.9), transparent 52%), radial-gradient(ellipse 55% 40% at 0% 100%, rgb(55 52 46 / 0.45), transparent 50%), radial-gradient(ellipse 45% 45% at 100% 60%, rgb(48 52 46 / 0.35), transparent 48%)',
+  dotOpacity:    '0.46',               // site keeps the .page-grid-overlay layer opacity in both themes
 };
 
 // Map a token camelCase key to its CSS custom-property name.

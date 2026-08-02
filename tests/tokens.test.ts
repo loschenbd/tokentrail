@@ -26,10 +26,13 @@ describe('tokensCss', () => {
     assert.match(css, /:root\[data-theme="dark"\]/);
   });
 
-  test('dark overrides actually change values (paper flips to the charcoal)', () => {
-    // The dark paper token must appear (it only exists in the dark blocks).
-    assert.match(css, /--color-paper:\s*#1a1815;/);
-    // And the lifted sage accent for dark.
-    assert.match(css, /--color-accent:\s*#93a891;/);
+  test('dark overrides match benjaminloschen.com canonical .dark values', () => {
+    // These are the site's exact .dark hexes (app/globals.css) — the port must
+    // stay pixel-identical, so assert the specific values, not just presence.
+    assert.match(css, /--color-paper:\s*#1a1917;/);   // site --background
+    assert.match(css, /--color-ink:\s*#ebe8e2;/);     // site --foreground
+    assert.match(css, /--color-accent:\s*#9aab97;/);  // site --accent
+    assert.match(css, /--color-warm-deep:\s*#b87d5c;/); // site --accent-warm-deep
+    assert.match(css, /--color-card-bg:\s*#22211e;/); // site --card
   });
 });

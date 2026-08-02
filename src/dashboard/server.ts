@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { getDb } from '../db/db.js';
 import { buildOverview } from './data/overview.js';
+import { materializeScopedRollup, presentScopes, isSourceScope, type SourceScope } from './data/scoped-rollup.js';
 import { renderOverview } from './render/overview.js';
 import { renderShell } from './render/shell.js';
 import { tokensCss } from './tokens.js';
@@ -37,10 +38,22 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.get('/', async (req, reply) => {
     const days = parseDays(req.query, opts.defaultDays);
-    const vm = buildOverview({ db: getDb(), days, hidden: hiddenProjectPatterns() });
+    const db = getDb();
+    const scopes = presentScopes(db);
+    // Requested harness scope, falling back to 'all' if absent/unknown or the
+    // source has no data (e.g. a stale ?source=cursor link after Cursor data
+    // ages out). materializeScopedRollup returns the real feature_rollups for
+    // 'all' and a per-source temp table otherwise.
+    const requested = parseSource(req.query);
+    const scope: SourceScope = requested && scopes.includes(requested) ? requested : 'all';
+    const rollupTable = materializeScopedRollup(db, scope);
+    const vm = buildOverview({ db, days, hidden: hiddenProjectPatterns(), rollupTable });
     const body = renderOverview(vm);
     reply.type('text/html; charset=utf-8');
-    return renderShell({ title: 'Tokentrail · Overview', activeTab: 'overview', days }, body);
+    return renderShell(
+      { title: 'Tokentrail · Overview', activeTab: 'overview', days, scope, scopes },
+      body
+    );
   });
 
   app.get<{ Params: { key: string } }>('/feature/:key', async (req, reply) => {
@@ -349,6 +362,12 @@ function parseDays(query: unknown, fallback: number): number {
   const n = Number.parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0 || n > 730) return fallback;
   return n;
+}
+
+function parseSource(query: unknown): SourceScope | null {
+  if (typeof query !== 'object' || query === null) return null;
+  const raw = (query as Record<string, unknown>).source;
+  return isSourceScope(raw) ? raw : null;
 }
 
 function parseShowDismissed(query: unknown): boolean {

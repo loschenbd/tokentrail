@@ -172,11 +172,18 @@ function renderBranchTable(bg: NonNullable<ProjectDetailVM['branchGraph']>): str
       </button>
       <div class="tail-body" hidden>${tail.map(row).join('')}</div>`;
   }
+  const startLbl = formatMonDay(bg.windowStart);
+  const endLbl = formatMonDay(bg.windowEnd);
   return `
     <div class="bwork">
+      <div class="bwork-legend">
+        <span class="bwork-lg"><span class="bwork-lg-sw bwork-lg-activity"></span>activity window <span class="bwork-lg-range">${startLbl}–${endLbl}</span></span>
+        <span class="bwork-lg"><span class="bwork-lg-sw bwork-lg-spend"></span>spend (bar length)</span>
+      </div>
       <div class="bwork-head">
-        <span></span><span></span>
-        <span class="bwork-axis"><span>${formatMonDay(bg.windowStart)}</span><span>${formatMonDay(bg.windowEnd)}</span></span>
+        <span></span>
+        <span class="bwork-hlabel-l">branch</span>
+        <span class="bwork-hlabel-l">activity</span>
         <span class="bwork-hlabel">spend</span>
         <span class="bwork-hlabel">sess</span>
       </div>

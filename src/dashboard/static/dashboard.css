@@ -820,7 +820,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .project-page .bwork-head,
 .project-page .bwork-row {
   display: grid;
-  grid-template-columns: 12px minmax(0, 1fr) 120px 150px 40px;
+  grid-template-columns: 12px minmax(0, 1fr) 88px 150px 40px;
   gap: 10px;
   align-items: center;
 }
@@ -831,13 +831,6 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 }
 .project-page .bwork-hlabel { font-family: var(--font-serif); font-size: 10px; color: var(--color-ink-subtle); text-align: right; }
 .project-page .bwork-hlabel-l { font-family: var(--font-serif); font-size: 10px; color: var(--color-ink-subtle); text-align: left; }
-/* Legend that names the two bars — the row's activity window (when) and its spend (how much). */
-.project-page .bwork-legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 2px 0 12px; font-size: 11px; color: var(--color-ink-muted); }
-.project-page .bwork-lg { display: inline-flex; align-items: center; gap: 6px; }
-.project-page .bwork-lg-range { color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; }
-.project-page .bwork-lg-sw { position: relative; width: 22px; height: 9px; border-radius: 3px; background: var(--color-fill-track); flex: none; }
-.project-page .bwork-lg-activity::after { content: ""; position: absolute; left: 28%; right: 28%; top: 0; bottom: 0; border-radius: 3px; background: var(--color-accent); }
-.project-page .bwork-lg-spend::after { content: ""; position: absolute; left: 0; right: 32%; top: 0; bottom: 0; border-radius: 3px; background: var(--color-accent); }
 .project-page .bwork-row { padding: 8px 6px; border-radius: 8px; }
 .project-page .bwork-row:hover { background: var(--color-hover-bg); }
 .project-page .bwork-stale { opacity: 0.55; }
@@ -848,9 +841,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .project-page .bwork-name { font-family: var(--font-mono); font-size: 12px; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .project-page .bwork-stale .bwork-name { color: var(--color-ink-muted); }
 .project-page .bwork-tick { color: var(--color-accent); font-weight: 700; margin-left: 4px; }
-.project-page .bwork-track { position: relative; height: 14px; background: var(--color-fill-track); border-radius: 3px; }
-.project-page .bwork-seg { position: absolute; top: 3px; height: 8px; border-radius: 4px; background: var(--color-accent); }
-.project-page .bwork-stale .bwork-seg { background: repeating-linear-gradient(90deg, var(--color-ink-subtle) 0 3px, transparent 3px 6px); }
+.project-page .bwork-last { font-size: 11px; color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .project-page .bwork-spend { display: flex; align-items: center; gap: 8px; }
 .project-page .bwork-bar { flex: 1; height: 8px; background: var(--color-fill-track); border-radius: 4px; overflow: hidden; }
 .project-page .bwork-fill { display: block; height: 100%; background: var(--color-accent); border-radius: 4px; }
@@ -858,22 +849,22 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .project-page .bwork-amt { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--color-ink); min-width: 40px; text-align: right; }
 .project-page .bwork-sess { font-size: 11px; color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; text-align: right; }
 /* Mobile: the 5-col grid can't fit a readable branch name, so stack each row —
-   name gets its own full-width line, the two bars sit below it. */
+   name gets its own line beside the dot, last-active date and sessions ride the
+   top line, and the spend bar spans full-width below. */
 @media (max-width: 640px) {
   .project-page .bwork-head { display: none; }
   .project-page .bwork-row {
-    grid-template-columns: 14px minmax(0, 1fr) auto;
+    grid-template-columns: 14px minmax(0, 1fr) auto auto;
     grid-template-areas:
-      "dot name sess"
-      "trk trk  trk"
-      "spd spd  spd";
+      "dot name last sess"
+      "spd spd  spd  spd";
     row-gap: 6px;
     column-gap: 8px;
     padding: 10px 6px;
   }
   .project-page .bwork-dot { grid-area: dot; }
   .project-page .bwork-name { grid-area: name; white-space: normal; overflow-wrap: anywhere; }
-  .project-page .bwork-track { grid-area: trk; }
+  .project-page .bwork-last { grid-area: last; }
   .project-page .bwork-spend { grid-area: spd; }
   .project-page .bwork-sess { grid-area: sess; }
   .project-page .bwork-sess::after { content: " sess"; color: var(--color-ink-subtle); }

@@ -1,5 +1,7 @@
 import type DatabaseType from 'better-sqlite3';
 import { bucketProject } from '../lib/project-bucket.js';
+import { getConfig } from '../../lib/config.js';
+import { buildBudget, type BudgetReport } from './budget.js';
 import {
   hiddenFeatureKeys,
   rollupVisiblePredicate,
@@ -133,6 +135,11 @@ export type OverviewVM = {
     repo: string | null;
     authoredAt: string | null;
   }>;
+
+  // Cycle-to-date burn rate vs the user's configured monthly budget. Null
+  // when no budget (global or per-source) is configured — the sidebar card
+  // falls back to a "set a budget" prompt.
+  budget: BudgetReport | null;
 };
 
 export function buildOverview(
@@ -491,6 +498,14 @@ export function buildOverview(
     };
   }
 
+  // --- budget: cycle-to-date burn rate vs the configured monthly cap ---
+  const cfg = getConfig();
+  const budget = buildBudget(db, {
+    budgetUsd: cfg.monthlyBudgetUsd,
+    cycleStartDay: cfg.budgetCycleStartDay,
+    sourceBudgets: cfg.sourceBudgets,
+  });
+
   return {
     windowDays,
     totalUsd: total,
@@ -508,6 +523,7 @@ export function buildOverview(
     unattributed,
     anomalies,
     recentCommits,
+    budget,
   };
 }
 

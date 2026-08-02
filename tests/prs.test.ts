@@ -39,13 +39,18 @@ function insertCommit(db: Database.Database, opts: {
 }
 
 function insertPr(db: Database.Database, opts: {
-  sessionId: string; repo: string; prNumber: number; headBranch: string;
+  sessionId: string; repo: string; prNumber: number; headBranch: string; merged?: boolean;
 }) {
   db.prepare(
     `INSERT INTO session_prs
        (session_id, repo, pr_number, pr_title, pr_url, pr_state, head_branch, merged_at)
-     VALUES (?, ?, ?, 't', 'u', 'open', ?, NULL)`
-  ).run(opts.sessionId, opts.repo, opts.prNumber, opts.headBranch);
+     VALUES (?, ?, ?, 't', 'u', ?, ?, ?)`
+  ).run(
+    opts.sessionId, opts.repo, opts.prNumber,
+    opts.merged ? 'merged' : 'open',
+    opts.headBranch,
+    opts.merged ? '2026-06-16T00:00:00Z' : null,
+  );
 }
 
 describe('findPrCandidateTuples', () => {
@@ -110,13 +115,16 @@ describe('findPrCandidateTuples', () => {
     ]);
   });
 
-  test('skips (session, repo) pairs already in session_prs unless force', () => {
+  test('re-scans sessions with an open PR (to catch a later merge), skips settled merged ones unless force', () => {
     const db = makeDb();
-    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-15T10:00:00Z', repo: 'o/r', branch: 'feat/x' });
-    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 42, headBranch: 'feat/x' });
-    assert.deepEqual(findPrCandidateTuples(db), []);
-    const forced = findPrCandidateTuples(db, { force: true });
-    assert.equal(forced.length, 1);
+    insertEvent(db, { id: 'e1', sessionId: 's1', timestamp: '2026-06-15T10:00:00Z', repo: 'o/r', branch: 'feat/open' });
+    insertEvent(db, { id: 'e2', sessionId: 's2', timestamp: '2026-06-15T10:00:00Z', repo: 'o/r', branch: 'feat/merged' });
+    insertPr(db, { sessionId: 's1', repo: 'o/r', prNumber: 1, headBranch: 'feat/open' });                // still open
+    insertPr(db, { sessionId: 's2', repo: 'o/r', prNumber: 2, headBranch: 'feat/merged', merged: true }); // settled
+    // s1's PR could still merge later, so it stays a candidate; s2 is done → skipped.
+    assert.deepEqual(findPrCandidateTuples(db), [{ sessionId: 's1', repo: 'o/r', branch: 'feat/open' }]);
+    // force re-scans everything, merged or not.
+    assert.equal(findPrCandidateTuples(db, { force: true }).length, 2);
   });
 
   test('multiple non-mainline branches in one session produce multiple tuples', () => {

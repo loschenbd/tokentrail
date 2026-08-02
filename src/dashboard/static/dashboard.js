@@ -1210,20 +1210,46 @@
     liftDomBands();   // after all swatch/sub-bar rendering; lifts hues on dark
   });
 
-  // Theme toggle: flip between light/dark, persist the choice, and rebuild the
-  // chart so its axis/grid colors match. Delegated so it survives re-renders.
-  document.addEventListener('click', function (e) {
-    const btn = e.target.closest('#theme-toggle');
-    if (!btn) return;
+  // Theme preference. Stored in localStorage as 'system' | 'light' | 'dark'.
+  // The inline <head> script applies light/dark before first paint; 'system'
+  // (or absent) leaves no data-theme so the CSS follows prefers-color-scheme.
+  // The control lives on the Settings page (Appearance) — there is no header
+  // toggle. applyTheme also rebuilds the uPlot chart, which bakes its colors.
+  function applyTheme(pref) {
     const root = document.documentElement;
-    const current = root.getAttribute('data-theme')
-      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    const next = current === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', next);
-    try { localStorage.setItem('tt-theme', next); } catch (err) { /* private mode */ }
+    if (pref === 'light' || pref === 'dark') root.setAttribute('data-theme', pref);
+    else root.removeAttribute('data-theme');   // 'system' → follow the OS
+    try { localStorage.setItem('tt-theme', pref); } catch (err) { /* private mode */ }
     if (window.__ttRerenderChart) window.__ttRerenderChart();
     liftDomBands();   // recolor server/JS band swatches + sub-bars for the new theme
-  });
+  }
+
+  // Wire the Settings appearance radios (present only on /settings): reflect the
+  // stored preference and apply changes live.
+  (function wireThemeControl() {
+    const radios = document.querySelectorAll('input[name="theme-pref"]');
+    if (!radios.length) return;
+    let stored = 'system';
+    try { stored = localStorage.getItem('tt-theme') || 'system'; } catch (e) { /* ignore */ }
+    if (stored !== 'light' && stored !== 'dark') stored = 'system';
+    radios.forEach((r) => {
+      r.checked = r.value === stored;
+      r.addEventListener('change', () => { if (r.checked) applyTheme(r.value); });
+    });
+  })();
+
+  // In 'system' mode a live OS light/dark flip recolors the CSS on its own, but
+  // the uPlot canvas bakes its colors — so rebuild it when the OS theme changes.
+  try {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      let pref = 'system';
+      try { pref = localStorage.getItem('tt-theme') || 'system'; } catch (e) { /* ignore */ }
+      if (pref !== 'light' && pref !== 'dark') {
+        if (window.__ttRerenderChart) window.__ttRerenderChart();
+        liftDomBands();
+      }
+    });
+  } catch (e) { /* older Safari lacks addEventListener on MediaQueryList */ }
 
   // Anomaly dismiss/restore actions. Delegated handler so we don't need
   // to re-bind after server-rendered re-renders.

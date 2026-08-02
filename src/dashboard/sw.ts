@@ -13,8 +13,11 @@ function appVersion(): string {
   }
 }
 
-// Cache-first for /static/* only; everything else (HTML pages, /api/*) is
-// network-only so live spend figures are never served stale.
+// Network-first for /static/* only; everything else (HTML pages, /api/*) is
+// network-only so live spend figures are never served stale. Network-first
+// (rather than cache-first) means a new release's JS/CSS load the moment the
+// daemon is reachable — the cache is a pure offline fallback, so users never
+// get pinned to a stale cached bundle after an upgrade.
 export function serviceWorkerJs(): string {
   const cache = `tt-static-v${appVersion()}`;
   return `const CACHE = ${JSON.stringify(cache)};
@@ -36,13 +39,16 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || !url.pathname.startsWith('/static/')) return; // network-only
+  // Network-first: fetch fresh, refresh the cache on success, and fall back to
+  // the cached copy only when the network fails (offline).
   e.respondWith(
-    caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      if (!res.ok) return res;
-      const copy = res.clone();
-      e.waitUntil(caches.open(CACHE).then((c) => c.put(e.request, copy)));
+    fetch(e.request).then((res) => {
+      if (res && res.ok) {
+        const copy = res.clone();
+        e.waitUntil(caches.open(CACHE).then((c) => c.put(e.request, copy)));
+      }
       return res;
-    }))
+    }).catch(() => caches.match(e.request))
   );
 });
 `;

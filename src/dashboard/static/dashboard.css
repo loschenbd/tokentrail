@@ -133,7 +133,23 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 
 .layout { display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-l); }
 .main-col, .side-col { display: flex; flex-direction: column; gap: var(--space-l); }
-@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+@media (max-width: 900px) {
+  /* Single column: flatten both columns into one flow (display:contents) so
+     cards from the main and side columns can be interleaved into a sensible
+     mobile reading order via `order`, instead of "all main cards, then all
+     side cards". Order: headline total → budget → trend → burn paths →
+     this week → unattributed → worth a look → recent commits. */
+  .layout { display: flex; flex-direction: column; gap: var(--space-l); }
+  .main-col, .side-col { display: contents; }
+  .hero-card    { order: 1; }
+  .budget-card  { order: 2; }
+  .chart-card   { order: 3; }
+  .burn-card    { order: 4; }
+  .week-card    { order: 5; }
+  .unatt-card   { order: 6; }
+  .worth-card   { order: 7; }
+  .commits-card { order: 8; }
+}
 
 /* Cards: stamps on paper — hairline border, 2px corners, whisper shadow. */
 .card {

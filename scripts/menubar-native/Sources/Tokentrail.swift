@@ -14,6 +14,7 @@
 import SwiftUI
 import Charts
 import AppKit
+import UserNotifications
 
 // MARK: - Wire model (matches /api/today exactly)
 
@@ -173,6 +174,29 @@ enum Api {
     }
 }
 
+// Pure threshold-crossing decision. For each budget (global + sources), fire a
+// notification the FIRST time cycle-to-date pctUsed crosses 80 or 100 within a
+// cycle. Markers are keyed "<cycleStart>:<key>:<threshold>" so they auto-expire
+// when the cycle rolls (a new cycleStart yields fresh keys). Uses actual spend
+// (pctUsed), never the noisy projection. Testable without UNUserNotification.
+func newlyCrossed(
+    prevMarkers: Set<String>,
+    statuses: [(key: String, pctUsed: Double, cycleStart: String)]
+) -> (fired: [(key: String, threshold: Int)], next: Set<String>) {
+    var next = prevMarkers
+    var fired: [(key: String, threshold: Int)] = []
+    for s in statuses {
+        for threshold in [80, 100] {
+            let marker = "\(s.cycleStart):\(s.key):\(threshold)"
+            if s.pctUsed >= Double(threshold) && !next.contains(marker) {
+                next.insert(marker)
+                fired.append((key: s.key, threshold: threshold))
+            }
+        }
+    }
+    return (fired, next)
+}
+
 // MARK: - Store
 
 @MainActor
@@ -180,6 +204,9 @@ final class Store: ObservableObject {
     @Published var today: TodayResponse?
     @Published var error: String?
     private var timer: Timer?
+    private var budgetMarkers: Set<String> =
+        Set(UserDefaults.standard.stringArray(forKey: "budgetMarkers") ?? [])
+    private var didRequestAuth = false
 
     init(preloaded: TodayResponse? = nil) {
         self.today = preloaded
@@ -196,11 +223,47 @@ final class Store: ObservableObject {
 
     func refresh() async {
         do {
-            today = try await Api.fetch()
+            let t = try await Api.fetch()
+            today = t
             error = nil
+            maybeNotify(t)
         } catch {
             self.error = "dashboard not running"
         }
+    }
+
+    // Fires a threshold notification the first time cycle-to-date spend
+    // crosses 80% or 100% of a budget (global or a per-source one), once per
+    // threshold per cycle. Markers persist across launches via UserDefaults.
+    private func maybeNotify(_ t: TodayResponse) {
+        guard let b = t.budget else { return }
+        if !didRequestAuth {
+            didRequestAuth = true
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
+        var statuses: [(key: String, pctUsed: Double, cycleStart: String)] = []
+        if b.budgetUsd > 0 { statuses.append(("global", b.pctUsed, b.cycleStart)) }
+        for s in (b.sources ?? []) { statuses.append((s.key, s.pctUsed, b.cycleStart)) }
+        let (fired, next) = newlyCrossed(prevMarkers: budgetMarkers, statuses: statuses)
+        if next != budgetMarkers {
+            budgetMarkers = next
+            UserDefaults.standard.set(Array(next), forKey: "budgetMarkers")
+        }
+        for f in fired {
+            let name = f.key == "global" ? "Budget" : label(for: f.key, in: b)
+            let content = UNMutableNotificationContent()
+            content.title = f.threshold >= 100 ? "\(name): over budget" : "\(name): trending over"
+            content.body = f.threshold >= 100
+                ? "Cycle-to-date spend has passed 100% of the cap."
+                : "Cycle-to-date spend has passed 80% of the cap."
+            let req = UNNotificationRequest(identifier: "tt-\(f.key)-\(f.threshold)-\(b.cycleStart)",
+                content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(req)
+        }
+    }
+
+    private func label(for key: String, in b: Budget) -> String {
+        (b.sources ?? []).first { $0.key == key }?.label ?? key
     }
 
     // Menu-bar title: "~$89.22". Tilde carries "estimated".
@@ -987,12 +1050,36 @@ struct TokentrailApp: App {
 @main
 enum Main {
     static func main() {
+        if CommandLine.arguments.contains("--selftest-notifications") {
+            runNotificationSelftest()
+            return
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--render-png"),
            i + 1 < CommandLine.arguments.count {
             renderPNG(to: CommandLine.arguments[i + 1])
             return
         }
         TokentrailApp.main()
+    }
+
+    static func runNotificationSelftest() {
+        func check(_ cond: Bool, _ msg: String) {
+            if !cond { FileHandle.standardError.write("FAIL: \(msg)\n".data(using: .utf8)!); exit(1) }
+        }
+        // First crossing of 80 fires; 100 not yet.
+        var (fired, markers) = newlyCrossed(prevMarkers: [], statuses: [("global", 85, "2026-08-01")])
+        check(fired.count == 1 && fired[0].threshold == 80, "80 should fire once")
+        // Same cycle, same pct: no re-fire.
+        (fired, markers) = newlyCrossed(prevMarkers: markers, statuses: [("global", 85, "2026-08-01")])
+        check(fired.isEmpty, "no re-fire within a cycle")
+        // Crossing 100 now fires only 100.
+        (fired, markers) = newlyCrossed(prevMarkers: markers, statuses: [("global", 102, "2026-08-01")])
+        check(fired.count == 1 && fired[0].threshold == 100, "100 fires once")
+        // New cycle resets — 80 fires again under the new cycleStart.
+        (fired, _) = newlyCrossed(prevMarkers: markers, statuses: [("global", 85, "2026-09-01")])
+        check(fired.count == 1 && fired[0].threshold == 80, "new cycle re-arms 80")
+        FileHandle.standardError.write("selftest-notifications OK\n".data(using: .utf8)!)
+        exit(0)
     }
 
     // Headless verification: fetch once, render the panel to a PNG, exit.

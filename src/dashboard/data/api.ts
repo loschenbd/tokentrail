@@ -4,7 +4,7 @@ import { buildOverview, bucketProject } from './overview.js';
 import { colorForProject } from '../lib/feature-colors.js';
 import { hiddenFeatureKeys, rollupVisiblePredicate, shownAnomalyPredicate } from '../lib/hidden-projects.js';
 import { buildSources, type SourcesResponse } from './sources.js';
-import { buildBudget, type BudgetStatus } from './budget.js';
+import { buildBudget, type BudgetReport } from './budget.js';
 import { getConfig } from '../../lib/config.js';
 
 const DASHBOARD_BASE_URL = 'http://127.0.0.1:4920';
@@ -66,7 +66,7 @@ export type TodayResponse = {
   sources30d: SourcesResponse;
   // Current billing-cycle budget status + burn-rate forecast. Null when no
   // budget is configured (monthlyBudgetUsd unset).
-  budget: BudgetStatus | null;
+  budget: BudgetReport | null;
 };
 
 // Cache the full payload between menubar polls (every 60 s). Between
@@ -103,7 +103,8 @@ export function buildToday(
   const cfg = getConfig();
   // Hidden patterns + budget config join the cache key so editing settings.json
   // takes effect on the next poll without waiting for a DB write.
-  const cacheKey = `${todayCacheKey(db)};hidden=${hidden.join(',')};budget=${cfg.monthlyBudgetUsd}:${cfg.budgetCycleStartDay}`;
+  const sb = cfg.sourceBudgets;
+  const cacheKey = `${todayCacheKey(db)};hidden=${hidden.join(',')};budget=${cfg.monthlyBudgetUsd}:${cfg.budgetCycleStartDay}:${sb.claude},${sb.copilot},${sb.cursor}`;
   const cached = todayCache.get(db);
   if (cached && cached.key === cacheKey) return cached.value;
 
@@ -177,6 +178,7 @@ export function buildToday(
     budget: buildBudget(db, {
       budgetUsd: cfg.monthlyBudgetUsd,
       cycleStartDay: cfg.budgetCycleStartDay,
+      sourceBudgets: cfg.sourceBudgets,
     }),
   };
   todayCache.set(db, { key: cacheKey, value });

@@ -125,10 +125,17 @@ function renderTrendLegend(
   return rows.map((p) => {
     const clickable = p.clickable ? '1' : '0';
     const expandable = p.key === OTHER_KEY && otherProjects.length > 0;
+    // Nav chevron: mobile-only affordance to open the project page, since on
+    // touch a row tap now toggles focus instead of navigating. Hidden on
+    // desktop via CSS (where the whole row is the click target).
+    const nav = p.clickable && !expandable
+      ? `<a class="legend-nav" href="/project/${encodeURIComponent(p.key)}" aria-label="Open ${escapeHtml(p.name)}" tabindex="-1">&#8250;</a>`
+      : '';
     const row = `<li class="trend-legend-row" data-project-key="${escapeHtml(p.key)}" data-project-color="${escapeHtml(p.color)}" data-clickable="${clickable}"${expandable ? ' data-expandable="1" role="button" tabindex="0" aria-expanded="false"' : ''}>
       <span class="swatch" style="background:${escapeHtml(p.color)}"></span>
       <span class="name">${escapeHtml(p.name)}${expandable ? ' <span class="chevron">&#9656;</span>' : ''}</span>
       <span class="amt">$${p.totalUsd.toFixed(0)}</span>
+      ${nav}
     </li>`;
     if (!expandable) return row;
     // Sub-rows are flat siblings (not a nested list): the legend <ul> is a

@@ -261,20 +261,41 @@
     // draw: when a project is active (legend hover or cursor inside its
     // band), every other band ghosts to low opacity in place.
     let activeKey = null;
+    const colorByKey = {};
+    stackOrder.forEach((proj) => { colorByKey[proj.key] = proj.color; });
+    // Fills are STATIC here on purpose: uPlot resolves a series' stroke/fill
+    // once (cached in _fill/_stroke) and does not re-run a function on redraw,
+    // so the focus effect is driven by writing those cached values directly in
+    // setActiveKey below.
     const series = [{}].concat(stackOrder.map((proj) => ({
       label: proj.name,
-      stroke: () => (activeKey && proj.key !== activeKey ? hexToRgba(proj.color, 0.25) : proj.color),
-      fill: () => (activeKey && proj.key !== activeKey ? hexToRgba(proj.color, 0.15) : hexToRgba(proj.color, 0.92)),
+      stroke: proj.color,
+      fill: hexToRgba(proj.color, 0.92),
       width: 1,
       points: { show: false },
     })));
-    // Bands: each band fills between series idx and idx-1 (stacked area).
+    // Focus overlay: the active project's own daily $ (un-stacked, from zero),
+    // drawn last so it sits on top of the ghosted stack; transparent until a
+    // project is focused (see setActiveKey).
+    series.push({
+      label: '__focus__',
+      stroke: 'rgba(0,0,0,0)',
+      fill: 'rgba(0,0,0,0)',
+      width: 1.5,
+      points: { show: false },
+    });
+    // Bands: each band fills between series idx and idx-1 (stacked area). The
+    // overlay series is intentionally outside every band so uPlot fills it to
+    // the zero baseline.
     const bands = [];
     for (let i = 1; i < stackOrder.length; i++) {
       bands.push({ series: [i + 1, i] });
     }
 
-    const data = [xs].concat(seriesYs);
+    // The overlay column: the focused project's raw daily values, or nulls
+    // (uPlot draws nothing) when nothing is focused.
+    const focusYs = () => (activeKey ? days.map((d) => d.bands[activeKey] || 0) : days.map(() => null));
+    const data = [xs].concat(seriesYs, [focusYs()]);
 
     // Declare setActiveKey before opts so it can be safely called from hooks.
     let chartCanvas;
@@ -287,7 +308,34 @@
       // setCursor calls this every mouse move.
       if (key !== activeKey) {
         activeKey = key;
-        if (node.__uplot) node.__uplot.redraw();
+        const u = node.__uplot;
+        if (u) {
+          // 1) swap the overlay column in place (no rescale — the stack sets
+          //    y-max). Mutating u.data directly and letting redraw() rebuild
+          //    the path avoids setData's DEFERRED repaint, which re-resolves
+          //    the static series fills and erases the ghost/overlay we set
+          //    synchronously below.
+          u.data[stackOrder.length + 1] = focusYs();
+          // 2) write the resolved fills directly: ghost every stacked band to
+          //    ~12% while a project is focused, and paint the overlay in the
+          //    focused project's color. uPlot draws from these cached fields.
+          for (let i = 1; i <= stackOrder.length; i++) {
+            const c = stackOrder[i - 1].color;
+            u.series[i]._fill = key ? hexToRgba(c, 0.12) : hexToRgba(c, 0.92);
+            u.series[i]._stroke = key ? hexToRgba(c, 0.15) : c;
+          }
+          const ov = u.series[stackOrder.length + 1];
+          const fc = key ? (colorByKey[key] || '#888888') : null;
+          ov._fill = fc ? hexToRgba(fc, 0.85) : 'rgba(0,0,0,0)';
+          ov._stroke = fc ? hexToRgba(fc, 0.95) : 'rgba(0,0,0,0)';
+          // 3) repaint with the updated fills. Rebuild paths but DON'T
+          //    recompute scales: the stack total always sets y-max and the
+          //    overlay (one project's daily $) can never exceed it, so a
+          //    rescale here is at best a no-op and at worst collapses the
+          //    axis if it fires against a mid-init chart (e.g. a theme
+          //    rebuild in flight).
+          u.redraw(true, false);
+        }
       }
       if (legend) {
         legend.querySelectorAll('.trend-legend-row').forEach((li) => {
@@ -372,15 +420,31 @@
     const legend = document.getElementById('trend-legend');
     chartCanvas = node.querySelector('canvas');
 
+    const canHover = window.matchMedia('(hover: hover)').matches;
     if (legend) {
       legend.querySelectorAll('.trend-legend-row').forEach((li) => {
         const key = li.getAttribute('data-project-key');
         const clickable = li.getAttribute('data-clickable') === '1';
-        li.addEventListener('mouseenter', () => setActiveKey(key));
-        li.addEventListener('mouseleave', () => setActiveKey(null));
-        if (clickable && key) {
-          li.addEventListener('click', () => {
-            window.location.href = '/project/' + encodeURIComponent(key);
+        const expandable = li.getAttribute('data-expandable') === '1';
+        // Desktop: hover focuses (brings the project to the front). On touch,
+        // hover events are unreliable, so focus is driven by tap below.
+        li.addEventListener('mouseenter', () => { if (canHover) setActiveKey(key); });
+        li.addEventListener('mouseleave', () => { if (canHover) setActiveKey(null); });
+        if (canHover) {
+          // Desktop click navigates (the nav chevron is hidden on desktop).
+          if (clickable && key) {
+            li.addEventListener('click', (e) => {
+              if (e.target.closest('.legend-nav')) return;
+              window.location.href = '/project/' + encodeURIComponent(key);
+            });
+          }
+        } else if (key && !expandable) {
+          // Touch: tapping a project row toggles its focus; tapping it again
+          // (or another row) clears/switches. The chevron (.legend-nav) still
+          // navigates to the project page.
+          li.addEventListener('click', (e) => {
+            if (e.target.closest('.legend-nav')) return;
+            setActiveKey(activeKey === key ? null : key);
           });
         }
       });

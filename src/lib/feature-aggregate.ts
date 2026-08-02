@@ -25,7 +25,7 @@ export type FeatureBucket = {
 // 'copilot'. Cursor is NOT in usage_events (separate metered tables) and is
 // handled by the scoped-rollup layer, not here.
 export type UsageSource = 'claude' | 'copilot';
-const SOURCE_VALUES: Record<UsageSource, string[]> = {
+export const SOURCE_VALUES: Record<UsageSource, string[]> = {
   claude: ['jsonl', 'hook'],
   copilot: ['copilot'],
 };

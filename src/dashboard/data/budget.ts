@@ -1,4 +1,6 @@
 import type DatabaseType from 'better-sqlite3';
+import { SOURCE_VALUES } from '../../lib/feature-aggregate.js';
+import type { SourceBudgets } from '../../lib/config.js';
 
 // Burn-rate / budget status for the current billing cycle. Null when no budget
 // is configured (feature is opt-in). Spend covers ALL sources the user sees as
@@ -24,71 +26,100 @@ export type BudgetStatus = {
   state: 'ok' | 'warn' | 'over';
 };
 
+export type BudgetSourceKey = 'claude' | 'copilot' | 'cursor';
+export type SourceBudgetStatus = BudgetStatus & { key: BudgetSourceKey; label: string };
+export type BudgetReport = BudgetStatus & { sources: SourceBudgetStatus[] };
+
+const SOURCE_LABELS: Record<BudgetSourceKey, string> = {
+  claude: 'Claude Code', copilot: 'Copilot', cursor: 'Cursor',
+};
+
 // Days into a cycle before the linear projection is worth showing.
 const PROJECTION_MIN_DAYS = 3;
+
+// Pure: spend + budget + cycle position → the full status shape. Shared by the
+// global budget and every per-source cap so the state logic can't diverge.
+function computeStatus(
+  spentUsd: number, budgetUsd: number, daysElapsed: number, daysInCycle: number,
+  cycleStart: string, cycleEnd: string,
+): BudgetStatus {
+  if (budgetUsd <= 0) {
+    const projectedUsd = round2(daysElapsed > 0 ? (spentUsd / daysElapsed) * daysInCycle : spentUsd);
+    return { budgetUsd: 0, cycleStart, cycleEnd, spentUsd, projectedUsd, pctUsed: 0,
+      projectedPct: 0, daysElapsed, daysInCycle, projectionReliable: daysElapsed >= PROJECTION_MIN_DAYS, state: 'ok' };
+  }
+  const projectedUsd = round2(daysElapsed > 0 ? (spentUsd / daysElapsed) * daysInCycle : spentUsd);
+  const pctUsed = round1((spentUsd / budgetUsd) * 100);
+  const projectedPct = round1((projectedUsd / budgetUsd) * 100);
+  const projectionReliable = daysElapsed >= PROJECTION_MIN_DAYS;
+  // Once we trust the projection, either an already-over cycle or a run-rate
+  // heading over trips the state. Early on, only actual spend counts — a single
+  // spendy day shouldn't scream "trending over".
+  const state: BudgetStatus['state'] = projectionReliable
+    ? (pctUsed >= 100 || projectedPct > 100 ? 'over' : projectedPct >= 80 ? 'warn' : 'ok')
+    : (pctUsed >= 100 ? 'over' : pctUsed >= 80 ? 'warn' : 'ok');
+  return { budgetUsd, cycleStart, cycleEnd, spentUsd, projectedUsd, pctUsed,
+    projectedPct, daysElapsed, daysInCycle, projectionReliable, state };
+}
+
+// Cycle-to-date spend for one source, using the SAME source→spend mapping as
+// the per-harness overview (SOURCE_VALUES for usage_events; cursor_daily_cost
+// for Cursor).
+function sourceSpend(db: DatabaseType.Database, key: BudgetSourceKey, start: string, end: string): number {
+  if (key === 'cursor') {
+    return (db.prepare(`SELECT COALESCE(SUM(usd),0) AS u FROM cursor_daily_cost WHERE date >= ? AND date < ?`)
+      .get(start, end) as { u: number }).u;
+  }
+  const vals = SOURCE_VALUES[key];                      // fixed whitelist, no injection
+  const ph = vals.map(() => '?').join(',');
+  return (db.prepare(
+    `SELECT COALESCE(SUM(estimated_cost_usd),0) AS u FROM usage_events
+      WHERE source IN (${ph}) AND date(timestamp) >= ? AND date(timestamp) < ?`
+  ).get(...vals, start, end) as { u: number }).u;
+}
 
 export function buildBudget(
   db: DatabaseType.Database,
   // `today` (YYYY-MM-DD) is injectable for deterministic tests; production
   // leaves it undefined and we read the DB's localtime clock.
-  opts: { budgetUsd: number | null; cycleStartDay: number; today?: string }
-): BudgetStatus | null {
-  if (!opts.budgetUsd || opts.budgetUsd <= 0) return null;
+  opts: { budgetUsd: number | null; cycleStartDay: number; sourceBudgets?: SourceBudgets; today?: string }
+): BudgetReport | null {
+  const sb: SourceBudgets = opts.sourceBudgets ?? { claude: null, copilot: null, cursor: null };
+  const hasGlobal = !!opts.budgetUsd && opts.budgetUsd > 0;
+  const configuredSources = (Object.keys(sb) as BudgetSourceKey[]).filter((k) => sb[k] && sb[k]! > 0);
+  if (!hasGlobal && configuredSources.length === 0) return null;
 
   // Use the app's localtime "today" so the cycle lines up with the rest of the UI.
   const today =
     opts.today ?? (db.prepare(`SELECT date('now', 'localtime') AS d`).get() as { d: string }).d;
   const { cycleStart, cycleEnd, daysElapsed, daysInCycle } = cycleBounds(today, opts.cycleStartDay);
 
-  // usage_events (Claude + Copilot) within the cycle.
-  const ue = (db
+  // Global blended spend (unchanged behavior): usage_events + cursor_daily_cost.
+  const ueAll = (db
     .prepare(
       `SELECT COALESCE(SUM(estimated_cost_usd), 0) AS u FROM usage_events
         WHERE date(timestamp) >= ? AND date(timestamp) < ?`
     )
     .get(cycleStart, cycleEnd) as { u: number }).u;
-  // Cursor's per-day metered rollup within the cycle (its own table).
-  const cur = (db
+  const curAll = (db
     .prepare(
       `SELECT COALESCE(SUM(usd), 0) AS u FROM cursor_daily_cost
         WHERE date >= ? AND date < ?`
     )
     .get(cycleStart, cycleEnd) as { u: number }).u;
+  const globalSpent = round2(ueAll + curAll);
 
-  const spentUsd = round2(ue + cur);
-  const projectedUsd = round2(daysElapsed > 0 ? (spentUsd / daysElapsed) * daysInCycle : spentUsd);
-  const pctUsed = round1((spentUsd / opts.budgetUsd) * 100);
-  const projectedPct = round1((projectedUsd / opts.budgetUsd) * 100);
-  const projectionReliable = daysElapsed >= PROJECTION_MIN_DAYS;
+  // When there's no global budget we still return a report (for the source
+  // caps); budgetUsd 0 signals "no global bar" to every UI.
+  const global = computeStatus(globalSpent, hasGlobal ? opts.budgetUsd! : 0, daysElapsed, daysInCycle, cycleStart, cycleEnd);
 
-  // Once we trust the projection, either an already-over cycle or a run-rate
-  // heading over trips the state. Early on, only actual spend counts — a single
-  // spendy day shouldn't scream "trending over".
-  const state: BudgetStatus['state'] = projectionReliable
-    ? pctUsed >= 100 || projectedPct > 100
-      ? 'over'
-      : projectedPct >= 80
-        ? 'warn'
-        : 'ok'
-    : pctUsed >= 100
-      ? 'over'
-      : pctUsed >= 80
-        ? 'warn'
-        : 'ok';
+  const sources: SourceBudgetStatus[] = configuredSources.map((key) => {
+    const spent = round2(sourceSpend(db, key, cycleStart, cycleEnd));
+    const s = computeStatus(spent, sb[key]!, daysElapsed, daysInCycle, cycleStart, cycleEnd);
+    return { ...s, key, label: SOURCE_LABELS[key] };
+  });
 
-  return {
-    budgetUsd: opts.budgetUsd,
-    cycleStart,
-    cycleEnd,
-    spentUsd,
-    projectedUsd,
-    pctUsed,
-    projectedPct,
-    daysElapsed,
-    daysInCycle,
-    projectionReliable,
-    state,
-  };
+  return { ...global, sources };
 }
 
 // Pure date math on a YYYY-MM-DD string. cycleStartDay is 1-28. The cycle is

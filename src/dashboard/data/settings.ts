@@ -1,5 +1,6 @@
 import type DatabaseType from 'better-sqlite3';
 import { readSettings } from '../../lib/settings.js';
+import { getConfig, type SourceBudgets } from '../../lib/config.js';
 import { bucketProject } from '../lib/project-bucket.js';
 import { matchesHiddenPattern, normalizeProjectToken } from '../lib/hidden-projects.js';
 
@@ -14,10 +15,17 @@ export type SettingsViewModel = {
   // Every project in the ledger with its current visibility, so the page
   // can offer a picker instead of asking the user to type a pattern.
   projects: Array<{ key: string; name: string; hidden: boolean }>;
+  // Budget values come from the Tokentrail config file (not settings.json).
+  budget: {
+    monthlyBudgetUsd: number | null;
+    budgetCycleStartDay: number;
+    sourceBudgets: SourceBudgets;
+  };
 };
 
 export function buildSettingsVM(db?: DatabaseType.Database): SettingsViewModel {
   const s = readSettings();
+  const cfg = getConfig();
   const key = s.llm.openrouter.apiKey ?? null;
   const patterns = s.hiddenProjects.map(normalizeProjectToken).filter((p) => p.length > 0);
 
@@ -57,5 +65,10 @@ export function buildSettingsVM(db?: DatabaseType.Database): SettingsViewModel {
     },
     hiddenProjects: s.hiddenProjects,
     projects,
+    budget: {
+      monthlyBudgetUsd: cfg.monthlyBudgetUsd,
+      budgetCycleStartDay: cfg.budgetCycleStartDay,
+      sourceBudgets: cfg.sourceBudgets,
+    },
   };
 }

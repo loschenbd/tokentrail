@@ -4,6 +4,7 @@ import { claudeProjectsDir } from '../../services/jsonl-reader.js';
 import { renderTrailMap } from './trail-map.js';
 import { colorFor, STRIPED_SENTINEL, OTHER_KEY } from '../lib/feature-colors.js';
 import { renderProjectRows } from './project-rows.js';
+import { renderBudgetCard } from './budget-card.js';
 
 export function renderOverview(vm: OverviewVM): string {
   if (isEmpty(vm)) return renderEmptyState();
@@ -34,6 +35,8 @@ export function renderOverview(vm: OverviewVM): string {
       <div class="hero">$${vm.totalUsd.toFixed(0)}</div>
       <div class="delta ${vm.deltaPct >= 0 ? 'up' : 'down'}">${vm.deltaPct >= 0 ? '▲' : '▼'} ${Math.abs(vm.deltaPct)}% vs prior</div>
     </div>
+
+    ${renderBudgetCard(vm.budget)}
 
     <div class="card">
       <div class="label">This week</div>

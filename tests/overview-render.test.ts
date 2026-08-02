@@ -21,6 +21,7 @@ function emptyVM(): OverviewVM {
     unattributed: null,
     anomalies: [],
     recentCommits: [],
+    budget: null,
   };
 }
 

@@ -833,7 +833,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   text-align: right;
 }
 .project-page .pfeat-amt b { color: var(--color-ink); font-weight: 600; }
-.project-page .pfeat-tail-toggle {
+.project-page .tail-toggle {
   width: 100%;
   display: flex;
   justify-content: space-between;
@@ -848,8 +848,8 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   font-size: 12.5px;
   cursor: pointer;
 }
-.project-page .pfeat-tail-toggle:hover { color: var(--color-ink); }
-.project-page .pfeat-tail[hidden] { display: none; }
+.project-page .tail-toggle:hover { color: var(--color-ink); }
+.project-page .tail-body[hidden] { display: none; }
 
 /* --- project detail: active work --- */
 .project-page section[data-section="active-work"] .amt-tag {

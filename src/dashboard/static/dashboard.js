@@ -1202,17 +1202,19 @@
     renderTrailElevation();
     renderBranchGraph();
 
-    // Features long-tail expand/collapse on the project page.
-    document.querySelectorAll('[data-pfeat-tail]').forEach(function (btn) {
-      var collapsedLabel = btn.querySelector('.pfeat-tail-label').textContent;
+    // Generic expand/collapse for any folded tail (features list, branch table).
+    document.querySelectorAll('[data-tail-toggle]').forEach(function (btn) {
+      var body = btn.nextElementSibling;
+      if (!body) return;
+      var label = btn.querySelector('.tail-toggle-label');
+      var caret = btn.querySelector('.tail-toggle-caret');
+      var collapsedLabel = label ? label.textContent : '';
       btn.addEventListener('click', function () {
-        var tail = btn.nextElementSibling;
-        if (!tail) return;
-        var willOpen = tail.hasAttribute('hidden');
-        tail.toggleAttribute('hidden');
+        var willOpen = body.hasAttribute('hidden');
+        body.toggleAttribute('hidden');
         btn.setAttribute('aria-expanded', String(willOpen));
-        btn.querySelector('.pfeat-tail-label').textContent = willOpen ? 'Collapse long tail' : collapsedLabel;
-        btn.querySelector('.pfeat-tail-caret').textContent = willOpen ? '⌄' : '›';
+        if (label) label.textContent = willOpen ? 'Collapse' : collapsedLabel;
+        if (caret) caret.textContent = willOpen ? '⌄' : '›';
       });
     });
 

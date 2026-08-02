@@ -269,10 +269,10 @@ function renderFeatures(vm: ProjectDetailVM, color: string): string {
       : `+ ${tail.length} more · $${formatUsdCommas(tailSum)} total`;
     const tailRows = tail.map((f, i) => row(f, visibleCount + i)).join('');
     tailBlock = `
-      <button class="pfeat-tail-toggle" type="button" data-pfeat-tail aria-expanded="false">
-        <span class="pfeat-tail-label">${label}</span><span class="pfeat-tail-caret">›</span>
+      <button class="tail-toggle" type="button" data-tail-toggle aria-expanded="false">
+        <span class="tail-toggle-label">${label}</span><span class="tail-toggle-caret">›</span>
       </button>
-      <div class="pfeat-tail" hidden>${tailRows}</div>`;
+      <div class="tail-body" hidden>${tailRows}</div>`;
   }
 
   return `

@@ -179,9 +179,9 @@ describe('renderProject features section', () => {
     ];
     const seg = extractSection(renderProject(baseVm({ totalUsd: 670, features: many })), 'features');
     // 5 features >= $10 stay visible; 3 (<$10) fold.
-    assert.match(seg, /data-pfeat-tail/);
+    assert.match(seg, /data-tail-toggle/);
     assert.match(seg, /\+ 3 more under \$10 · \$8 total/);
-    assert.match(seg, /class="pfeat-tail" hidden/);
+    assert.match(seg, /class="tail-body" hidden/);
     assert.match(seg, /Foxtrot/);   // tail row still in DOM (just hidden)
   });
 

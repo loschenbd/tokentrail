@@ -135,19 +135,19 @@ function renderActiveWork(vm: ProjectDetailVM): string {
 function renderBranchSummary(bg: NonNullable<ProjectDetailVM['branchGraph']>): string {
   const branches: BranchLifecycle[] = bg.branches ?? [];
   const bucket = (status: BranchLifecycle['status']) => branches.filter((b) => b.status === status);
-  const rowFor = (label: string, status: BranchLifecycle['status']) => {
+  const col = (label: string, status: BranchLifecycle['status']) => {
     const items = bucket(status);
     if (items.length === 0) return '';
-    const inline = items.map((b) => {
-      const usd = b.totalUsd > 0 ? ` <span class="muted">$${b.totalUsd.toFixed(0)}</span>` : '';
-      return `<span class="bsum-name">${escapeHtml(b.branch)}${usd}</span>`;
-    }).join(' · ');
-    return `<div class="bsum-row"><span class="bsum-k">${label} ${items.length}</span><span class="bsum-v">${inline}</span></div>`;
+    const rows = items.map((b) => {
+      const zero = b.totalUsd > 0 ? '' : ' zero';
+      return `<div class="bsum-item"><span class="bsum-branch">${escapeHtml(b.branch)}</span><span class="bsum-usd${zero}">$${b.totalUsd.toFixed(0)}</span></div>`;
+    }).join('');
+    return `<div class="bsum-col"><div class="bsum-col-head">${label} <span class="bsum-count">${items.length}</span></div><div class="bsum-items">${rows}</div></div>`;
   };
   return `<div class="branch-summary">
-    ${rowFor('Open',   'open')}
-    ${rowFor('Merged', 'merged')}
-    ${rowFor('Stale',  'stale')}
+    ${col('Open',   'open')}
+    ${col('Merged', 'merged')}
+    ${col('Stale',  'stale')}
   </div>`;
 }
 

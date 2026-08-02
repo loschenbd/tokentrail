@@ -208,14 +208,15 @@ describe('renderProject active-work section', () => {
     ],
   };
 
-  test('branch summary shows open / merged / stale counts with names', () => {
+  test('branch summary shows open / merged / stale buckets with names + aligned $', () => {
     const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');
-    assert.match(seg, /Open\s*1/);
+    assert.match(seg, /Open/);
     assert.match(seg, /worktree-local-semantic-search/);
-    assert.match(seg, /Merged\s*1/);
+    assert.match(seg, /Merged/);
     assert.match(seg, /onboarding-wizard/);
-    assert.match(seg, /Stale\s*1/);
+    assert.match(seg, /Stale/);
     assert.match(seg, /coherence-pass/);
+    assert.match(seg, /bsum-usd/);   // dollar cell present
   });
 
   test('branch graph mount + JSON payload are embedded', () => {

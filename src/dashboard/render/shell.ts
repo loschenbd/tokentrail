@@ -125,6 +125,7 @@ export function renderShell(opts: ShellOptions, body: string): string {
 ${bottomNav}
 <script src="/static/uPlot.iife.min.js"></script>
 <script src="/static/dashboard.js"></script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}</script>
 </body>
 </html>`;
 }

@@ -29,6 +29,7 @@ import { readSettings, writeSettings, type Settings } from '../lib/settings.js';
 import { hiddenProjectPatterns } from './lib/hidden-projects.js';
 import { getLLMClient } from '../lib/llm.js';
 import { saveBudgetConfig, type BudgetPatch, type SourceBudgets } from '../lib/config.js';
+import { serviceWorkerJs } from './sw.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
 
@@ -374,6 +375,12 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
         { src: '/static/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
       ],
     };
+  });
+
+  app.get('/sw.js', async (_req, reply) => {
+    reply.type('text/javascript; charset=utf-8');
+    reply.header('cache-control', 'no-cache');
+    return serviceWorkerJs();
   });
 
   // Static asset serving — small bespoke handler instead of @fastify/static

@@ -136,25 +136,18 @@ function renderActiveWork(vm: ProjectDetailVM): string {
 
 function renderBranchTable(bg: NonNullable<ProjectDetailVM['branchGraph']>): string {
   const branches = (bg.branches ?? []).slice().sort((a, b) => b.totalUsd - a.totalUsd);
-  const startMs = new Date(bg.windowStart).getTime();
-  const endMs = new Date(bg.windowEnd).getTime();
-  const span = Math.max(1, endMs - startMs);
   const leader = branches[0]?.totalUsd || 1;
-  const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
   const row = (b: BranchLifecycle): string => {
-    const firstMs = new Date(b.firstEventAt).getTime();
-    const lastMs = new Date(b.mergedAt || b.lastEventAt).getTime();
-    const left = clamp01((firstMs - startMs) / span) * 100;
-    const rawWidth = clamp01((lastMs - firstMs) / span) * 100;
-    const width = Math.min(Math.max(rawWidth, 4), 100 - left);
     const barPct = Math.max((b.totalUsd / leader) * 100, 1.2);
     const tick = b.status === 'merged' ? '<span class="bwork-tick">✓</span>' : '';
+    // Full timestamps (lastEventAt/mergedAt) → take the date part for formatting.
+    const lastDate = formatMonDay((b.mergedAt || b.lastEventAt).slice(0, 10));
     return `
       <div class="bwork-row bwork-${b.status}">
         <span class="bwork-dot"></span>
         <span class="bwork-name">${escapeHtml(b.branch)}${tick}</span>
-        <span class="bwork-track"><span class="bwork-seg" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%"></span></span>
+        <span class="bwork-last">last ${lastDate}</span>
         <span class="bwork-spend"><span class="bwork-bar"><span class="bwork-fill" style="width:${barPct.toFixed(1)}%"></span></span><span class="bwork-amt">$${b.totalUsd.toFixed(0)}</span></span>
         <span class="bwork-sess">${b.sessionCount}</span>
       </div>`;
@@ -172,18 +165,12 @@ function renderBranchTable(bg: NonNullable<ProjectDetailVM['branchGraph']>): str
       </button>
       <div class="tail-body" hidden>${tail.map(row).join('')}</div>`;
   }
-  const startLbl = formatMonDay(bg.windowStart);
-  const endLbl = formatMonDay(bg.windowEnd);
   return `
     <div class="bwork">
-      <div class="bwork-legend">
-        <span class="bwork-lg"><span class="bwork-lg-sw bwork-lg-activity"></span>activity window <span class="bwork-lg-range">${startLbl}–${endLbl}</span></span>
-        <span class="bwork-lg"><span class="bwork-lg-sw bwork-lg-spend"></span>spend (bar length)</span>
-      </div>
       <div class="bwork-head">
         <span></span>
         <span class="bwork-hlabel-l">branch</span>
-        <span class="bwork-hlabel-l">activity</span>
+        <span class="bwork-hlabel-l">last active</span>
         <span class="bwork-hlabel">spend</span>
         <span class="bwork-hlabel">sess</span>
       </div>

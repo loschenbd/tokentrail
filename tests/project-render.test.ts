@@ -57,18 +57,20 @@ describe('renderProject skeleton', () => {
 
   test('hero shows repo label, name, total, delta, session/feature counts, most-active feature', () => {
     const html = renderProject(baseVm());
-    assert.match(html, /repo:loschenbd\/archi/);   // repo label in natural case (Spectral naming voice)
+    assert.match(html, /repo:loschenbd\/archi/);
     assert.match(html, />archi</);
     assert.match(html, /\$2,?203/);
-    assert.match(html, /▲649% vs prior/);
-    assert.match(html, /17 sessions/);
-    assert.match(html, /18 features/);
+    assert.match(html, /▲649%/);
+    assert.match(html, /vs prior 30d/);
+    assert.match(html, />17</);            // sessions value cell
+    assert.match(html, /Sessions/);
+    assert.match(html, />18</);            // features value cell
     assert.match(html, /Local RAG \+ chatbot/);
   });
 
-  test('hero shows "(new project)" delta line when priorUsd is 0', () => {
+  test('hero shows "new project" delta cell when priorUsd is 0', () => {
     const html = renderProject(baseVm({ priorUsd: 0, deltaPct: 100 }));
-    assert.match(html, /\(new project\)/);
+    assert.match(html, /new project/);
   });
 
   test('hero omits most-active line when features is empty', () => {

@@ -22,18 +22,21 @@ export function renderProject(vm: ProjectDetailVM): string {
 
 function renderHero(vm: ProjectDetailVM): string {
   const label = renderRepoLabel(vm.projectKey);
-  const deltaLine = renderDeltaLine(vm);
+  const win = vm.dailySeries.length;
   const mostActive = vm.features.length > 0
-    ? `<div class="hero-most-active">most active: <a href="/feature/${encodeURIComponent(vm.features[0]!.featureKey)}">${escapeHtml(vm.features[0]!.featureName || vm.features[0]!.featureKey)}</a> <span class="muted">($${vm.features[0]!.totalUsd.toFixed(0)})</span></div>`
+    ? `<div class="pp-stat pp-stat-active"><div class="pp-stat-k">Most active</div><div class="pp-stat-v"><a href="/feature/${encodeURIComponent(vm.features[0]!.featureKey)}">${escapeHtml(vm.features[0]!.featureName || vm.features[0]!.featureKey)}</a> · $${vm.features[0]!.totalUsd.toFixed(0)}</div></div>`
     : '';
   return `
     <section class="card project-hero" data-section="hero">
       <div class="label">${label}</div>
       <div class="hero">${escapeHtml(vm.projectName)}</div>
-      <div class="hero-amount">$${formatUsdCommas(vm.totalUsd)}</div>
-      ${deltaLine}
-      <div class="hero-meta">${vm.sessionCount} sessions · ${vm.featureCount} features</div>
-      ${mostActive}
+      <div class="pp-statstrip">
+        <div class="pp-stat"><div class="pp-stat-k">Total · ${win}d</div><div class="pp-stat-v pp-stat-total">$${formatUsdCommas(vm.totalUsd)}</div></div>
+        ${renderDeltaCell(vm)}
+        <div class="pp-stat"><div class="pp-stat-k">Sessions</div><div class="pp-stat-v">${vm.sessionCount}</div></div>
+        <div class="pp-stat"><div class="pp-stat-k">Features</div><div class="pp-stat-v">${vm.featureCount}</div></div>
+        ${mostActive}
+      </div>
     </section>`;
 }
 
@@ -43,15 +46,16 @@ function renderRepoLabel(projectKey: string): string {
   return escapeHtml(projectKey);
 }
 
-function renderDeltaLine(vm: ProjectDetailVM): string {
+function renderDeltaCell(vm: ProjectDetailVM): string {
+  const win = vm.dailySeries.length;
   if (vm.priorUsd === 0 && vm.totalUsd > 0) {
-    return `<div class="hero-delta up">(new project)</div>`;
+    return `<div class="pp-stat pp-stat-delta"><div class="pp-stat-k">vs prior ${win}d</div><div class="pp-stat-v up">new project</div></div>`;
   }
   const arrow = vm.deltaPct >= 0 ? '▲' : '▼';
   const cls = vm.deltaPct >= 0 ? 'up' : 'down';
   const diff = vm.totalUsd - vm.priorUsd;
-  const diffStr = `$${formatUsdCommas(Math.abs(diff))} ${diff >= 0 ? 'more' : 'less'}`;
-  return `<div class="hero-delta ${cls}">${arrow}${Math.abs(vm.deltaPct)}% vs prior · <span class="muted">${diffStr}</span></div>`;
+  const diffStr = `${diff >= 0 ? '+' : '−'}$${formatUsdCommas(Math.abs(diff))}`;
+  return `<div class="pp-stat pp-stat-delta"><div class="pp-stat-k">vs prior ${win}d</div><div class="pp-stat-v ${cls}">${arrow}${Math.abs(vm.deltaPct)}% <span class="pp-delta-diff">${diffStr}</span></div></div>`;
 }
 
 function formatUsdCommas(n: number): string {

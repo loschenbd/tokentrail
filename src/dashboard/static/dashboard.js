@@ -7,6 +7,84 @@
     return v || fallback;
   }
 
+  // Is the dark theme currently effective? Mirrors the tokens' resolution:
+  // explicit data-theme wins, else the OS preference.
+  function isDark() {
+    const t = document.documentElement.getAttribute('data-theme');
+    if (t === 'dark') return true;
+    if (t === 'light') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
+  // Lift a project/feature hue for dark mode — raise HSL lightness (and a
+  // touch of saturation) so the cream-tuned Midori hues become luminous on
+  // the dark ground, matching how benjaminloschen.com lifts its Midori
+  // palette in .dark. Non-#rrggbb inputs (stripes, rgba fallbacks) pass
+  // through untouched. Used for BOTH the chart canvas (via renderTrend) and
+  // the DOM swatches (via liftDomBands) so a band and its legend swatch match.
+  function liftForDark(hex) {
+    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+    if (!m) return hex;
+    let r = parseInt(m[1], 16) / 255, g = parseInt(m[2], 16) / 255, b = parseInt(m[3], 16) / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    let h = 0, s = 0; const l = (mx + mn) / 2;
+    if (mx !== mn) {
+      const d = mx - mn;
+      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+      if (mx === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (mx === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h /= 6;
+    }
+    const L = Math.min(0.74, l + 0.24);        // the ~+0.23 lift the site uses
+    const S = Math.min(0.5, s * 1.05);
+    const c = (1 - Math.abs(2 * L - 1)) * S;
+    const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
+    const mm = L - c / 2;
+    let rr = 0, gg = 0, bb = 0; const hh = h * 6;
+    if (hh < 1) { rr = c; gg = x; } else if (hh < 2) { rr = x; gg = c; }
+    else if (hh < 3) { gg = c; bb = x; } else if (hh < 4) { gg = x; bb = c; }
+    else if (hh < 5) { rr = x; bb = c; } else { rr = c; bb = x; }
+    const to = (v) => Math.round((v + mm) * 255).toString(16).padStart(2, '0');
+    return `#${to(rr)}${to(gg)}${to(bb)}`;
+  }
+
+  // Recolor every server/JS-rendered band swatch + burn-path sub-bar segment
+  // for the current theme. Idempotent: the untouched base color is stashed in
+  // data-base on first pass, so toggling back to light restores it exactly.
+  // The chart tooltip is skipped — renderTrend already source-lifts those.
+  function liftDomBands() {
+    const dark = isDark();
+    document.querySelectorAll('.swatch, .subbar-segment').forEach((el) => {
+      if (el.closest('.chart-tooltip')) return;         // handled by renderTrend
+      let base = el.getAttribute('data-base');
+      if (base == null) {
+        base = el.style.backgroundColor || '';
+        el.setAttribute('data-base', base);
+      }
+      if (!base) return;                                // striped/empty segment
+      el.style.backgroundColor = dark ? liftForDark(rgbToHex(base)) : base;
+    });
+    // Sub-bar hover tips read data-swatch — keep it in step with the segment.
+    document.querySelectorAll('.subbar-segment[data-swatch]').forEach((el) => {
+      let base = el.getAttribute('data-swatch-base');
+      if (base == null) { base = el.getAttribute('data-swatch') || ''; el.setAttribute('data-swatch-base', base); }
+      if (!base) return;
+      el.setAttribute('data-swatch', dark ? liftForDark(rgbToHex(base)) : base);
+    });
+  }
+
+  // Browsers report inline background-color back as "rgb(r, g, b)"; liftForDark
+  // wants #rrggbb. Hex passes straight through.
+  function rgbToHex(c) {
+    if (!c) return c;
+    if (c[0] === '#') return c;
+    const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(c);
+    if (!m) return c;
+    const to = (n) => Number(n).toString(16).padStart(2, '0');
+    return `#${to(m[1])}${to(m[2])}${to(m[3])}`;
+  }
+
   function renderTrend() {
     const node = document.getElementById('trend-chart');
     const dataNode = document.getElementById('trend-data');
@@ -30,10 +108,21 @@
       return;
     }
 
+    // In dark mode, lift every band hue at the source — the canvas bands,
+    // the tooltip swatches, and the feature shades (colorForFeatureInProject
+    // reads projectColors) all flow from these two, so lifting here keeps the
+    // whole chart consistent with the DOM swatches that liftDomBands lifts by
+    // the same function. Re-runs on toggle (renderTrend is re-entrant).
+    const dark = isDark();
+    const lift = (c) => (dark ? liftForDark(c) : c);
+
     // Client-side twins of src/dashboard/lib/feature-colors.ts. Feature dots in
     // the tooltip are within-hue shades of the SERVER-RESOLVED project color
     // (payload.projectColors) so tooltip colors match the burn-paths sub-bar.
-    const projectColors = (payload && payload.projectColors) || {};
+    const rawProjectColors = (payload && payload.projectColors) || {};
+    const projectColors = {};
+    for (const k in rawProjectColors) projectColors[k] = lift(rawProjectColors[k]);
+    for (const p of projects) p.color = lift(p.color);
     function hashFeat(k) {
       let h = 0;
       for (let i = 0; i < k.length; i++) h = ((h << 5) - h + k.charCodeAt(i)) | 0;
@@ -1046,6 +1135,7 @@
     setupRowExpanders();
     setupClusterJumps();
     wireProjectUnattCta();
+    liftDomBands();   // after all swatch/sub-bar rendering; lifts hues on dark
   });
 
   // Theme toggle: flip between light/dark, persist the choice, and rebuild the
@@ -1060,6 +1150,7 @@
     root.setAttribute('data-theme', next);
     try { localStorage.setItem('tt-theme', next); } catch (err) { /* private mode */ }
     if (window.__ttRerenderChart) window.__ttRerenderChart();
+    liftDomBands();   // recolor server/JS band swatches + sub-bars for the new theme
   });
 
   // Anomaly dismiss/restore actions. Delegated handler so we don't need

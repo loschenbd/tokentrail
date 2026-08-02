@@ -67,11 +67,11 @@ body::after {
 .header-center { display: flex; justify-content: center; flex: 1; }
 .nav-tabs { display: flex; gap: var(--space-m); align-items: center; }
 .nav-tab {
-  font-family: var(--font-sans);
-  font-size: var(--size-small);
+  /* Wayfinding = naming voice → Spectral, mixed-case (matches the site). */
+  font-family: var(--font-serif);
+  font-size: var(--size-h2);
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  letter-spacing: 0;
   color: var(--color-ink-muted);
   text-decoration: none;
   padding: 6px 2px;
@@ -86,7 +86,8 @@ body::after {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 2px; flex: 1 1 0; padding: 8px 0 4px;
   color: var(--color-ink-muted); text-decoration: none;
-  font-size: 10px; letter-spacing: 0.04em;
+  /* Wayfinding label = naming voice → Spectral. */
+  font-family: var(--font-serif); font-size: 11px; letter-spacing: 0;
 }
 .bottom-nav-item svg { opacity: 0.85; }
 .bottom-nav-item.active { color: var(--color-accent); }
@@ -97,27 +98,7 @@ body::after {
   .header-center { order: 3; flex-basis: 100%; justify-content: flex-start; }
 }
 
-/* Theme toggle: ghost icon button. Shows the icon of the theme you'd switch
-   TO — a moon in light mode, a sun in dark — using the same
-   system-default-with-override logic as the tokens. */
-.theme-toggle {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; padding: 0;
-  color: var(--color-ink-muted);
-  background: var(--color-card-bg);
-  border: 1px solid var(--color-card-border);
-  border-radius: 2px;
-  cursor: pointer;
-}
-.theme-toggle:hover { color: var(--color-accent); border-color: var(--color-rule-accent); }
-.theme-toggle .ic-sun { display: none; }
-.theme-toggle .ic-moon { display: block; }
-:root[data-theme="dark"] .theme-toggle .ic-sun { display: block; }
-:root[data-theme="dark"] .theme-toggle .ic-moon { display: none; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .theme-toggle .ic-sun { display: block; }
-  :root:not([data-theme="light"]) .theme-toggle .ic-moon { display: none; }
-}
+/* Theme control lives on the Settings page (Appearance fieldset), not here. */
 
 .range-form { display: flex; gap: var(--space-s); align-items: center; }
 .range-form select {
@@ -161,11 +142,12 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
 }
 
 .label {
-  font-family: var(--font-sans);
-  font-size: var(--size-small);
+  /* Section labels = naming voice → Spectral, mixed-case (matches the site).
+     Was a small uppercase-tracked sans eyebrow. */
+  font-family: var(--font-serif);
+  font-size: var(--size-h2);
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  letter-spacing: 0;
   color: var(--color-ink-subtle);
   margin-bottom: var(--space-s);
 }
@@ -914,11 +896,11 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   box-shadow: var(--color-shadow-card);
 }
 .settings legend {
-  font-family: var(--font-sans);
-  font-size: var(--size-small);
+  /* Settings section titles = naming voice → Spectral, mixed-case. */
+  font-family: var(--font-serif);
+  font-size: var(--size-h2);
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
+  letter-spacing: 0;
   color: var(--color-ink-subtle);
   padding: 0 6px;
 }
@@ -960,6 +942,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 }
 .settings button[type="submit"]:hover { background: var(--color-accent-hover); color: var(--color-card-bg); }
 .settings .remove-key-hint { font-size: var(--size-small); color: var(--color-ink-muted); }
+.settings .appearance-hint { font-size: var(--size-small); color: var(--color-ink-muted); margin: 0 0 10px; }
 
 /* --- Hidden projects --- */
 .settings .hidden-projects-hint {

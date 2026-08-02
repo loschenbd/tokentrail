@@ -18,7 +18,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc && rm -rf dist/src/dashboard/static && cp -R src/dashboard/static dist/src/dashboard/static",
-    "start": "node dist/index.js",
+    "start": "node dist/src/index.js",
     "tokentrail": "tsx src/index.ts",
     "test": "node --import tsx --test $(find tests -name '*.test.ts')",
     "test:watch": "node --import tsx --test --watch $(find tests -name '*.test.ts')"

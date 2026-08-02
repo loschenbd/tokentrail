@@ -29,6 +29,7 @@ import { readSettings, writeSettings, type Settings } from '../lib/settings.js';
 import { hiddenProjectPatterns } from './lib/hidden-projects.js';
 import { getLLMClient } from '../lib/llm.js';
 import { saveBudgetConfig, type BudgetPatch, type SourceBudgets } from '../lib/config.js';
+import { serviceWorkerJs } from './sw.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
 
@@ -356,6 +357,32 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     }
   });
 
+  app.get('/manifest.webmanifest', async (_req, reply) => {
+    reply.type('application/manifest+json; charset=utf-8');
+    return {
+      name: 'Tokentrail',
+      short_name: 'Tokentrail',
+      description: 'The trail-map and ledger for AI spend.',
+      start_url: '/',
+      scope: '/',
+      display: 'standalone',
+      orientation: 'portrait',
+      background_color: '#f3f1eb',
+      theme_color: '#f3f1eb',
+      icons: [
+        { src: '/static/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/static/icon-512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/static/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
+    };
+  });
+
+  app.get('/sw.js', async (_req, reply) => {
+    reply.type('text/javascript; charset=utf-8');
+    reply.header('cache-control', 'no-cache');
+    return serviceWorkerJs();
+  });
+
   // Static asset serving — small bespoke handler instead of @fastify/static
   // to keep dep count low. Only allows files whose basename matches a
   // whitelist (no path traversal).
@@ -370,6 +397,9 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
     'trail-map.js',
     'settings.js',
     'fonts.css',
+    'icon-192.png',
+    'icon-512.png',
+    'icon-512-maskable.png',
   ]);
 
   app.get('/static/fonts/:name', async (req, reply) => {

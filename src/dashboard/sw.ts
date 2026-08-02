@@ -42,8 +42,9 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || !url.pathname.startsWith('/static/')) return; // network-only
   e.respondWith(
     caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
+      if (!res.ok) return res;
       const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(e.request, copy));
+      e.waitUntil(caches.open(CACHE).then((c) => c.put(e.request, copy)));
       return res;
     }))
   );

@@ -40,40 +40,40 @@ function baseVm(overrides: Partial<ProjectDetailVM> = {}): ProjectDetailVM {
 }
 
 describe('renderProject skeleton', () => {
-  test('renders five sections in order: hero, velocity, features, active-work, worth-reconciling', () => {
-    // Provide an anomaly so the worth-reconciling section renders as a card
-    // (empty unattributed + empty anomalies collapses to a note without a data-section).
+  test('renders sections in order: hero, velocity, active-work, worth-reconciling, features', () => {
     const html = renderProject(baseVm({
       anomalies: [{ id: 1, kind: 'spike_day', date: '2026-06-15', featureKey: 'f', sessionId: null, amount: 100, reason: 'test', cause: null }],
     }));
-    const order = ['hero', 'velocity', 'features', 'active-work', 'worth-reconciling'];
+    const order = ['hero', 'velocity', 'active-work', 'worth-reconciling', 'features'];
     let last = -1;
     for (const s of order) {
       const idx = html.indexOf(`data-section="${s}"`);
-      assert.ok(idx > last, `section ${s} should appear (found idx=${idx}, last=${last})`);
+      assert.ok(idx > last, `section ${s} should appear in order (found idx=${idx}, last=${last})`);
       last = idx;
     }
   });
 
   test('hero shows repo label, name, total, delta, session/feature counts, most-active feature', () => {
     const html = renderProject(baseVm());
-    assert.match(html, /repo:loschenbd\/archi/);   // repo label in natural case (Spectral naming voice)
+    assert.match(html, /repo:loschenbd\/archi/);
     assert.match(html, />archi</);
     assert.match(html, /\$2,?203/);
-    assert.match(html, /▲649% vs prior/);
-    assert.match(html, /17 sessions/);
-    assert.match(html, /18 features/);
+    assert.match(html, /▲649%/);
+    assert.match(html, /vs prior 30d/);
+    assert.match(html, />17</);            // sessions value cell
+    assert.match(html, /Sessions/);
+    assert.match(html, />18</);            // features value cell
     assert.match(html, /Local RAG \+ chatbot/);
   });
 
-  test('hero shows "(new project)" delta line when priorUsd is 0', () => {
+  test('hero shows "new project" delta cell when priorUsd is 0', () => {
     const html = renderProject(baseVm({ priorUsd: 0, deltaPct: 100 }));
-    assert.match(html, /\(new project\)/);
+    assert.match(html, /new project/);
   });
 
   test('hero omits most-active line when features is empty', () => {
     const html = renderProject(baseVm({ features: [] }));
-    assert.doesNotMatch(html, /most active:/i);
+    assert.doesNotMatch(html, /Most active/i);
   });
 });
 
@@ -86,7 +86,7 @@ describe('renderProject velocity section', () => {
     assert.match(seg, /▲649% vs prior 30d/);
   });
 
-  test('velocity section embeds an svg bar chart', () => {
+  test('velocity section embeds an svg bar chart with y-gridlines', () => {
     const vm = baseVm({
       dailySeries: [
         { date: '2026-06-14', total: 0, commits: 0, prs: 0 },
@@ -97,6 +97,7 @@ describe('renderProject velocity section', () => {
     const seg = extractSection(renderProject(vm), 'velocity');
     assert.match(seg, /<svg\b[^>]*viewBox/);
     assert.match(seg, /<rect\b/);
+    assert.match(seg, /stroke-dasharray/);   // gridlines present
   });
 
   test('week callouts render both totals and their delta arrows', () => {
@@ -159,10 +160,29 @@ describe('renderProject features section', () => {
     assert.match(seg, /href="\/feature\/local-rag-chatbot"/);
   });
 
-  test('sparkline svg is embedded per row', () => {
+  test('share bar embedded per row, no per-row sparkline svg', () => {
     const seg = extractSection(renderProject(fullVm()), 'features');
-    const svgs = (seg.match(/<svg\b/g) ?? []).length;
-    assert.equal(svgs, 2);
+    assert.equal((seg.match(/pfeat-fill/g) ?? []).length, 2);
+    assert.doesNotMatch(seg, /<svg\b/);
+  });
+
+  test('long tail folds behind a toggle naming count + summed dollars', () => {
+    const many = [
+      { featureKey: 'a', featureName: 'Alpha', totalUsd: 262, sessionCount: 2, lastActive: '2026-06-27', daily: [] },
+      { featureKey: 'b', featureName: 'Bravo', totalUsd: 149, sessionCount: 3, lastActive: '2026-06-23', daily: [] },
+      { featureKey: 'c', featureName: 'Charlie', totalUsd: 129, sessionCount: 1, lastActive: '2026-06-25', daily: [] },
+      { featureKey: 'd', featureName: 'Delta', totalUsd: 80, sessionCount: 1, lastActive: '2026-06-22', daily: [] },
+      { featureKey: 'e', featureName: 'Echo', totalUsd: 42, sessionCount: 1, lastActive: '2026-06-21', daily: [] },
+      { featureKey: 'f', featureName: 'Foxtrot', totalUsd: 4, sessionCount: 1, lastActive: '2026-06-20', daily: [] },
+      { featureKey: 'g', featureName: 'Golf', totalUsd: 3, sessionCount: 1, lastActive: '2026-06-19', daily: [] },
+      { featureKey: 'h', featureName: 'Hotel', totalUsd: 1, sessionCount: 1, lastActive: '2026-06-18', daily: [] },
+    ];
+    const seg = extractSection(renderProject(baseVm({ totalUsd: 670, features: many })), 'features');
+    // 5 features >= $10 stay visible; 3 (<$10) fold.
+    assert.match(seg, /data-pfeat-tail/);
+    assert.match(seg, /\+ 3 more under \$10 · \$8 total/);
+    assert.match(seg, /class="pfeat-tail" hidden/);
+    assert.match(seg, /Foxtrot/);   // tail row still in DOM (just hidden)
   });
 
   test('empty features → muted note, no rows', () => {
@@ -186,14 +206,15 @@ describe('renderProject active-work section', () => {
     ],
   };
 
-  test('branch summary shows open / merged / stale counts with names', () => {
+  test('branch summary shows open / merged / stale buckets with names + aligned $', () => {
     const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');
-    assert.match(seg, /Open\s*1/);
+    assert.match(seg, /Open/);
     assert.match(seg, /worktree-local-semantic-search/);
-    assert.match(seg, /Merged\s*1/);
+    assert.match(seg, /Merged/);
     assert.match(seg, /onboarding-wizard/);
-    assert.match(seg, /Stale\s*1/);
+    assert.match(seg, /Stale/);
     assert.match(seg, /coherence-pass/);
+    assert.match(seg, /bsum-usd/);   // dollar cell present
   });
 
   test('branch graph mount + JSON payload are embedded', () => {

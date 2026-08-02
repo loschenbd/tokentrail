@@ -1201,6 +1201,21 @@
     renderTrend();
     renderTrailElevation();
     renderBranchGraph();
+
+    // Features long-tail expand/collapse on the project page.
+    document.querySelectorAll('[data-pfeat-tail]').forEach(function (btn) {
+      var collapsedLabel = btn.querySelector('.pfeat-tail-label').textContent;
+      btn.addEventListener('click', function () {
+        var tail = btn.nextElementSibling;
+        if (!tail) return;
+        var willOpen = tail.hasAttribute('hidden');
+        tail.toggleAttribute('hidden');
+        btn.setAttribute('aria-expanded', String(willOpen));
+        btn.querySelector('.pfeat-tail-label').textContent = willOpen ? 'Collapse long tail' : collapsedLabel;
+        btn.querySelector('.pfeat-tail-caret').textContent = willOpen ? '⌄' : '›';
+      });
+    });
+
     renderBurnPathsSubBars();
     renderHourBarTips();
     renderUnattributedCard();

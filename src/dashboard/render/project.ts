@@ -1,6 +1,6 @@
 import type { ProjectDetailVM } from '../data/project.js';
 import type { BranchLifecycle } from '../data/branches.js';
-import { escapeHtml, jsonForScriptTag } from './shell.js';
+import { escapeHtml } from './shell.js';
 import { shadeForFeature } from '../lib/feature-colors.js';
 import { renderSparkline } from './sparkline.js';
 import { renderVelocityChart } from './velocity.js';
@@ -101,7 +101,8 @@ function formatMonDay(iso: string): string {
 }
 
 function renderActiveWork(vm: ProjectDetailVM): string {
-  const hasBranches = vm.branchGraph && vm.branchGraph.branches && vm.branchGraph.branches.length > 0;
+  const bg = vm.branchGraph;
+  const hasBranches = !!(bg && bg.branches && bg.branches.length > 0);
   const hasCommits = vm.recentCommits.length > 0;
   if (!hasBranches && !hasCommits) {
     return `
@@ -110,12 +111,8 @@ function renderActiveWork(vm: ProjectDetailVM): string {
       <div class="muted">No branches touched ${escapeHtml(vm.projectName)} in this window.</div>
     </section>`;
   }
-  const summary = hasBranches ? renderBranchSummary(vm.branchGraph!) : '';
-  const graph = hasBranches
-    ? `<div id="branch-graph" data-branch-graph style="width:100%;min-height:120px;max-height:140px;overflow:hidden"></div>
-       <script type="application/json" id="branch-graph-data">${jsonForScriptTag(vm.branchGraph)}</script>`
-    : '';
-  const totalBranchUsd = hasBranches ? vm.branchGraph!.totalUsd : 0;
+  const totalBranchUsd = hasBranches ? bg!.totalUsd : 0;
+  const table = hasBranches ? renderBranchTable(bg!) : '';
   const commits = hasCommits
     ? `<div class="commits-inline">
          <div class="label subheader">Recent commits</div>
@@ -130,31 +127,62 @@ function renderActiveWork(vm: ProjectDetailVM): string {
        </div>`
     : '';
   return `
-    <section class="card chart-card" data-section="active-work">
-      <div class="label">Active work · last ${vm.branchGraph?.days ?? 30}d <span class="amt-tag">$${totalBranchUsd.toFixed(0)}</span></div>
-      ${graph}
-      ${summary}
+    <section class="card" data-section="active-work">
+      <div class="label">Active work · last ${bg?.days ?? 30}d <span class="amt-tag">$${totalBranchUsd.toFixed(0)}</span></div>
+      ${table}
       ${commits}
     </section>`;
 }
 
-function renderBranchSummary(bg: NonNullable<ProjectDetailVM['branchGraph']>): string {
-  const branches: BranchLifecycle[] = bg.branches ?? [];
-  const bucket = (status: BranchLifecycle['status']) => branches.filter((b) => b.status === status);
-  const col = (label: string, status: BranchLifecycle['status']) => {
-    const items = bucket(status);
-    if (items.length === 0) return '';
-    const rows = items.map((b) => {
-      const zero = b.totalUsd > 0 ? '' : ' zero';
-      return `<div class="bsum-item"><span class="bsum-branch">${escapeHtml(b.branch)}</span><span class="bsum-usd${zero}">$${b.totalUsd.toFixed(0)}</span></div>`;
-    }).join('');
-    return `<div class="bsum-col"><div class="bsum-col-head">${label} <span class="bsum-count">${items.length}</span></div><div class="bsum-items">${rows}</div></div>`;
+function renderBranchTable(bg: NonNullable<ProjectDetailVM['branchGraph']>): string {
+  const branches = (bg.branches ?? []).slice().sort((a, b) => b.totalUsd - a.totalUsd);
+  const startMs = new Date(bg.windowStart).getTime();
+  const endMs = new Date(bg.windowEnd).getTime();
+  const span = Math.max(1, endMs - startMs);
+  const leader = branches[0]?.totalUsd || 1;
+  const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+
+  const row = (b: BranchLifecycle): string => {
+    const firstMs = new Date(b.firstEventAt).getTime();
+    const lastMs = new Date(b.mergedAt || b.lastEventAt).getTime();
+    const left = clamp01((firstMs - startMs) / span) * 100;
+    const rawWidth = clamp01((lastMs - firstMs) / span) * 100;
+    const width = Math.min(Math.max(rawWidth, 4), 100 - left);
+    const barPct = Math.max((b.totalUsd / leader) * 100, 1.2);
+    const tick = b.status === 'merged' ? '<span class="bwork-tick">✓</span>' : '';
+    return `
+      <div class="bwork-row bwork-${b.status}">
+        <span class="bwork-dot"></span>
+        <span class="bwork-name">${escapeHtml(b.branch)}${tick}</span>
+        <span class="bwork-track"><span class="bwork-seg" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%"></span></span>
+        <span class="bwork-spend"><span class="bwork-bar"><span class="bwork-fill" style="width:${barPct.toFixed(1)}%"></span></span><span class="bwork-amt">$${b.totalUsd.toFixed(0)}</span></span>
+        <span class="bwork-sess">${b.sessionCount}</span>
+      </div>`;
   };
-  return `<div class="branch-summary">
-    ${col('Open',   'open')}
-    ${col('Merged', 'merged')}
-    ${col('Stale',  'stale')}
-  </div>`;
+
+  const HEAD = 10;
+  const headRows = branches.slice(0, HEAD).map(row).join('');
+  const tail = branches.slice(HEAD);
+  let tailBlock = '';
+  if (tail.length > 0) {
+    const tailSum = tail.reduce((s, b) => s + b.totalUsd, 0);
+    tailBlock = `
+      <button class="tail-toggle" type="button" data-tail-toggle aria-expanded="false">
+        <span class="tail-toggle-label">+ ${tail.length} more · $${tailSum.toFixed(0)} total</span><span class="tail-toggle-caret">›</span>
+      </button>
+      <div class="tail-body" hidden>${tail.map(row).join('')}</div>`;
+  }
+  return `
+    <div class="bwork">
+      <div class="bwork-head">
+        <span></span><span></span>
+        <span class="bwork-axis"><span>${formatMonDay(bg.windowStart)}</span><span>${formatMonDay(bg.windowEnd)}</span></span>
+        <span class="bwork-hlabel">spend</span>
+        <span class="bwork-hlabel">sess</span>
+      </div>
+      ${headRows}
+      ${tailBlock}
+    </div>`;
 }
 
 function renderWorthReconciling(vm: ProjectDetailVM): string {
@@ -269,10 +297,10 @@ function renderFeatures(vm: ProjectDetailVM, color: string): string {
       : `+ ${tail.length} more · $${formatUsdCommas(tailSum)} total`;
     const tailRows = tail.map((f, i) => row(f, visibleCount + i)).join('');
     tailBlock = `
-      <button class="pfeat-tail-toggle" type="button" data-pfeat-tail aria-expanded="false">
-        <span class="pfeat-tail-label">${label}</span><span class="pfeat-tail-caret">›</span>
+      <button class="tail-toggle" type="button" data-tail-toggle aria-expanded="false">
+        <span class="tail-toggle-label">${label}</span><span class="tail-toggle-caret">›</span>
       </button>
-      <div class="pfeat-tail" hidden>${tailRows}</div>`;
+      <div class="tail-body" hidden>${tailRows}</div>`;
   }
 
   return `

@@ -38,9 +38,9 @@ function renderHero(vm: ProjectDetailVM): string {
 }
 
 function renderRepoLabel(projectKey: string): string {
-  // Preserves the existing key namespace vocabulary — the label just
-  // upper-cases it so it reads like a header tag.
-  return escapeHtml(projectKey.toUpperCase());
+  // The namespaced key in its natural case — the `.label` class renders it in
+  // the Spectral naming voice (mixed-case), so no upper-casing here.
+  return escapeHtml(projectKey);
 }
 
 function renderDeltaLine(vm: ProjectDetailVM): string {

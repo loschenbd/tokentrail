@@ -55,6 +55,30 @@ describe('renderShell window selector visibility', () => {
   });
 });
 
+describe('renderShell bottom nav', () => {
+  test('renders a bottom tab bar with all four sections', () => {
+    const html = renderShell({ title: 't', activeTab: 'overview', days: 30 }, '');
+    assert.match(html, /class="bottom-nav"/);
+    for (const [href, label] of [['/today', 'Today'], ['/', 'Overview'], ['/worth-a-look', 'Worth'], ['/settings', 'Settings']] as const) {
+      assert.ok(html.includes(`href="${href}"`), `bottom nav missing ${label} link`);
+    }
+  });
+
+  test('Today is the leftmost tab in both navs', () => {
+    const html = renderShell({ title: 't', activeTab: 'today', days: 30 }, '');
+    // In each nav block, the Today link appears before the Overview link.
+    const navTabs = html.slice(html.indexOf('class="nav-tabs"'));
+    assert.ok(navTabs.indexOf('/today') < navTabs.indexOf('href="/"'), 'desktop nav: Today not before Overview');
+    const bottom = html.slice(html.indexOf('class="bottom-nav"'));
+    assert.ok(bottom.indexOf('/today') < bottom.indexOf('href="/"'), 'bottom nav: Today not before Overview');
+  });
+
+  test('marks the active bottom-nav item', () => {
+    const html = renderShell({ title: 't', activeTab: 'today', days: 30 }, '');
+    assert.match(html, /class="bottom-nav-item active"[^>]*href="\/today"|href="\/today"[^>]*class="bottom-nav-item active"/);
+  });
+});
+
 describe('jsonForScriptTag', () => {
   test('escapes < so payloads cannot close the script tag', async () => {
     const { jsonForScriptTag } = await import('../src/dashboard/render/shell.js');

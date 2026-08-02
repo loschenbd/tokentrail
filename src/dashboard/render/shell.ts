@@ -43,12 +43,31 @@ export function renderShell(opts: ShellOptions, body: string): string {
   const sourceHidden = showSource ? `<input type="hidden" name="source" value="${escapeHtml(scope)}">` : '';
   const navItem = (key: NonNullable<ShellOptions['activeTab']>, href: string, label: string): string =>
     `<a class="nav-tab${opts.activeTab === key ? ' active' : ''}" href="${href}">${label}</a>`;
+
+  const navLinks: Array<['today' | 'overview' | 'worth-a-look' | 'settings', string, string]> = [
+    ['today', '/today', 'Today'],
+    ['overview', '/', 'Overview'],
+    ['worth-a-look', '/worth-a-look', 'Worth a look'],
+    ['settings', '/settings', 'Settings'],
+  ];
   const nav = `
     <nav class="nav-tabs">
-      ${navItem('overview', '/', 'Overview')}
-      ${navItem('today', '/today', 'Today')}
-      ${navItem('worth-a-look', '/worth-a-look', 'Worth a look')}
-      ${navItem('settings', '/settings', 'Settings')}
+      ${navLinks.map(([key, href, label]) => navItem(key, href, label)).join('\n      ')}
+    </nav>`;
+
+  // Icons for the mobile bottom bar (inline SVG, currentColor, 22px).
+  const bottomIcons: Record<'today' | 'overview' | 'worth-a-look' | 'settings', string> = {
+    today: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    overview: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg>',
+    'worth-a-look': '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg>',
+    settings: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
+  };
+  const bottomLabels: Record<'today' | 'overview' | 'worth-a-look' | 'settings', string> = {
+    today: 'Today', overview: 'Overview', 'worth-a-look': 'Worth', settings: 'Settings',
+  };
+  const bottomNav = `
+    <nav class="bottom-nav" aria-label="Primary">
+      ${navLinks.map(([key, href]) => `<a class="bottom-nav-item${opts.activeTab === key ? ' active' : ''}" href="${href}">${bottomIcons[key]}<span>${bottomLabels[key]}</span></a>`).join('\n      ')}
     </nav>`;
   return `<!doctype html>
 <html lang="en">
@@ -97,6 +116,7 @@ export function renderShell(opts: ShellOptions, body: string): string {
   </div>
 </header>
 <main>${body}</main>
+${bottomNav}
 <script src="/static/uPlot.iife.min.js"></script>
 <script src="/static/dashboard.js"></script>
 </body>

@@ -136,9 +136,16 @@ export type OverviewVM = {
 };
 
 export function buildOverview(
-  { db, days, hidden = [] }: { db: DatabaseType.Database; days: number; hidden?: string[] }
+  { db, days, hidden = [], rollupTable = 'feature_rollups' }:
+    { db: DatabaseType.Database; days: number; hidden?: string[]; rollupTable?: string }
 ): OverviewVM {
   const windowDays = Math.max(1, days);
+  // Windowed aggregates read from `rollupTable`. For the blended default this
+  // is `feature_rollups`; a source-scoped view passes the name of a temp table
+  // holding just that harness's rollup rows (see scoped-rollup.ts). Table names
+  // can't be bound params, so guard against anything but a bare identifier —
+  // the value comes only from our own whitelist, never user input.
+  const T = safeTable(rollupTable);
   // All date arithmetic uses the server's local time so the dashboard
   // matches the user's calendar — same machine, same timezone.
   const startExpr = `date('now', '-${windowDays - 1} days', 'localtime')`;
@@ -155,13 +162,13 @@ export function buildOverview(
 
   // --- scalar stats ---
   const totalRow = db
-    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM feature_rollups WHERE date >= ${startExpr} AND ${visibleSql}`)
+    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM ${T} WHERE date >= ${startExpr} AND ${visibleSql}`)
     .get() as { total: number };
   const priorRow = db
-    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM feature_rollups WHERE date >= ${priorStartExpr} AND date <= ${priorEndExpr} AND ${visibleSql}`)
+    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM ${T} WHERE date >= ${priorStartExpr} AND date <= ${priorEndExpr} AND ${visibleSql}`)
     .get() as { total: number };
   const weekRow = db
-    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total, COALESCE(SUM(sessions_count), 0) AS sessions FROM feature_rollups WHERE date >= date('now', '-6 days', 'localtime') AND ${visibleSql}`)
+    .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total, COALESCE(SUM(sessions_count), 0) AS sessions FROM ${T} WHERE date >= date('now', '-6 days', 'localtime') AND ${visibleSql}`)
     .get() as { total: number; sessions: number };
 
   const total = round2(totalRow.total);
@@ -176,7 +183,7 @@ export function buildOverview(
       SELECT feature_key AS featureKey,
              MAX(feature_name) AS featureName,
              ROUND(SUM(total_cost_usd), 2) AS totalUsd
-      FROM feature_rollups
+      FROM ${T}
       WHERE date >= ${startExpr} AND ${visibleSql}
       GROUP BY feature_key
       ORDER BY totalUsd DESC
@@ -192,7 +199,7 @@ export function buildOverview(
              MAX(repo) AS repo,
              ROUND(SUM(total_cost_usd), 2) AS totalUsd,
              COALESCE(SUM(sessions_count), 0) AS sessionsCount
-      FROM feature_rollups
+      FROM ${T}
       WHERE date >= ${startExpr} AND ${visibleSql}
       GROUP BY feature_key
     `)
@@ -235,9 +242,18 @@ export function buildOverview(
     color: projectColors[p.key]!,
   }));
 
-  // --- anomalies, recentCommits (unchanged) ---
-  const anomalies = db
-    .prepare(`
+  // --- anomalies, recentCommits ---
+  // Anomalies are computed from the blended feature_rollups and carry no
+  // source tag, so they can't be honestly scoped to one harness — showing the
+  // global list on a source-scoped view (e.g. a $0 Copilot page listing a $729
+  // Claude spike) would mislead. Suppress them off the blended default; the
+  // panel falls back to its "nothing worth a look" state. Recent commits stay:
+  // a commit isn't attributable to a harness, so it's fine on every scope.
+  const scoped = T !== 'feature_rollups';
+  const anomalies = scoped
+    ? ([] as OverviewVM['anomalies'])
+    : (db
+        .prepare(`
       SELECT id, kind, date, feature_key AS featureKey, session_id AS sessionId,
              ROUND(amount, 2) AS amount, reason
       FROM anomalies
@@ -245,7 +261,7 @@ export function buildOverview(
       ORDER BY multiplier DESC, date DESC
       LIMIT 5
     `)
-    .all() as OverviewVM['anomalies'];
+        .all() as OverviewVM['anomalies']);
 
   const recentCommits = db
     .prepare(`
@@ -270,7 +286,7 @@ export function buildOverview(
              MAX(feature_name) AS featureName,
              MAX(repo) AS repo,
              ROUND(SUM(total_cost_usd), 2) AS totalUsd
-      FROM feature_rollups
+      FROM ${T}
       WHERE date >= ${startExpr} AND ${visibleSql}
       GROUP BY feature_key
     `)
@@ -324,7 +340,7 @@ export function buildOverview(
 
   // --- Commits / PRs per day ---
   const observedRows = db
-    .prepare(`SELECT date, SUM(total_cost_usd) AS total FROM feature_rollups WHERE date >= ${startExpr} AND ${visibleSql} GROUP BY date`)
+    .prepare(`SELECT date, SUM(total_cost_usd) AS total FROM ${T} WHERE date >= ${startExpr} AND ${visibleSql} GROUP BY date`)
     .all() as Array<{ date: string; total: number }>;
   const observedMap = new Map(observedRows.map((r) => [r.date, r.total]));
 
@@ -369,7 +385,7 @@ export function buildOverview(
              MAX(feature_name) AS featureName,
              MAX(repo) AS repo,
              ROUND(SUM(total_cost_usd), 2) AS usd
-      FROM feature_rollups
+      FROM ${T}
       WHERE date >= ${startExpr} AND ${visibleSql}
       GROUP BY date, feature_key
     `)
@@ -527,4 +543,15 @@ export function canonicalProjectColors(db: DatabaseType.Database): Record<string
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+// Table names can't be SQLite bind params, so they're interpolated. The value
+// only ever comes from our own code (feature_rollups or the scoped temp table),
+// but validate a bare identifier anyway so this can never become an injection
+// vector if a caller gets careless.
+function safeTable(name: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error(`Unsafe rollup table name: ${name}`);
+  }
+  return name;
 }

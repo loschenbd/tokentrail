@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/db.js';
-import { attribute } from '../lib/attribution.js';
-import { bucketFromProjectDir } from '../lib/project-dir.js';
+import { aggregateFeatureBuckets } from '../lib/feature-aggregate.js';
 import { computeAndPersistAnomalies } from '../services/anomalies-db.js';
 import { recomputeClusters } from '../services/clustering.js';
 
@@ -32,117 +31,10 @@ export async function runRollup(opts: { cluster?: boolean } = {}): Promise<Rollu
   const shouldCluster = opts.cluster ?? true;
   const db = getDb();
 
-  // Pull aggregated rows. Bucket events by their LOCAL date so the daily
-  // series matches the user's calendar (events at 11pm don't slip into
-  // "tomorrow" the way a UTC date() would).
-  const rows = db
-    .prepare(
-      `SELECT
-         date(e.timestamp, 'localtime')          AS date,
-         COALESCE(e.repo, '')                    AS repo,
-         COALESCE(e.branch, '')                  AS branch,
-         COALESCE(e.project_dir, '')             AS project_dir,
-         COALESCE(e.inferred_feature_key, w.feature_key)   AS feature_key,
-         COALESCE(e.inferred_feature_name, w.feature_name) AS feature_name,
-         s.feature_override                       AS override_key,
-         s.feature_override_name                  AS override_name,
-         SUM(e.input_tokens)                      AS in_tokens,
-         SUM(e.output_tokens)                     AS out_tokens,
-         SUM(e.estimated_cost_usd)                AS cost,
-         COUNT(DISTINCT e.session_id)             AS sessions,
-         GROUP_CONCAT(DISTINCT e.session_id)       AS session_ids
-       FROM usage_events e
-       LEFT JOIN work_units w
-         ON w.repo = e.repo AND w.branch = e.branch
-       LEFT JOIN sessions s
-         ON s.session_id = e.session_id
-       GROUP BY date(e.timestamp, 'localtime'), e.repo, e.branch, e.project_dir,
-                COALESCE(e.inferred_feature_key, w.feature_key),
-                COALESCE(e.inferred_feature_name, w.feature_name),
-                s.feature_override, s.feature_override_name`
-    )
-    .all() as Array<{
-    date: string;
-    repo: string;
-    branch: string;
-    project_dir: string;
-    feature_key: string | null;
-    feature_name: string | null;
-    override_key: string | null;
-    override_name: string | null;
-    in_tokens: number;
-    out_tokens: number;
-    cost: number;
-    sessions: number;
-    session_ids: string | null;
-  }>;
-
-  // Bucket by (date, feature_key). A feature can pull from multiple
-  // (repo, branch) pairs in the same day.
-  type Bucket = {
-    date: string;
-    featureKey: string;
-    featureName: string;
-    repos: Set<string>;
-    branches: Set<string>;
-    sessionIds: Set<string>;
-    inTokens: number;
-    outTokens: number;
-    cost: number;
-  };
-
-  const buckets = new Map<string, Bucket>();
-  for (const r of rows) {
-    let key: string | null;
-    let name: string | null;
-    // Per-session override beats everything else. This is how you label
-    // sessions that don't map cleanly to repo+branch — e.g. exploratory
-    // work outside any git repo, or a feature you didn't branch for.
-    if (r.override_key) {
-      key = r.override_key;
-      name = r.override_name ?? r.override_key;
-    } else if (r.feature_key && r.feature_name) {
-      key = r.feature_key;
-      name = r.feature_name;
-    } else if (r.branch && r.repo) {
-      const a = attribute({ repo: r.repo, branch: r.branch });
-      key = a.featureKey;
-      name = a.featureName;
-    } else if (r.project_dir) {
-      const b = bucketFromProjectDir(r.project_dir);
-      key = b.featureKey;
-      name = b.featureName;
-    } else {
-      key = 'untracked';
-      name = 'Untracked sessions';
-    }
-    const id = `${r.date}::${key}`;
-    let b = buckets.get(id);
-    if (!b) {
-      b = {
-        date: r.date,
-        featureKey: key,
-        featureName: name,
-        repos: new Set(),
-        branches: new Set(),
-        sessionIds: new Set(),
-        inTokens: 0,
-        outTokens: 0,
-        cost: 0,
-      };
-      buckets.set(id, b);
-    }
-    if (r.repo) b.repos.add(r.repo);
-    if (r.branch) b.branches.add(r.branch);
-    if (r.session_ids) {
-      for (const sid of r.session_ids.split(',')) {
-        if (sid) b.sessionIds.add(sid);
-      }
-    }
-    b.inTokens += r.in_tokens ?? 0;
-    b.outTokens += r.out_tokens ?? 0;
-    b.cost += r.cost ?? 0;
-  }
+  // Aggregate usage_events → (date, feature) buckets. Shared with the
+  // source-scoped overview so attribution can never diverge between the two.
+  // All sources here; the overview passes a source filter.
+  const buckets = aggregateFeatureBuckets(db);
 
   const upsert = db.prepare(`
     INSERT INTO feature_rollups (

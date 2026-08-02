@@ -1,9 +1,16 @@
+import { SCOPE_LABELS, type SourceScope } from '../data/scoped-rollup.js';
+
 export type ShellOptions = {
   title: string;
   activeTab?: 'overview' | 'today' | 'feature' | 'project' | 'worth-a-look' | 'settings';
   days: number;          // current time-window selection
   showBack?: boolean;
   showDismissed?: boolean;
+  // Harness scope for the Overview's source picker. `scope` is the current
+  // selection; `scopes` is which sources have data (>= ['all']). Only rendered
+  // on the Overview, and only when more than one source exists.
+  scope?: SourceScope;
+  scopes?: SourceScope[];
 };
 
 export function renderShell(opts: ShellOptions, body: string): string {
@@ -14,6 +21,26 @@ export function renderShell(opts: ShellOptions, body: string): string {
   const range = dayOptions
     .map((d) => `<option value="${d}"${d === opts.days ? ' selected' : ''}>${d === 365 ? 'all' : `${d}d`}</option>`)
     .join('');
+
+  // Source picker: Overview only, and only when there's more than one harness
+  // to pick between. 'all' is always first. Each selector carries the other's
+  // current value as a hidden field so switching one preserves the other.
+  const scope = opts.scope ?? 'all';
+  const scopes = opts.scopes ?? ['all'];
+  const showSource = opts.activeTab === 'overview' && scopes.length > 1;
+  const sourceOptions = scopes
+    .map((s) => `<option value="${s}"${s === scope ? ' selected' : ''}>${escapeHtml(SCOPE_LABELS[s])}</option>`)
+    .join('');
+  const sourceForm = showSource
+    ? `<form method="get" class="range-form source-form">
+      <label class="label" for="source">Source</label>
+      <input type="hidden" name="days" value="${opts.days}">
+      <select id="source" name="source" onchange="this.form.submit()">${sourceOptions}</select>
+    </form>`
+    : '';
+  // Window keeps the current source when it submits (Overview only; other
+  // views have no source dimension).
+  const sourceHidden = showSource ? `<input type="hidden" name="source" value="${escapeHtml(scope)}">` : '';
   const navItem = (key: NonNullable<ShellOptions['activeTab']>, href: string, label: string): string =>
     `<a class="nav-tab${opts.activeTab === key ? ' active' : ''}" href="${href}">${label}</a>`;
   const nav = `
@@ -48,9 +75,11 @@ export function renderShell(opts: ShellOptions, body: string): string {
   </div>
   <div class="header-center">${nav}</div>
   <div class="header-right">
+    ${sourceForm}
     ${showWindow
       ? `<form method="get" class="range-form">
       <label class="label" for="days">Window</label>
+      ${sourceHidden}
       <select id="days" name="days" onchange="this.form.submit()">${range}</select>
     </form>`
       : ''}

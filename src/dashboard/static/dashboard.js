@@ -819,10 +819,6 @@
     return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
   }
 
-  function truncate(s, n) {
-    return s.length <= n ? s : s.slice(0, n - 1) + '…';
-  }
-
   function niceTicks(min, max, n) {
     const range = max - min;
     const step = Math.pow(10, Math.floor(Math.log10(range / n)));

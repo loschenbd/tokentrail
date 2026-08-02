@@ -213,6 +213,25 @@ describe('buildProjectDetail', () => {
     assert.equal(feat.status, 'closed');
   });
 
+  test('feature reads "closed" from a merged PR even when its branch is out of the activity window', () => {
+    const db = makeDb();
+    const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;
+    // Recent spend so the feature shows and the age fallback would say "opened"...
+    db.prepare(
+      `INSERT INTO feature_rollups (id, date, feature_key, feature_name, repo, total_input_tokens, total_output_tokens, total_cost_usd, sessions_count, session_ids, branches)
+       VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`
+    ).run('r-old', day(2), 'shipped-old', 'Shipped Old', 'loschenbd/x', 50, 1, 'sess-x', 'feat/shipped-old');
+    // ...but NO usage_events for the branch, so it never surfaces in the branch
+    // graph. Only the window-independent merged-PR lookup can mark it closed.
+    db.prepare(
+      `INSERT INTO session_prs (session_id, repo, pr_number, pr_state, head_branch, merged_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('sess-x', 'loschenbd/x', 90, 'merged', 'feat/shipped-old', `${day(40)}T00:00:00Z`);
+
+    const vm = buildProjectDetail(db, { projectKey: 'repo:loschenbd/x', days: 30 })!;
+    const feat = vm.features.find((f) => f.featureKey === 'shipped-old')!;
+    assert.equal(feat.status, 'closed');   // durable: merged PR wins over the recent-activity age fallback
+  });
+
   test('anomalies expose a session cause when the anomaly is tied to a session', () => {
     const db = makeDb();
     const day = (n: number) => (db.prepare(`SELECT date('now','-${n} days','localtime') AS d`).get() as { d: string }).d;

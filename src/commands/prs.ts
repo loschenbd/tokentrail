@@ -40,9 +40,14 @@ export function findPrCandidateTuples(
             AND c.repo NOT LIKE 'local/%'
             AND c.branch IS NOT NULL AND c.branch != ''
        ) AS sources
+       -- Without --force, skip only sessions that already have a MERGED PR
+       -- (their state is settled). Sessions with an open/no PR stay candidates
+       -- every run, so a PR that merges AFTER its first scan still gets picked
+       -- up — otherwise merges are invisible and features never read "closed".
        ${opts.force ? '' : `WHERE NOT EXISTS (
          SELECT 1 FROM session_prs p
           WHERE p.session_id = sources.session_id AND p.repo = sources.repo
+            AND p.merged_at IS NOT NULL
        )`}`
     )
     .all() as Array<{ session_id: string; repo: string; branch: string }>;

@@ -298,12 +298,43 @@ export function buildProjectDetail(
       branchStatusByFeature.set(b.featureKey, mapped);
     }
   }
+  // Window-independent "closed": a feature is closed if any of its branches has
+  // a merged PR, regardless of the 30-day activity window. A shipped feature
+  // goes quiet and its branch ages out of the branch graph, but it is still
+  // done — not stale. Branch names come from feature_rollups.branches (which
+  // persists across the window); merges from session_prs. This is what lets a
+  // completed feature keep reading "closed" long after its last commit.
+  const featureBranchRows = db
+    .prepare(`SELECT feature_key AS featureKey, repo, branches FROM feature_rollups
+               WHERE ${filterSql} AND branches IS NOT NULL AND branches != ''`)
+    .all(filterParams) as Array<{ featureKey: string; repo: string | null; branches: string }>;
+  const closedRepos = [...new Set(featureBranchRows.map((r) => r.repo).filter((r): r is string => !!r))];
+  const mergedBranchSet = new Set<string>();
+  if (closedRepos.length > 0) {
+    const mergedRows = db
+      .prepare(`SELECT DISTINCT REPLACE(head_branch, 'origin/', '') AS b FROM session_prs
+                 WHERE pr_state = 'merged' AND merged_at IS NOT NULL
+                   AND repo IN (SELECT value FROM json_each(?))`)
+      .all(JSON.stringify(closedRepos)) as Array<{ b: string | null }>;
+    for (const r of mergedRows) if (r.b) mergedBranchSet.add(r.b);
+  }
+  const closedFeatureKeys = new Set<string>();
+  for (const r of featureBranchRows) {
+    const names = r.branches.split(',').map((s) => s.trim()).filter(Boolean);
+    if (names.some((n) => mergedBranchSet.has(n))) closedFeatureKeys.add(r.featureKey);
+  }
+
   const staleBefore = (db
     .prepare(`SELECT date('now', 'localtime', '-${STALE_DAYS} days') AS d`)
     .get() as { d: string }).d;
+  // Precedence: active work now (an in-window open branch) trumps a past merge;
+  // a merge — in-window OR the durable lookup — reads "closed" over a stale or
+  // aged-out branch; otherwise fall back to activity age.
   const featureStatus = (featureKey: string, lastActive: string): 'opened' | 'closed' | 'stale' => {
-    const fromBranch = branchStatusByFeature.get(featureKey);
-    if (fromBranch) return fromBranch;
+    const inWindow = branchStatusByFeature.get(featureKey);
+    if (inWindow === 'opened') return 'opened';
+    if (inWindow === 'closed' || closedFeatureKeys.has(featureKey)) return 'closed';
+    if (inWindow === 'stale') return 'stale';
     return lastActive && lastActive < staleBefore ? 'stale' : 'opened';
   };
   const featuresWithStatus = featuresWithSparkline.map((f) => ({

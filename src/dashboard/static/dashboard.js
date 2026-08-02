@@ -1,8 +1,21 @@
 (function () {
+  // Resolve a themed CSS custom property to its current value, with a fallback
+  // for the rare case the stylesheet hasn't applied yet. Read live (not cached)
+  // so a theme toggle picks up the new value on re-render.
+  function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+
   function renderTrend() {
     const node = document.getElementById('trend-chart');
     const dataNode = document.getElementById('trend-data');
     if (!node || !dataNode || typeof uPlot === 'undefined') return;
+    // Re-entrant: a theme toggle calls renderTrend again to recolor axes/grid.
+    // Tear down the prior uPlot (it owns appended canvas + a resize listener)
+    // before rebuilding, or they'd stack.
+    if (node.__uplot) { try { node.__uplot.destroy(); } catch (e) { /* noop */ } node.__uplot = null; }
+    node.innerHTML = '';
     let payload;
     try { payload = JSON.parse(dataNode.textContent || 'null'); } catch (e) { return; }
     if (!payload || !Array.isArray(payload.days) || payload.days.length === 0) {
@@ -61,7 +74,7 @@
       return `#${to(r)}${to(g)}${to(b)}`;
     }
     function colorForFeatureInProject(projectKey, featureKey) {
-      const base = projectColors[projectKey] || '#a8a29a';
+      const base = projectColors[projectKey] || cssVar('--color-swatch-fallback','#a8a29a');
       const [h, s, l] = hexToHsl(base);
       const shifts = [-18, -9, 0, 9, 18];
       const shift = shifts[hashFeat(featureKey) % shifts.length];
@@ -121,7 +134,7 @@
         .sort((a, b) => b[1] - a[1])
         .map(([key, usd]) => {
           const proj = stackOrder.find((p) => p.key === key);
-          const color = proj ? proj.color : '#a8a29a';
+          const color = proj ? proj.color : cssVar('--color-swatch-fallback','#a8a29a');
           const name = proj ? proj.name : key;
           const activeCls = key === activeProjectKey ? ' chart-tooltip-row--active' : '';
           return `<div class="chart-tooltip-row${activeCls}"><span class="swatch" style="background:${esc(color)}"></span>${esc(name)}<span class="amt">${fmtUsd(usd)}</span></div>`;
@@ -203,10 +216,15 @@
       scales: { x: { time: true } },
       series: series,
       bands: bands,
-      axes: [
-        { stroke: '#524d46', grid: { stroke: 'rgba(60,58,54,0.09)' } },
-        { stroke: '#524d46', grid: { stroke: 'rgba(60,58,54,0.09)' }, values: (_s, ticks) => ticks.map((t) => '$' + Math.round(t)) },
-      ],
+      axes: (() => {
+        // Themed at build time (and rebuilt on toggle via renderTrend re-entry).
+        const axisStroke = cssVar('--color-chart-axis', '#524d46');
+        const gridStroke = cssVar('--color-chart-grid', 'rgba(60,58,54,0.09)');
+        return [
+          { stroke: axisStroke, grid: { stroke: gridStroke } },
+          { stroke: axisStroke, grid: { stroke: gridStroke }, values: (_s, ticks) => ticks.map((t) => '$' + Math.round(t)) },
+        ];
+      })(),
       hooks: {
         setCursor: [
           (() => {
@@ -715,13 +733,13 @@
         else otherUsd += f.totalUsd;
       });
       if (otherUsd > 0) {
-        kept.push({ key: '__other_features__', name: 'other features', color: '#a8a29a', totalUsd: otherUsd, pct: (otherUsd / total) * 100 });
+        kept.push({ key: '__other_features__', name: 'other features', color: cssVar('--color-swatch-fallback','#a8a29a'), totalUsd: otherUsd, pct: (otherUsd / total) * 100 });
       }
 
       container.innerHTML = kept.map((f) => {
         const striped = f.color === '__striped__' ? ' subbar-segment--striped' : '';
         const bg = f.color === '__striped__' ? '' : `background:${escapeAttr(f.color)};`;
-        const swatch = f.color === '__striped__' ? '#78716a' : f.color;
+        const swatch = f.color === '__striped__' ? cssVar('--color-stripe-fg', '#78716a') : f.color;
         return `<div class="subbar-segment${striped}" style="${bg}width:${f.pct.toFixed(2)}%" data-feature-name="${escapeAttr(f.name)}" data-usd="${f.totalUsd.toFixed(0)}" data-swatch="${escapeAttr(swatch)}"></div>`;
       }).join('');
       container.querySelectorAll('.subbar-segment').forEach(attachSubbarSegmentTip);
@@ -759,7 +777,7 @@
   function attachSubbarSegmentTip(seg) {
     seg.addEventListener('mouseenter', () => {
       const tip = ensureSubbarTip();
-      tip.innerHTML = `<span class="swatch" style="background:${escapeAttr(seg.dataset.swatch || '#a8a29a')}"></span>` +
+      tip.innerHTML = `<span class="swatch" style="background:${escapeAttr(seg.dataset.swatch || cssVar('--color-swatch-fallback','#a8a29a'))}"></span>` +
         `<span class="name">${esc(seg.dataset.featureName || '')}</span>` +
         `<span class="amt">$${esc(seg.dataset.usd || '0')}</span>`;
       // Display before measuring — offsetWidth is 0 while display:none.
@@ -809,7 +827,7 @@
         const rows = projects.slice(0, MAX_ROWS).map((p) => {
           const usd = Number(p.usd) || 0;
           return `<div class="hour-tip-row">` +
-            `<span class="swatch" style="background:${escapeAttr(p.color || '#a8a29a')}"></span>` +
+            `<span class="swatch" style="background:${escapeAttr(p.color || cssVar('--color-swatch-fallback','#a8a29a'))}"></span>` +
             `<span class="name">${esc(p.name || '')}</span>` +
             `<span class="amt">$${usd < 1 ? usd.toFixed(2) : usd.toFixed(0)}</span>` +
             `</div>`;
@@ -1002,7 +1020,7 @@
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
     return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
-      <polyline points="${pts}" fill="none" stroke="#78716a" stroke-width="1.5" />
+      <polyline points="${pts}" fill="none" stroke="${cssVar('--color-stripe-fg', '#78716a')}" stroke-width="1.5" />
     </svg>`;
   }
 
@@ -1014,6 +1032,10 @@
     wireInferMainlineCta(btn, status);
   }
 
+  // Let the theme toggle recolor the uPlot axes/grid (which are baked at build
+  // time) by rebuilding the chart after a theme flip.
+  window.__ttRerenderChart = renderTrend;
+
   document.addEventListener('DOMContentLoaded', () => {
     renderTrend();
     renderTrailElevation();
@@ -1024,6 +1046,20 @@
     setupRowExpanders();
     setupClusterJumps();
     wireProjectUnattCta();
+  });
+
+  // Theme toggle: flip between light/dark, persist the choice, and rebuild the
+  // chart so its axis/grid colors match. Delegated so it survives re-renders.
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('#theme-toggle');
+    if (!btn) return;
+    const root = document.documentElement;
+    const current = root.getAttribute('data-theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('tt-theme', next); } catch (err) { /* private mode */ }
+    if (window.__ttRerenderChart) window.__ttRerenderChart();
   });
 
   // Anomaly dismiss/restore actions. Delegated handler so we don't need

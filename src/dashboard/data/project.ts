@@ -3,6 +3,8 @@ import { buildBranchGraph, STALE_DAYS, type BranchGraphVM } from './branches.js'
 import { canonicalProjectColors } from './overview.js';
 import { colorForProject } from '../lib/feature-colors.js';
 import { shownAnomalyPredicate } from '../lib/hidden-projects.js';
+import { attribute } from '../../lib/attribution.js';
+import { getConfig } from '../../lib/config.js';
 
 // A "project" is a higher-level grouping than a feature. There are three
 // kinds of project key:
@@ -301,27 +303,40 @@ export function buildProjectDetail(
   // Window-independent "closed": a feature is closed if any of its branches has
   // a merged PR, regardless of the 30-day activity window. A shipped feature
   // goes quiet and its branch ages out of the branch graph, but it is still
-  // done — not stale. Branch names come from feature_rollups.branches (which
-  // persists across the window); merges from session_prs. This is what lets a
-  // completed feature keep reading "closed" long after its last commit.
-  const featureBranchRows = db
-    .prepare(`SELECT feature_key AS featureKey, repo, branches FROM feature_rollups
-               WHERE ${filterSql} AND branches IS NOT NULL AND branches != ''`)
-    .all(filterParams) as Array<{ featureKey: string; repo: string | null; branches: string }>;
-  const closedRepos = [...new Set(featureBranchRows.map((r) => r.repo).filter((r): r is string => !!r))];
-  const mergedBranchSet = new Set<string>();
-  if (closedRepos.length > 0) {
-    const mergedRows = db
-      .prepare(`SELECT DISTINCT REPLACE(head_branch, 'origin/', '') AS b FROM session_prs
-                 WHERE pr_state = 'merged' AND merged_at IS NOT NULL
-                   AND repo IN (SELECT value FROM json_each(?))`)
-      .all(JSON.stringify(closedRepos)) as Array<{ b: string | null }>;
-    for (const r of mergedRows) if (r.b) mergedBranchSet.add(r.b);
-  }
+  // done — not stale. Merges come from session_prs; each merged branch is
+  // resolved to a feature two ways (union):
+  //   (1) attribute() — the canonical branch→feature derivation, so it works
+  //       even when feature_rollups.branches was never populated (older repos);
+  //   (2) membership in a feature's recorded branches CSV — belt-and-braces for
+  //       features attributed by PR title/label rather than by branch.
+  const projectRepos = (db
+    .prepare(`SELECT DISTINCT repo FROM feature_rollups
+               WHERE ${filterSql} AND repo IS NOT NULL AND repo != ''`)
+    .all(filterParams) as Array<{ repo: string }>).map((r) => r.repo);
   const closedFeatureKeys = new Set<string>();
-  for (const r of featureBranchRows) {
-    const names = r.branches.split(',').map((s) => s.trim()).filter(Boolean);
-    if (names.some((n) => mergedBranchSet.has(n))) closedFeatureKeys.add(r.featureKey);
+  if (projectRepos.length > 0) {
+    const mergedRows = db
+      .prepare(`SELECT DISTINCT repo, REPLACE(head_branch, 'origin/', '') AS branch FROM session_prs
+                 WHERE pr_state = 'merged' AND merged_at IS NOT NULL
+                   AND head_branch IS NOT NULL AND head_branch != ''
+                   AND repo IN (SELECT value FROM json_each(?))`)
+      .all(JSON.stringify(projectRepos)) as Array<{ repo: string; branch: string }>;
+    const config = getConfig();
+    const mergedBranches = new Set<string>();
+    for (const m of mergedRows) {
+      if (!m.branch) continue;
+      closedFeatureKeys.add(attribute({ repo: m.repo, branch: m.branch }, config).featureKey);
+      mergedBranches.add(m.branch);
+    }
+    // CSV path: features whose recorded branches include a merged branch.
+    const featureBranchRows = db
+      .prepare(`SELECT feature_key AS featureKey, branches FROM feature_rollups
+                 WHERE ${filterSql} AND branches IS NOT NULL AND branches != ''`)
+      .all(filterParams) as Array<{ featureKey: string; branches: string }>;
+    for (const r of featureBranchRows) {
+      const names = r.branches.split(',').map((s) => s.trim()).filter(Boolean);
+      if (names.some((n) => mergedBranches.has(n))) closedFeatureKeys.add(r.featureKey);
+    }
   }
 
   const staleBefore = (db

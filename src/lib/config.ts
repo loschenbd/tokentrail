@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 
 // Tokentrail's runtime config: extension knobs that let teams customize
 // attribution without forking the source. All keys are optional; missing
@@ -36,6 +36,8 @@ export type FeatureOverride = {
   featureName: string;
 };
 
+export type SourceBudgets = { claude: number | null; copilot: number | null; cursor: number | null };
+
 export type TokentrailConfig = {
   /** Extra branch names treated as mainline (added to default main/master/develop/staging). */
   extraMainlineBranches: string[];
@@ -69,6 +71,8 @@ export type TokentrailConfig = {
   monthlyBudgetUsd: number | null;
   /** Day-of-month (1-28) the budget cycle resets. Default 1. Clamped to 1-28 to avoid short-month drift. */
   budgetCycleStartDay: number;
+  /** Optional per-harness monthly caps. Each null = no cap for that source. */
+  sourceBudgets: SourceBudgets;
 };
 
 const EMPTY_CONFIG: TokentrailConfig = {
@@ -84,6 +88,7 @@ const EMPTY_CONFIG: TokentrailConfig = {
   copilotStorePath: null,
   monthlyBudgetUsd: null,
   budgetCycleStartDay: 1,
+  sourceBudgets: { claude: null, copilot: null, cursor: null },
 };
 
 let cached: TokentrailConfig | null = null;
@@ -135,6 +140,15 @@ function resolveConfigPath(): string | null {
   return null;
 }
 
+function positiveOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null;
+}
+
+function normalizeSourceBudgets(v: unknown): SourceBudgets {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  return { claude: positiveOrNull(o.claude), copilot: positiveOrNull(o.copilot), cursor: positiveOrNull(o.cursor) };
+}
+
 function normalize(raw: unknown, source: string): TokentrailConfig {
   if (typeof raw !== 'object' || raw === null) {
     throw new Error(`[tokentrail] config at ${source} must be a JSON object`);
@@ -156,6 +170,7 @@ function normalize(raw: unknown, source: string): TokentrailConfig {
         ? obj.monthlyBudgetUsd
         : null,
     budgetCycleStartDay: clampCycleDay(obj.budgetCycleStartDay),
+    sourceBudgets: normalizeSourceBudgets(obj.sourceBudgets),
   };
 }
 
@@ -224,4 +239,57 @@ function asOverrides(value: unknown, source: string): Record<string, FeatureOver
     };
   }
   return out;
+}
+
+export type BudgetPatch = {
+  monthlyBudgetUsd?: number | null;
+  budgetCycleStartDay?: number;
+  sourceBudgets?: Partial<SourceBudgets>;
+};
+
+// Where a write should land: an existing config file if one is resolvable,
+// else the user-level path (created on demand). Never invents a project-local
+// file that doesn't already exist.
+function configTargetPath(): string {
+  if (process.env.TOKENTRAIL_CONFIG) {
+    return resolve(process.env.TOKENTRAIL_CONFIG);
+  }
+  return resolveConfigPath() ?? join(homedir(), '.config', 'tokentrail', 'config.json');
+}
+
+// The FIRST config writer. Narrow by design: touches only budget keys, keeps
+// every unrelated key verbatim, writes atomically, and busts the cache so the
+// next getConfig() reflects the change.
+export function saveBudgetConfig(patch: BudgetPatch): { path: string } {
+  const path = configTargetPath();
+  let current: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    const raw = readFileSync(path, 'utf-8').trim();
+    if (raw.length > 0) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === 'object' && parsed !== null) current = parsed as Record<string, unknown>;
+    }
+  }
+
+  if ('monthlyBudgetUsd' in patch) {
+    current.monthlyBudgetUsd = patch.monthlyBudgetUsd == null ? null : patch.monthlyBudgetUsd;
+  }
+  if ('budgetCycleStartDay' in patch && patch.budgetCycleStartDay !== undefined) {
+    current.budgetCycleStartDay = Math.min(28, Math.max(1, Math.trunc(patch.budgetCycleStartDay)));
+  }
+  if (patch.sourceBudgets) {
+    const existing = (typeof current.sourceBudgets === 'object' && current.sourceBudgets !== null
+      ? current.sourceBudgets : {}) as Record<string, unknown>;
+    for (const k of ['claude', 'copilot', 'cursor'] as const) {
+      if (k in patch.sourceBudgets) existing[k] = patch.sourceBudgets[k] ?? null;
+    }
+    current.sourceBudgets = existing;
+  }
+
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(current, null, 2) + '\n', 'utf-8');
+  renameSync(tmp, path);
+  resetConfigCache();
+  return { path };
 }

@@ -181,3 +181,27 @@ if (removeBtn && confirmDiv && confirmInput && confirmSubmit && confirmCancel) {
     removeBtn.closest('.remove-key-row').removeAttribute('hidden');
   });
 }
+
+// Budget form: blank field = null (no cap). Numbers post to /api/budget.
+const budgetForm = document.getElementById('budget-form');
+if (budgetForm) {
+  budgetForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(budgetForm);
+    const numOrNull = (v) => { const s = String(v ?? '').trim(); return s === '' ? null : Number(s); };
+    const body = {
+      monthlyBudgetUsd: numOrNull(fd.get('monthlyBudgetUsd')),
+      budgetCycleStartDay: Number(fd.get('budgetCycleStartDay') || 1),
+      sourceBudgets: {
+        claude: numOrNull(fd.get('claude')),
+        copilot: numOrNull(fd.get('copilot')),
+        cursor: numOrNull(fd.get('cursor')),
+      },
+    };
+    const r = await fetch('/api/budget', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (r.ok) location.reload();
+    else { const o = await r.json().catch(() => ({})); alert('Save failed: ' + (o.error || r.status)); }
+  });
+}

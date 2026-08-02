@@ -51,6 +51,7 @@ export function renderSettings(vm: SettingsViewModel): string {
 <section class="settings">
   <h1>Settings</h1>
   ${hiddenProjectsUI}
+  ${renderBudgetFieldset(vm)}
   <form id="llm-form">
     <fieldset>
       <legend>LLM backend</legend>
@@ -79,4 +80,23 @@ export function renderSettings(vm: SettingsViewModel): string {
   </form>
   <script src="/static/settings.js"></script>
 </section>`;
+}
+
+function num(v: number | null): string { return v == null ? '' : String(v); }
+
+function renderBudgetFieldset(vm: SettingsViewModel): string {
+  const b = vm.budget;
+  return `
+  <form id="budget-form">
+    <fieldset id="budget">
+      <legend>Budget</legend>
+      <p class="hidden-projects-hint">Monthly spend caps (estimated). Leave a field blank for no cap.</p>
+      <label>Monthly budget $ <input name="monthlyBudgetUsd" type="number" min="0" step="1" value="${num(b.monthlyBudgetUsd)}"></label>
+      <label>Cycle start day <input name="budgetCycleStartDay" type="number" min="1" max="28" step="1" value="${b.budgetCycleStartDay}"></label>
+      <label>Claude Code cap $ <input name="claude" type="number" min="0" step="1" value="${num(b.sourceBudgets.claude)}"></label>
+      <label>Copilot cap $ <input name="copilot" type="number" min="0" step="1" value="${num(b.sourceBudgets.copilot)}"></label>
+      <label>Cursor cap $ <input name="cursor" type="number" min="0" step="1" value="${num(b.sourceBudgets.cursor)}"></label>
+      <button type="submit">Save budget</button>
+    </fieldset>
+  </form>`;
 }

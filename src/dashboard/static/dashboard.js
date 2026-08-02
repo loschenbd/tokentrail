@@ -263,24 +263,27 @@
     let activeKey = null;
     const colorByKey = {};
     stackOrder.forEach((proj) => { colorByKey[proj.key] = proj.color; });
-    // Fills are STATIC here on purpose: uPlot resolves a series' stroke/fill
-    // once (cached in _fill/_stroke) and does not re-run a function on redraw,
-    // so the focus effect is driven by writing those cached values directly in
-    // setActiveKey below.
+    // Fills/strokes are FUNCTIONS of activeKey. uPlot re-resolves them via its
+    // internal cacheStrokeFill on setData/setSize (e.g. a mobile-layout resize),
+    // so those paths recompute the focus effect correctly instead of reverting
+    // to a static default. Plain redraw() does NOT re-run them — the drawClear
+    // hook (applyFocusFills) covers that path. Between the two, no uPlot redraw
+    // can clobber the effect. When a project is focused, EVERY stacked band
+    // ghosts to ~12% (the focused project is redrawn on the overlay below).
     const series = [{}].concat(stackOrder.map((proj) => ({
       label: proj.name,
-      stroke: proj.color,
-      fill: hexToRgba(proj.color, 0.92),
+      stroke: () => (activeKey ? hexToRgba(proj.color, 0.15) : proj.color),
+      fill: () => (activeKey ? hexToRgba(proj.color, 0.12) : hexToRgba(proj.color, 0.92)),
       width: 1,
       points: { show: false },
     })));
     // Focus overlay: the active project's own daily $ (un-stacked, from zero),
     // drawn last so it sits on top of the ghosted stack; transparent until a
-    // project is focused (see setActiveKey).
+    // project is focused.
     series.push({
       label: '__focus__',
-      stroke: 'rgba(0,0,0,0)',
-      fill: 'rgba(0,0,0,0)',
+      stroke: () => (activeKey ? hexToRgba(colorByKey[activeKey] || '#888888', 0.95) : 'rgba(0,0,0,0)'),
+      fill: () => (activeKey ? hexToRgba(colorByKey[activeKey] || '#888888', 0.85) : 'rgba(0,0,0,0)'),
       width: 1.5,
       points: { show: false },
     });
@@ -297,43 +300,37 @@
     const focusYs = () => (activeKey ? days.map((d) => d.bands[activeKey] || 0) : days.map(() => null));
     const data = [xs].concat(seriesYs, [focusYs()]);
 
+    // Re-resolve every series' cached _fill/_stroke by re-invoking its
+    // fill/stroke FUNCTION (which reads activeKey). Runs from the uPlot
+    // `drawClear` hook on every draw, so plain redraw() — which otherwise
+    // reuses the stale cached value — re-derives the focus effect. Paired with
+    // the fill functions (which uPlot re-resolves on resize/setData), this
+    // makes the effect robust to every redraw path. (Writing _fill once in
+    // setActiveKey was fragile: hover masked it via continuous re-assertion on
+    // every mouse move, but a single touch tap had none and a later resize
+    // reverted it.)
+    function applyFocusFills(u) {
+      for (let i = 1; i < u.series.length; i++) {
+        const s = u.series[i];
+        if (typeof s.fill === 'function') s._fill = s.fill(u, i);
+        if (typeof s.stroke === 'function') s._stroke = s.stroke(u, i);
+      }
+    }
+
     // Declare setActiveKey before opts so it can be safely called from hooks.
     let chartCanvas;
     function setActiveKey(key) {
       if (!chartCanvas) return;
-      // In-place band isolation: repaint with the per-series fill/stroke
-      // functions above (they read activeKey). Replaces the old whole-
-      // canvas .chart-dimmed opacity drop, which dimmed the hovered band
-      // along with everything else. Redraw only on real changes —
-      // setCursor calls this every mouse move.
       if (key !== activeKey) {
         activeKey = key;
         const u = node.__uplot;
         if (u) {
-          // 1) swap the overlay column in place (no rescale — the stack sets
-          //    y-max). Mutating u.data directly and letting redraw() rebuild
-          //    the path avoids setData's DEFERRED repaint, which re-resolves
-          //    the static series fills and erases the ghost/overlay we set
-          //    synchronously below.
+          // Swap the overlay column in place (the focused project's daily $,
+          // un-stacked from the baseline) and repaint. Fills are re-derived by
+          // the drawClear hook, so we only own the data + the redraw here.
+          // Rebuild paths but DON'T recompute scales: the stack total always
+          // sets y-max and the overlay can never exceed it.
           u.data[stackOrder.length + 1] = focusYs();
-          // 2) write the resolved fills directly: ghost every stacked band to
-          //    ~12% while a project is focused, and paint the overlay in the
-          //    focused project's color. uPlot draws from these cached fields.
-          for (let i = 1; i <= stackOrder.length; i++) {
-            const c = stackOrder[i - 1].color;
-            u.series[i]._fill = key ? hexToRgba(c, 0.12) : hexToRgba(c, 0.92);
-            u.series[i]._stroke = key ? hexToRgba(c, 0.15) : c;
-          }
-          const ov = u.series[stackOrder.length + 1];
-          const fc = key ? (colorByKey[key] || '#888888') : null;
-          ov._fill = fc ? hexToRgba(fc, 0.85) : 'rgba(0,0,0,0)';
-          ov._stroke = fc ? hexToRgba(fc, 0.95) : 'rgba(0,0,0,0)';
-          // 3) repaint with the updated fills. Rebuild paths but DON'T
-          //    recompute scales: the stack total always sets y-max and the
-          //    overlay (one project's daily $) can never exceed it, so a
-          //    rescale here is at best a no-op and at worst collapses the
-          //    axis if it fires against a mid-init chart (e.g. a theme
-          //    rebuild in flight).
           u.redraw(true, false);
         }
       }
@@ -344,6 +341,12 @@
         });
       }
     }
+
+    // Hover vs touch: cursor-driven focus (below, in setCursor) and legend
+    // hover are desktop affordances. On touch there is no persistent cursor,
+    // so a phantom setCursor firing after a legend tap would clobber the
+    // tap-driven focus — hence gate cursor focus on canHover.
+    const canHover = window.matchMedia('(hover: hover)').matches;
 
     const opts = {
       width: node.clientWidth,
@@ -363,6 +366,9 @@
         ];
       })(),
       hooks: {
+        // Re-derive focus fills from activeKey before every draw, so no
+        // internal uPlot redraw can revert the ghost/overlay effect.
+        drawClear: [(u) => applyFocusFills(u)],
         setCursor: [
           (() => {
             // Track prior state so we only re-render on real changes. Every
@@ -384,7 +390,10 @@
               const yVal = self.posToVal(self.cursor.top, 'y');
               const band = hitBand(yVal, idx);
               const activeProjectKey = band ? band.key : null;
-              setActiveKey(activeProjectKey);
+              // Only let the chart cursor drive focus on hover devices. On
+              // touch, focus is owned by legend taps; a phantom cursor update
+              // here (fired after the tap's redraw) would otherwise reset it.
+              if (canHover) setActiveKey(activeProjectKey);
 
               // Skip re-render if content unchanged — keeps drill-down link
               // positions stable so the user can reach them.
@@ -420,7 +429,6 @@
     const legend = document.getElementById('trend-legend');
     chartCanvas = node.querySelector('canvas');
 
-    const canHover = window.matchMedia('(hover: hover)').matches;
     if (legend) {
       legend.querySelectorAll('.trend-legend-row').forEach((li) => {
         const key = li.getAttribute('data-project-key');

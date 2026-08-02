@@ -162,10 +162,29 @@ describe('renderProject features section', () => {
     assert.match(seg, /href="\/feature\/local-rag-chatbot"/);
   });
 
-  test('sparkline svg is embedded per row', () => {
+  test('share bar embedded per row, no per-row sparkline svg', () => {
     const seg = extractSection(renderProject(fullVm()), 'features');
-    const svgs = (seg.match(/<svg\b/g) ?? []).length;
-    assert.equal(svgs, 2);
+    assert.equal((seg.match(/pfeat-fill/g) ?? []).length, 2);
+    assert.doesNotMatch(seg, /<svg\b/);
+  });
+
+  test('long tail folds behind a toggle naming count + summed dollars', () => {
+    const many = [
+      { featureKey: 'a', featureName: 'Alpha', totalUsd: 262, sessionCount: 2, lastActive: '2026-06-27', daily: [] },
+      { featureKey: 'b', featureName: 'Bravo', totalUsd: 149, sessionCount: 3, lastActive: '2026-06-23', daily: [] },
+      { featureKey: 'c', featureName: 'Charlie', totalUsd: 129, sessionCount: 1, lastActive: '2026-06-25', daily: [] },
+      { featureKey: 'd', featureName: 'Delta', totalUsd: 80, sessionCount: 1, lastActive: '2026-06-22', daily: [] },
+      { featureKey: 'e', featureName: 'Echo', totalUsd: 42, sessionCount: 1, lastActive: '2026-06-21', daily: [] },
+      { featureKey: 'f', featureName: 'Foxtrot', totalUsd: 4, sessionCount: 1, lastActive: '2026-06-20', daily: [] },
+      { featureKey: 'g', featureName: 'Golf', totalUsd: 3, sessionCount: 1, lastActive: '2026-06-19', daily: [] },
+      { featureKey: 'h', featureName: 'Hotel', totalUsd: 1, sessionCount: 1, lastActive: '2026-06-18', daily: [] },
+    ];
+    const seg = extractSection(renderProject(baseVm({ totalUsd: 670, features: many })), 'features');
+    // 5 features >= $10 stay visible; 3 (<$10) fold.
+    assert.match(seg, /data-pfeat-tail/);
+    assert.match(seg, /\+ 3 more under \$10 · \$8 total/);
+    assert.match(seg, /class="pfeat-tail" hidden/);
+    assert.match(seg, /Foxtrot/);   // tail row still in DOM (just hidden)
   });
 
   test('empty features → muted note, no rows', () => {

@@ -225,30 +225,54 @@ function renderFeatures(vm: ProjectDetailVM, color: string): string {
     </section>`;
   }
   const denom = vm.totalUsd > 0 ? vm.totalUsd : 1;
-  const rows = vm.features.map((f, i) => {
+  const leader = vm.features[0]!.totalUsd || 1;
+  const THRESHOLD = 10;
+
+  // Fold: rows >= $10 stay expanded; if that leaves < 5 visible, fall back to
+  // the top 8 so the block never collapses to almost nothing.
+  let visibleCount = vm.features.filter((f) => f.totalUsd >= THRESHOLD).length;
+  if (visibleCount < 5) visibleCount = Math.min(8, vm.features.length);
+  const head = vm.features.slice(0, visibleCount);
+  const tail = vm.features.slice(visibleCount);
+
+  const row = (f: ProjectDetailVM['features'][number], i: number): string => {
     const share = Math.round((f.totalUsd / denom) * 100);
+    const barPct = Math.max((f.totalUsd / leader) * 100, 1.5);
     const shade = shadeForFeature(color, f.featureKey);
-    const spark = renderSparkline({
-      points: f.daily,
-      color: shade,
-      width: 96,
-      height: 18,
-      ariaLabel: `${f.featureKey} 30d`,
-    });
     const rawName = f.featureName || f.featureKey;
     const displayName = rawName.length > 40 ? rawName.slice(0, 39) + '…' : rawName;
     return `
       <a class="pfeat-row" href="/feature/${encodeURIComponent(f.featureKey)}" title="${escapeHtml(rawName)}">
         <span class="pfeat-rank">${i + 1}</span>
         <span class="pfeat-name">${escapeHtml(displayName)}</span>
-        <span class="pfeat-amt">$${formatUsdCommas(f.totalUsd)} · ${share}%</span>
         <span class="pfeat-meta"><span class="pfeat-sess">${f.sessionCount} sess</span> · <span class="pfeat-last">last ${formatMonDay(f.lastActive)}</span></span>
-        <span class="pfeat-spark">${spark}</span>
+        <span class="pfeat-barline">
+          <span class="pfeat-track"><span class="pfeat-fill" style="width:${barPct.toFixed(1)}%;background:${escapeHtml(shade)}"></span></span>
+          <span class="pfeat-amt"><b>$${formatUsdCommas(f.totalUsd)}</b> · ${share}%</span>
+        </span>
       </a>`;
-  }).join('');
+  };
+
+  const headRows = head.map((f, i) => row(f, i)).join('');
+  let tailBlock = '';
+  if (tail.length > 0) {
+    const tailSum = tail.reduce((s, f) => s + f.totalUsd, 0);
+    const allBelow = tail.every((f) => f.totalUsd < THRESHOLD);
+    const label = allBelow
+      ? `+ ${tail.length} more under $${THRESHOLD} · $${formatUsdCommas(tailSum)} total`
+      : `+ ${tail.length} more · $${formatUsdCommas(tailSum)} total`;
+    const tailRows = tail.map((f, i) => row(f, visibleCount + i)).join('');
+    tailBlock = `
+      <button class="pfeat-tail-toggle" type="button" data-pfeat-tail aria-expanded="false">
+        <span class="pfeat-tail-label">${label}</span><span class="pfeat-tail-caret">›</span>
+      </button>
+      <div class="pfeat-tail" hidden>${tailRows}</div>`;
+  }
+
   return `
     <section class="card" data-section="features">
       <div class="label">Features · ${vm.features.length}</div>
-      <div class="pfeat-list">${rows}</div>
+      <div class="pfeat-list">${headRows}</div>
+      ${tailBlock}
     </section>`;
 }

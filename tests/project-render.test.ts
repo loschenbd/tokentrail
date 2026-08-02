@@ -206,24 +206,40 @@ describe('renderProject active-work section', () => {
     ],
   };
 
-  test('branch summary shows open / merged / stale buckets with names + aligned $', () => {
+  test('branch table renders a row per branch with name, spend fill, activity segment, sessions', () => {
     const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');
-    assert.match(seg, /Open/);
     assert.match(seg, /worktree-local-semantic-search/);
-    assert.match(seg, /Merged/);
-    assert.match(seg, /onboarding-wizard/);
-    assert.match(seg, /Stale/);
-    assert.match(seg, /coherence-pass/);
-    assert.match(seg, /bsum-usd/);   // dollar cell present
+    assert.match(seg, /bwork-fill/);       // spend bar
+    assert.match(seg, /bwork-seg/);         // activity-window segment
+    assert.match(seg, /bwork-row bwork-open/);
   });
 
-  test('branch graph mount + JSON payload are embedded', () => {
+  test('merged branch carries a ✓; stale branch carries the stale class', () => {
     const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');
-    assert.match(seg, /id="branch-graph"/);
-    assert.match(seg, /id="branch-graph-data"/);
+    assert.match(seg, /bwork-row bwork-merged/);
+    assert.match(seg, /bwork-tick/);
+    assert.match(seg, /bwork-row bwork-stale/);
   });
 
-  test('recent commits render inline (not in a separate card)', () => {
+  test('activity segment left/width stay within 0–100%', () => {
+    const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');
+    const styles = [...seg.matchAll(/style="left:([\d.]+)%;width:([\d.]+)%"/g)];
+    assert.ok(styles.length >= 1, 'expected at least one segment');
+    for (const m of styles) {
+      const left = Number(m[1]); const width = Number(m[2]);
+      assert.ok(left >= 0 && left <= 100, `left ${left} in range`);
+      assert.ok(width >= 0 && width <= 100, `width ${width} in range`);
+      assert.ok(left + width <= 100.5, `left+width ${left + width} within bounds`);
+    }
+  });
+
+  test('the SVG branch-graph mount and JSON payload are gone', () => {
+    const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');
+    assert.doesNotMatch(seg, /id="branch-graph"/);
+    assert.doesNotMatch(seg, /branch-graph-data/);
+  });
+
+  test('recent commits still render inline', () => {
     const seg = extractSection(renderProject(baseVm({
       branchGraph,
       recentCommits: [

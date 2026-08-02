@@ -517,52 +517,6 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--space-l); }
   r: 7;
 }
 
-/* Branch graph — bezier-arc lifecycle visualization per project */
-.branch-graph { display: block; font-family: var(--font-sans); }
-.branch-graph-trunk {
-  fill: none;
-  stroke: var(--color-ink);
-  stroke-width: 2;
-  shape-rendering: crispEdges;
-}
-.branch-graph-grid {
-  stroke: var(--color-hairline);
-  stroke-width: 1;
-  stroke-dasharray: 2 3;
-  shape-rendering: crispEdges;
-}
-.branch-graph-axis-label {
-  fill: var(--color-ink-muted);
-  font-size: var(--size-small);
-  font-family: var(--font-mono);
-}
-.branch-graph-arc {
-  fill: none;
-  stroke-width: 1.5;
-  cursor: pointer;
-  transition: stroke-width 120ms ease-out;
-}
-.branch-graph-arc:hover { stroke-width: 2.5; }
-.branch-graph-arc.merged { stroke: var(--color-ink-muted); }
-.branch-graph-arc.open   { stroke: var(--color-accent); stroke-width: 2; }
-.branch-graph-arc.stale  { stroke: var(--color-ink-subtle); }
-.branch-graph-marker {
-  stroke: var(--color-paper, #f3f1eb);
-  stroke-width: 2;
-}
-.branch-graph-marker.merged { fill: var(--color-ink-muted); }
-.branch-graph-marker.open   { fill: var(--color-accent); }
-.branch-graph-marker.stale  { fill: var(--color-ink-subtle); }
-.branch-graph-marker.open-end { fill: var(--color-paper, #f3f1eb); stroke: var(--color-accent); stroke-width: 2; }
-.branch-graph-marker.stale-end { fill: var(--color-paper, #f3f1eb); stroke: var(--color-ink-subtle); stroke-width: 2; }
-.branch-graph-label {
-  fill: var(--color-ink);
-  font-size: var(--size-small);
-  font-family: var(--font-sans);
-  pointer-events: none;
-}
-.branch-graph-label.muted { fill: var(--color-ink-muted); }
-
 .trend-layout {
   display: flex;
   gap: 16px;
@@ -858,45 +812,44 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   font-variant-numeric: tabular-nums;
   color: var(--color-ink-muted);
 }
-.project-page .branch-summary {
-  margin-top: 14px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--space-l);
-}
-.project-page .bsum-col-head {
-  font-family: var(--font-serif);
-  font-size: var(--size-small);
-  color: var(--color-ink);
-  margin-bottom: 6px;
-}
-.project-page .bsum-count { color: var(--color-ink-subtle); }
-.project-page .bsum-items { display: flex; flex-direction: column; }
-.project-page .bsum-item {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-s);
-  padding: 4px 0;
-  border-bottom: 1px solid var(--color-hairline);
-  font-size: 12.5px;
-}
-.project-page .bsum-item:last-child { border-bottom: 0; }
-.project-page .bsum-branch {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--color-ink-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.project-page .bsum-usd {
-  font-variant-numeric: tabular-nums;
-  color: var(--color-ink);
-  white-space: nowrap;
-}
-.project-page .bsum-usd.zero { color: var(--color-ink-subtle); }
 .project-page .commits-inline { margin-top: 14px; }
 .project-page .commits-inline .subheader { margin-bottom: 4px; }
+
+/* --- project detail: active work branch table --- */
+.project-page .bwork { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.project-page .bwork-head,
+.project-page .bwork-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) 120px 150px 40px;
+  gap: 10px;
+  align-items: center;
+}
+.project-page .bwork-head {
+  padding: 0 6px 6px;
+  border-bottom: 1px solid var(--color-hairline);
+  margin-bottom: 2px;
+}
+.project-page .bwork-axis { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; }
+.project-page .bwork-hlabel { font-family: var(--font-serif); font-size: 10px; color: var(--color-ink-subtle); text-align: right; }
+.project-page .bwork-row { padding: 8px 6px; border-radius: 8px; }
+.project-page .bwork-row:hover { background: var(--color-hover-bg); }
+.project-page .bwork-stale { opacity: 0.55; }
+.project-page .bwork-dot { width: 9px; height: 9px; border-radius: 50%; justify-self: center; }
+.project-page .bwork-open .bwork-dot { background: var(--color-accent); }
+.project-page .bwork-merged .bwork-dot { background: var(--color-accent); box-shadow: 0 0 0 2px var(--color-card-bg), 0 0 0 3px var(--color-accent); }
+.project-page .bwork-stale .bwork-dot { background: transparent; border: 1.5px solid var(--color-ink-subtle); }
+.project-page .bwork-name { font-family: var(--font-mono); font-size: 12px; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.project-page .bwork-stale .bwork-name { color: var(--color-ink-muted); }
+.project-page .bwork-tick { color: var(--color-accent); font-weight: 700; margin-left: 4px; }
+.project-page .bwork-track { position: relative; height: 14px; background: var(--color-fill-track); border-radius: 3px; }
+.project-page .bwork-seg { position: absolute; top: 3px; height: 8px; border-radius: 4px; background: var(--color-accent); }
+.project-page .bwork-stale .bwork-seg { background: repeating-linear-gradient(90deg, var(--color-ink-subtle) 0 3px, transparent 3px 6px); }
+.project-page .bwork-spend { display: flex; align-items: center; gap: 8px; }
+.project-page .bwork-bar { flex: 1; height: 8px; background: var(--color-fill-track); border-radius: 4px; overflow: hidden; }
+.project-page .bwork-fill { display: block; height: 100%; background: var(--color-accent); border-radius: 4px; }
+.project-page .bwork-stale .bwork-fill { background: var(--color-ink-subtle); }
+.project-page .bwork-amt { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--color-ink); min-width: 40px; text-align: right; }
+.project-page .bwork-sess { font-size: 11px; color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; text-align: right; }
 
 /* --- project detail: worth reconciling --- */
 .project-page .reconciled-note {

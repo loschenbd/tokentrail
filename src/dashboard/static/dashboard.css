@@ -1041,6 +1041,25 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   /* Source picker (Overview, multi-source) drops to its own full-width row. */
   .source-form { flex-basis: 100%; }
 
+  /* Trend chart: stack legend below a full-width, taller chart. */
+  .trend-layout { flex-direction: column; }
+  .trend-layout #trend-chart { width: 100%; height: 220px; }
+  .trend-legend {
+    flex: 1 1 auto; max-height: none; overflow: visible;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px;
+  }
+
+  /* Worth a look: rigid grid -> stacked cards. */
+  .anomaly-full {
+    display: block;
+    padding: var(--space-s) 0;
+  }
+  .anomaly-full > .anomaly-date { display: inline; }
+  .anomaly-full > .anomaly-kind { display: inline; margin-left: var(--space-s); }
+  .anomaly-target { display: block; margin: 4px 0; font-size: var(--size-body); }
+  .anomaly-full > .anomaly-reason { display: block; text-align: left; margin-bottom: 4px; }
+  .anomaly-full > .anomaly-action { display: inline-block; padding-left: 0; }
+
   /* Bottom tab bar shown, fixed, safe-area aware. */
   .bottom-nav {
     display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;

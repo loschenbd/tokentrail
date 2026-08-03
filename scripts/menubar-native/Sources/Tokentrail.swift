@@ -609,6 +609,17 @@ struct PanelView: View {
     // Persisted so the choice sticks across relaunches.
     @AppStorage("tt.budgetCollapsed") private var budgetCollapsed = false
 
+    // Measured intrinsic height of scrollBody. A ScrollView reports no intrinsic
+    // height, so inside the self-sizing MenuBarExtra .window panel it would
+    // collapse to nothing — we measure the content and give the ScrollView a
+    // concrete height (capped at maxScrollHeight) instead.
+    @State private var scrollBodyHeight: CGFloat = 0
+
+    private struct ScrollContentHeightKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+    }
+
     enum SourceTab: String, CaseIterable { case all = "All", claude = "Claude", copilot = "Copilot", cursor = "Cursor" }
 
     var body: some View {
@@ -616,8 +627,16 @@ struct PanelView: View {
         // always reachable no matter how long the lists get.
         VStack(alignment: .leading, spacing: 0) {
             if bounded {
-                ScrollView { scrollBody }
-                    .frame(maxHeight: maxScrollHeight)
+                ScrollView {
+                    scrollBody
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: ScrollContentHeightKey.self, value: g.size.height)
+                        })
+                }
+                // Until measured, fall back to the cap so the panel never opens
+                // at zero height; then fit content exactly up to the cap.
+                .frame(height: scrollBodyHeight == 0 ? maxScrollHeight : min(scrollBodyHeight, maxScrollHeight))
+                .onPreferenceChange(ScrollContentHeightKey.self) { scrollBodyHeight = $0 }
             } else {
                 scrollBody
             }

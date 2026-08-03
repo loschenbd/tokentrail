@@ -1173,10 +1173,14 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
    (what shipped / ledger | cost & activity / topics). See
    docs/superpowers/specs/2026-08-02-feature-page-redesign-design.md
    ============================================================ */
-.fp-page { max-width: 1080px; margin: 0 auto; }
-.fp-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--space-m); align-items: start; }
-.fp-grid > .fp-main, .fp-grid > .fp-rail { min-width: 0; }
-@media (max-width: 820px) { .fp-grid { grid-template-columns: 1fr; } }
+/* Match the project page's framing (.pp-page): same max-width, 24px gaps,
+   flex-column card stacks, and 900px collapse — so detail pages feel identical. */
+.fp-page { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-l); }
+.fp-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--space-l); align-items: start; }
+.fp-grid > .fp-main, .fp-grid > .fp-rail { display: flex; flex-direction: column; gap: var(--space-l); min-width: 0; }
+/* Stacked columns must stretch to full width — the base align-items:start would
+   otherwise size them to content, overflowing the viewport on mobile. */
+@media (max-width: 900px) { .fp-grid { display: flex; flex-direction: column; align-items: stretch; } }
 
 .fp-zone-note { font-family: var(--font-sans); font-size: 10px; letter-spacing: 0.04em;
   color: var(--color-accent); opacity: 0.8; margin-left: 8px; }

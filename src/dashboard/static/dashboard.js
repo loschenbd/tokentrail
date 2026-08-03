@@ -510,162 +510,131 @@
     });
   }
 
-  function renderTrailElevation() {
-    const node = document.getElementById('trail-elevation');
-    const dataNode = document.getElementById('trail-elevation-data');
+  function escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function featureDayMs(d) { return new Date(String(d) + 'T12:00:00').getTime(); }
+
+  // Adaptive cost & activity view: a full daily-cost chart with commits/PRs/
+  // releases overlaid when the feature spans enough active days, else a compact
+  // event strip for sparse features. Replaces the old cumulative "trail elevation".
+  function renderFeatureActivity() {
+    const node = document.getElementById('feature-activity');
+    const dataNode = document.getElementById('feature-activity-data');
     if (!node || !dataNode) return;
-    let sessions;
-    try { sessions = JSON.parse(dataNode.textContent || '[]'); } catch (e) { return; }
-    if (!Array.isArray(sessions) || sessions.length === 0) {
-      node.innerHTML = '<div class="muted" style="padding:24px;text-align:center">No sessions yet — start a Claude Code session in this feature\'s branch to begin the trail.</div>';
+    let payload;
+    try { payload = JSON.parse(dataNode.textContent || 'null'); } catch (e) { return; }
+    if (!payload || !Array.isArray(payload.dailySeries)) return;
+    const events = Array.isArray(payload.events) ? payload.events : [];
+    const activeDays = payload.activeDays || payload.dailySeries.length;
+    node.style.position = 'relative';
+    if (activeDays >= 5 && payload.dailySeries.length >= 2) {
+      renderFeatureChart(node, payload.dailySeries, events);
+    } else {
+      renderFeatureStrip(node, payload.dailySeries, events);
+    }
+  }
+
+  function featureLegend() {
+    return '<div class="fp-strip-legend">' +
+      '<span><i class="fp-lg-commit"></i> commit</span>' +
+      '<span><i class="fp-lg-pr"></i> merged PR</span>' +
+      '<span><i class="fp-lg-rel"></i> release</span>' +
+      '</div>';
+  }
+
+  function renderFeatureStrip(node, dailySeries, events) {
+    const times = [];
+    dailySeries.forEach((d) => times.push(featureDayMs(d.date)));
+    events.forEach((e) => times.push(featureDayMs(e.date)));
+    if (times.length === 0) {
+      node.innerHTML = '<div class="muted" style="padding:16px">No activity in this window yet.</div>';
       return;
     }
+    let xMin = Math.min.apply(null, times), xMax = Math.max.apply(null, times);
+    if (xMin === xMax) { xMin -= 86400000; xMax += 86400000; }
+    // Inset 2%..98% so edge markers/labels don't clip.
+    const pos = (t) => (((t - xMin) / (xMax - xMin)) * 96 + 2).toFixed(1);
 
-    // Build cumulative trail points: { t (unix ms), cum, session }
-    const pts = [];
-    let acc = 0;
-    for (const s of sessions) {
-      acc += s.cost;
-      pts.push({ t: new Date(s.date + 'T12:00:00').getTime(), cum: acc, session: s });
-    }
-    // Anchor the curve at zero on the day before the first session so the
-    // trail starts at the trailhead instead of mid-climb.
-    const firstT = pts[0].t - 86400000;
-    // End the curve at "now" so the trail extends to today as a flat
-    // plateau (the trail doesn't dip after the last session).
-    const lastT = Math.max(pts[pts.length - 1].t, Date.now());
-
-    const W = node.clientWidth || 800;
-    const H = 240;
-    const pad = { l: 50, r: 20, t: 20, b: 30 };
-    const innerW = W - pad.l - pad.r;
-    const innerH = H - pad.t - pad.b;
-
-    const xMin = firstT;
-    const xMax = lastT + 86400000;
-    const yMax = Math.max(acc, 1) * 1.1;
-
-    function xPos(t) {
-      if (xMax === xMin) return pad.l + innerW / 2;
-      return pad.l + ((t - xMin) / (xMax - xMin)) * innerW;
-    }
-    function yPos(v) {
-      return pad.t + innerH - (v / yMax) * innerH;
-    }
-
-    // Build the area polygon and the trail line.
-    // Trail steps: start at (firstT, 0), then for each session step UP to
-    // the cumulative value at that session's t (vertical), then continue
-    // FLAT to the next session's t. This gives the "elevation profile"
-    // look — each session is a rise, days between sessions are flat.
-    const trailPoints = [{ t: firstT, v: 0 }];
-    let prevCum = 0;
-    for (const p of pts) {
-      trailPoints.push({ t: p.t, v: prevCum });   // flat up to the rise
-      trailPoints.push({ t: p.t, v: p.cum });     // the rise
-      prevCum = p.cum;
-    }
-    trailPoints.push({ t: lastT + 86400000, v: prevCum });
-
-    const lineD = trailPoints.map((p, i) => (i === 0 ? 'M' : 'L') + xPos(p.t).toFixed(1) + ' ' + yPos(p.v).toFixed(1)).join(' ');
-    const areaD = lineD +
-      ' L' + xPos(trailPoints[trailPoints.length - 1].t).toFixed(1) + ' ' + yPos(0).toFixed(1) +
-      ' L' + xPos(trailPoints[0].t).toFixed(1) + ' ' + yPos(0).toFixed(1) + ' Z';
-
-    // Build axis ticks: a few horizontal $ gridlines + the date axis.
-    const yTicks = niceTicks(0, yMax, 4);
-    const xTicks = niceTimeTicks(xMin, xMax, 6);
-
-    const ns = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-    svg.setAttribute('width', '100%');
-    svg.setAttribute('height', H);
-    svg.setAttribute('class', 'trail-elevation');
-
-    // Y gridlines + labels
-    for (const v of yTicks) {
-      const y = yPos(v);
-      const grid = document.createElementNS(ns, 'line');
-      grid.setAttribute('x1', pad.l); grid.setAttribute('x2', W - pad.r);
-      grid.setAttribute('y1', y); grid.setAttribute('y2', y);
-      grid.setAttribute('class', 'trail-grid');
-      svg.appendChild(grid);
-      const label = document.createElementNS(ns, 'text');
-      label.setAttribute('x', pad.l - 8); label.setAttribute('y', y + 4);
-      label.setAttribute('class', 'trail-axis-label');
-      label.setAttribute('text-anchor', 'end');
-      label.textContent = '$' + Math.round(v);
-      svg.appendChild(label);
-    }
-    // X labels
-    for (const t of xTicks) {
-      const x = xPos(t);
-      const label = document.createElementNS(ns, 'text');
-      label.setAttribute('x', x); label.setAttribute('y', H - 10);
-      label.setAttribute('class', 'trail-axis-label');
-      label.setAttribute('text-anchor', 'middle');
-      label.textContent = fmtTickDate(t);
-      svg.appendChild(label);
-    }
-
-    // Area
-    const area = document.createElementNS(ns, 'path');
-    area.setAttribute('d', areaD);
-    area.setAttribute('class', 'trail-area');
-    svg.appendChild(area);
-
-    // Line
-    const line = document.createElementNS(ns, 'path');
-    line.setAttribute('d', lineD);
-    line.setAttribute('class', 'trail-line');
-    svg.appendChild(line);
-
-    // Mile markers — one per session, at (t, cum)
-    const tooltip = document.createElement('div');
-    tooltip.className = 'chart-tooltip';
-    tooltip.style.display = 'none';
-    node.style.position = 'relative';
-    node.appendChild(tooltip);
-
-    for (const p of pts) {
-      const cx = xPos(p.t);
-      const cy = yPos(p.cum);
-      const marker = document.createElementNS(ns, 'circle');
-      marker.setAttribute('cx', cx); marker.setAttribute('cy', cy);
-      marker.setAttribute('r', 5);
-      marker.setAttribute('class', 'trail-marker');
-      marker.setAttribute('data-session-id', p.session.sessionId);
-      marker.addEventListener('mouseenter', () => {
-        tooltip.innerHTML =
-          '<div class="chart-tooltip-date">' + fmtFullDate(p.t) + '</div>' +
-          '<div class="chart-tooltip-value">$' + p.session.cost.toFixed(2) + ' this session</div>' +
-          '<div class="chart-tooltip-meta">$' + p.cum.toFixed(2) + ' on the trail</div>';
-        tooltip.style.display = 'block';
-        const rect = node.getBoundingClientRect();
-        const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
-        let px = cx + 12, py = cy - th - 8;
-        if (px + tw > rect.width) px = cx - tw - 12;
-        // Same clamp as the trend tooltip — the flip can push a wide
-        // tooltip past the node's left edge for markers near x=0.
-        px = Math.max(8, Math.min(px, rect.width - tw - 8));
-        if (py < 0) py = cy + 12;
-        tooltip.style.left = px + 'px'; tooltip.style.top = py + 'px';
+    // Commit ticks + PR diamonds.
+    let marks = events.filter((e) => e.type !== 'release').map((e) => {
+      const left = pos(featureDayMs(e.date));
+      const title = escapeAttr(e.label || '');
+      if (e.type === 'pr') {
+        const dot = '<div class="fp-ev fp-ev-pr" style="left:' + left + '%" title="' + title + '"></div>';
+        return e.url ? '<a href="' + escapeAttr(e.url) + '" target="_blank" rel="noopener">' + dot + '</a>' : dot;
+      }
+      return '<div class="fp-ev fp-ev-commit" style="left:' + left + '%" title="' + title + '"></div>';
+    }).join('');
+    // Release flags: draw every line, but collapse labels that would overlap
+    // (several same-day releases) into one "vX +N" so they stay legible.
+    const rels = events.filter((e) => e.type === 'release')
+      .map((e) => ({ x: parseFloat(pos(featureDayMs(e.date))), label: e.label }))
+      .sort((a, b) => a.x - b.x);
+    const relGroups = [];
+    rels.forEach((r) => {
+      const g = relGroups[relGroups.length - 1];
+      if (g && r.x - g.items[g.items.length - 1].x <= 6) g.items.push(r);
+      else relGroups.push({ items: [r] });
+    });
+    relGroups.forEach((g) => {
+      g.items.forEach((r, i) => {
+        const isLabel = i === g.items.length - 1;
+        const text = g.items.length > 1 ? r.label + ' +' + (g.items.length - 1) : r.label;
+        marks += '<div class="fp-ev fp-ev-rel" style="left:' + r.x.toFixed(1) + '%">' +
+          (isLabel ? '<span class="fp-ev-flag">' + escHtml(text) + '</span>' : '') + '</div>';
       });
-      marker.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
-      marker.addEventListener('click', () => {
-        const row = document.getElementById(p.session.sessionId);
-        if (!row) return;
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        row.classList.add('flash');
-        setTimeout(() => row.classList.remove('flash'), 1200);
-      });
-      svg.appendChild(marker);
-    }
+    });
 
-    node.innerHTML = '';
-    node.appendChild(svg);
-    node.appendChild(tooltip);
+    const axis = dailySeries.map((d) =>
+      '<span class="fp-strip-axis" style="left:' + pos(featureDayMs(d.date)) + '%">' +
+      escHtml(fmtTickDate(featureDayMs(d.date))) + ' · $' + Math.round(d.total) + '</span>'
+    ).join('');
+
+    node.innerHTML = '<div class="fp-strip">' + marks + axis + '</div>' + featureLegend();
+  }
+
+  function renderFeatureChart(node, dailySeries, events) {
+    const W = node.clientWidth || 640, H = 200;
+    const pad = { l: 44, r: 12, t: 16, b: 26 };
+    const innerW = W - pad.l - pad.r, innerH = H - pad.t - pad.b;
+    const days = dailySeries.slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+    const times = days.map((d) => featureDayMs(d.date));
+    let xMin = times[0], xMax = times[times.length - 1];
+    if (xMin === xMax) { xMin -= 86400000; xMax += 86400000; }
+    const yMax = Math.max.apply(null, days.map((d) => d.total).concat([1])) * 1.15;
+    const xPos = (t) => pad.l + ((t - xMin) / (xMax - xMin)) * innerW;
+    const yPos = (v) => pad.t + innerH - (v / yMax) * innerH;
+    const baseline = pad.t + innerH;
+    const bw = Math.max(3, Math.min(28, (innerW / days.length) * 0.55));
+
+    let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" class="fp-chart">';
+    niceTicks(0, yMax, 4).forEach((v) => {
+      const y = yPos(v).toFixed(1);
+      svg += '<line class="fp-chart-grid" x1="' + pad.l + '" x2="' + (W - pad.r) + '" y1="' + y + '" y2="' + y + '"/>';
+      svg += '<text class="fp-chart-axis-label" x="' + (pad.l - 6) + '" y="' + (yPos(v) + 3).toFixed(1) + '" text-anchor="end">$' + Math.round(v) + '</text>';
+    });
+    niceTimeTicks(xMin, xMax, 6).forEach((t) => {
+      svg += '<text class="fp-chart-axis-label" x="' + xPos(t).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + escHtml(fmtTickDate(t)) + '</text>';
+    });
+    days.forEach((d) => {
+      const x = xPos(featureDayMs(d.date)) - bw / 2;
+      const y = yPos(d.total);
+      svg += '<rect class="fp-chart-bar" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(0, baseline - y).toFixed(1) + '" rx="2"><title>' + escHtml(fmtTickDate(featureDayMs(d.date))) + ' · $' + d.total.toFixed(2) + '</title></rect>';
+    });
+    events.forEach((e) => {
+      const x = xPos(featureDayMs(e.date));
+      if (e.type === 'release') {
+        svg += '<line class="fp-chart-rel" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + pad.t + '" y2="' + baseline + '"><title>' + escHtml(e.label) + '</title></line>';
+      } else if (e.type === 'pr') {
+        const cy = pad.t + 4;
+        svg += '<rect class="fp-chart-di" x="' + (x - 4).toFixed(1) + '" y="' + (cy - 4) + '" width="8" height="8" transform="rotate(45 ' + x.toFixed(1) + ' ' + cy + ')"><title>' + escHtml(e.label) + '</title></rect>';
+      } else {
+        svg += '<line class="fp-chart-tick" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + (baseline - 8) + '" y2="' + baseline + '"><title>' + escHtml(e.label) + '</title></line>';
+      }
+    });
+    svg += '</svg>';
+    node.innerHTML = svg + featureLegend();
   }
 
   function renderBurnPathsSubBars() {
@@ -993,7 +962,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     renderTrend();
-    renderTrailElevation();
+    renderFeatureActivity();
 
     // Generic expand/collapse for any folded tail (features list, branch table).
     document.querySelectorAll('[data-tail-toggle]').forEach(function (btn) {

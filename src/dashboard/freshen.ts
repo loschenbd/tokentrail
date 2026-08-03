@@ -91,6 +91,10 @@ let inFlight: Promise<void> | null = null;
 //
 // Failures are caught — we log and let the next tick try again.
 export function freshenIfStale(): void {
+  // Commit/PR enrichment rides the same request path but on its own hourly
+  // throttle — evaluate it before the ingest debounce so it isn't gated by it.
+  enrichIfStale();
+
   const now = Date.now();
   if (now - lastFreshenedAt < FRESHEN_DEBOUNCE_MS) return;
   if (inFlight) return;
@@ -112,6 +116,66 @@ export function freshenIfStale(): void {
       inFlight = null;
     }
   })();
+}
+
+// Commit + PR enrichment (a `git log` per new session; GitHub calls for PRs)
+// is heavier than ingest and only needs to trail the live data loosely, so it
+// runs on its own hourly throttle rather than every freshen. This is what keeps
+// the per-session "N commits · M PRs" counts current — ingest+rollup alone
+// never touch session_commits / session_prs, so without this they freeze at
+// whenever the backfill was last run by hand.
+const ENRICH_THROTTLE_MS = 60 * 60_000;
+
+let lastEnrichedAt = 0;
+let enrichInFlight = false;
+
+// Pure throttle decision, exported for testing. Due when nothing is in flight
+// and either it has never run (lastAt === 0) or a full throttle window passed.
+export function enrichmentDue(
+  now: number,
+  lastAt: number,
+  inFlight: boolean,
+  throttleMs: number = ENRICH_THROTTLE_MS
+): boolean {
+  if (inFlight) return false;
+  if (lastAt === 0) return true; // never run this process → due immediately
+  return now - lastAt >= throttleMs;
+}
+
+// Fire-and-forget the commit + PR backfills in short-lived children (so their
+// verbose per-call logging and any native memory stay out of the long-lived
+// daemon), chained so commits (local, fast) finish before prs (GitHub). Updated
+// counts appear on the next request after the children exit. No-ops in tsx dev
+// runs (argv[1] is a .ts file node can't re-exec) and when a run is in flight.
+function enrichIfStale(): void {
+  const now = Date.now();
+  if (!enrichmentDue(now, lastEnrichedAt, enrichInFlight)) return;
+  const entry = process.argv[1];
+  if (!entry || entry.endsWith('.ts')) return;
+  lastEnrichedAt = now;
+  enrichInFlight = true;
+  spawnBackfill(entry, ['commits', '--backfill'], () => {
+    spawnBackfill(entry, ['prs', '--backfill'], () => {
+      enrichInFlight = false;
+    });
+  });
+}
+
+function spawnBackfill(entry: string, args: string[], onDone: () => void): void {
+  try {
+    const child = spawn(process.execPath, [entry, ...args], {
+      stdio: 'ignore',
+      env: process.env,
+    });
+    child.on('error', (e) => {
+      console.error(`[dashboard] enrich ${args[0]} spawn error:`, e.message);
+      onDone();
+    });
+    child.on('exit', () => onDone());
+  } catch (err) {
+    console.error('[dashboard] enrich spawn failed:', err);
+    onDone();
+  }
 }
 
 function isRollupBehindEvents(): boolean {

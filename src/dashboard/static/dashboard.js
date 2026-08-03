@@ -514,6 +514,16 @@
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   function featureDayMs(d) { return new Date(String(d) + 'T12:00:00').getTime(); }
+  // Semver-ish compare so "v0.9.0" sorts before "v0.10.0" (lexicographic wouldn't).
+  function cmpVer(a, b) {
+    const A = String(a).replace(/^v/, '').split('.').map(Number);
+    const B = String(b).replace(/^v/, '').split('.').map(Number);
+    for (let i = 0; i < Math.max(A.length, B.length); i++) {
+      const d = (A[i] || 0) - (B[i] || 0);
+      if (d) return d;
+    }
+    return 0;
+  }
 
   // Adaptive cost & activity view: a full daily-cost chart with commits/PRs/
   // releases overlaid when the feature spans enough active days, else a compact
@@ -531,7 +541,7 @@
     if (activeDays >= 5 && payload.dailySeries.length >= 2) {
       renderFeatureChart(node, payload.dailySeries, events);
     } else {
-      renderFeatureStrip(node, payload.dailySeries, events);
+      renderFeatureDaysList(node, payload.dailySeries, events);
     }
   }
 
@@ -543,55 +553,46 @@
       '</div>';
   }
 
-  function renderFeatureStrip(node, dailySeries, events) {
-    const times = [];
-    dailySeries.forEach((d) => times.push(featureDayMs(d.date)));
-    events.forEach((e) => times.push(featureDayMs(e.date)));
-    if (times.length === 0) {
+  // Sparse features (few active days) collapse every event onto 1-2 x-positions,
+  // so a timeline reads as empty with markers piled at the edges. Instead show a
+  // per-day breakdown: one row per active day with a cost bar (magnitude) + that
+  // day's event summary. Shows cost, groups events sensibly, never looks broken.
+  function renderFeatureDaysList(node, dailySeries, events) {
+    if (!dailySeries.length) {
       node.innerHTML = '<div class="muted" style="padding:16px">No activity in this window yet.</div>';
       return;
     }
-    let xMin = Math.min.apply(null, times), xMax = Math.max.apply(null, times);
-    if (xMin === xMax) { xMin -= 86400000; xMax += 86400000; }
-    // Inset 2%..98% so edge markers/labels don't clip.
-    const pos = (t) => (((t - xMin) / (xMax - xMin)) * 96 + 2).toFixed(1);
-
-    // Commit ticks + PR diamonds.
-    let marks = events.filter((e) => e.type !== 'release').map((e) => {
-      const left = pos(featureDayMs(e.date));
-      const title = escapeAttr(e.label || '');
-      if (e.type === 'pr') {
-        const dot = '<div class="fp-ev fp-ev-pr" style="left:' + left + '%" title="' + title + '"></div>';
-        return e.url ? '<a href="' + escapeAttr(e.url) + '" target="_blank" rel="noopener">' + dot + '</a>' : dot;
+    const byDay = {};
+    events.forEach((e) => {
+      const d = String(e.date).slice(0, 10);
+      const b = byDay[d] || (byDay[d] = { commit: 0, pr: 0, rel: [] });
+      if (e.type === 'commit') b.commit++;
+      else if (e.type === 'pr') b.pr++;
+      else if (e.type === 'release') b.rel.push(e.label);
+    });
+    const maxTotal = Math.max.apply(null, dailySeries.map((d) => d.total).concat([1]));
+    const days = dailySeries.slice().sort((a, b) => (a.date < b.date ? 1 : -1)); // newest first
+    const rows = days.map((d) => {
+      const ev = byDay[String(d.date).slice(0, 10)] || { commit: 0, pr: 0, rel: [] };
+      const w = Math.max(2, (d.total / maxTotal) * 100);
+      const parts = [];
+      if (ev.commit) parts.push(ev.commit + ' commit' + (ev.commit === 1 ? '' : 's'));
+      if (ev.pr) parts.push(ev.pr + ' PR' + (ev.pr === 1 ? '' : 's'));
+      if (ev.rel.length) {
+        const vs = ev.rel.slice().sort(cmpVer);
+        parts.push(vs.length === 1 ? vs[0] : vs[0] + '–' + vs[vs.length - 1]);
       }
-      return '<div class="fp-ev fp-ev-commit" style="left:' + left + '%" title="' + title + '"></div>';
+      const summary = parts.length ? parts.join(' · ') : 'no commits or PRs';
+      return '<div class="fp-day">' +
+        '<div class="fp-day-head">' +
+          '<span class="fp-day-date">' + escHtml(fmtTickDate(featureDayMs(d.date))) + '</span>' +
+          '<span class="fp-day-bar"><i style="width:' + w.toFixed(1) + '%"></i></span>' +
+          '<span class="fp-day-amt">$' + Math.round(d.total) + '</span>' +
+        '</div>' +
+        '<div class="fp-day-events">' + escHtml(summary) + '</div>' +
+      '</div>';
     }).join('');
-    // Release flags: draw every line, but collapse labels that would overlap
-    // (several same-day releases) into one "vX +N" so they stay legible.
-    const rels = events.filter((e) => e.type === 'release')
-      .map((e) => ({ x: parseFloat(pos(featureDayMs(e.date))), label: e.label }))
-      .sort((a, b) => a.x - b.x);
-    const relGroups = [];
-    rels.forEach((r) => {
-      const g = relGroups[relGroups.length - 1];
-      if (g && r.x - g.items[g.items.length - 1].x <= 6) g.items.push(r);
-      else relGroups.push({ items: [r] });
-    });
-    relGroups.forEach((g) => {
-      g.items.forEach((r, i) => {
-        const isLabel = i === g.items.length - 1;
-        const text = g.items.length > 1 ? r.label + ' +' + (g.items.length - 1) : r.label;
-        marks += '<div class="fp-ev fp-ev-rel" style="left:' + r.x.toFixed(1) + '%">' +
-          (isLabel ? '<span class="fp-ev-flag">' + escHtml(text) + '</span>' : '') + '</div>';
-      });
-    });
-
-    const axis = dailySeries.map((d) =>
-      '<span class="fp-strip-axis" style="left:' + pos(featureDayMs(d.date)) + '%">' +
-      escHtml(fmtTickDate(featureDayMs(d.date))) + ' · $' + Math.round(d.total) + '</span>'
-    ).join('');
-
-    node.innerHTML = '<div class="fp-strip">' + marks + axis + '</div>' + featureLegend();
+    node.innerHTML = '<div class="fp-days">' + rows + '</div>';
   }
 
   function renderFeatureChart(node, dailySeries, events) {

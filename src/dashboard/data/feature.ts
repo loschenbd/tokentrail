@@ -1,13 +1,35 @@
 import type DatabaseType from 'better-sqlite3';
+import {
+  dedupeCommits,
+  deriveShipped,
+  parseRelease,
+  type CommitInput,
+  type ShippedPr,
+  type ShippedRelease,
+} from './feature-shipped.js';
+import { STALE_DAYS } from './branches.js';
 
 export type FeatureDetailVM = {
   featureKey: string;
   featureName: string;
   totalUsd: number;
-  deltaPct: number;
+  status: 'opened' | 'closed' | 'stale';
+  // null when the prior window's spend was 0 (no honest baseline for a %).
+  deltaPct: number | null;
   sessionCount: number;
   branches: string[];
+  // Computed accounting for the statement header.
+  mergedPrCount: number;
+  commitCount: number; // deduped work items (squash twins collapsed, releases out)
+  releaseCount: number;
+  costPerPr: number | null;
+  costPerCommit: number | null;
+  activeDays: number;
   dailySeries: Array<{ date: string; total: number; commits: number; prs: number }>;
+  // Discrete events for the adaptive timeline / event strip.
+  events: Array<{ date: string; type: 'commit' | 'pr' | 'release'; label: string; url: string | null }>;
+  // "What shipped": merged PRs grouped under the release they rode, newest first.
+  releases: ShippedRelease[];
   clusters: Array<{
     name: string;
     sessionIds: string[];
@@ -55,7 +77,9 @@ export function buildFeatureDetail(
   const prior = (db
     .prepare(`SELECT COALESCE(SUM(total_cost_usd), 0) AS total FROM feature_rollups WHERE feature_key = @key AND date >= ${priorStartExpr} AND date <= ${priorEndExpr}`)
     .get({ key: opts.featureKey }) as { total: number }).total;
-  const deltaPct = prior > 0 ? Math.round(((head.totalUsd - prior) / prior) * 100) : (head.totalUsd > 0 ? 100 : 0);
+  // Only a real prior-window baseline earns a delta; a first-window feature
+  // showed a meaningless "▲100%" before.
+  const deltaPct = prior > 0 ? Math.round(((head.totalUsd - prior) / prior) * 100) : null;
 
   const dailyRows = db
     .prepare(`SELECT date, SUM(total_cost_usd) AS total FROM feature_rollups WHERE feature_key = @key AND date >= ${startExpr} GROUP BY date ORDER BY date`)
@@ -173,16 +197,98 @@ export function buildFeatureDetail(
     s.date ? s : { ...s, date: earliestDateBySession.get(s.sessionId) ?? null }
   );
 
+  // --- Shipped-output accounting (What shipped, header stats, event timeline) ---
+  // All commits + PRs across the feature's sessions, deduped, for derivation.
+  const allCommits: CommitInput[] = sessionIds.length === 0
+    ? []
+    : (db
+        .prepare(`SELECT DISTINCT commit_sha AS sha, subject, repo, authored_at AS authoredAt
+                  FROM session_commits WHERE session_id IN (SELECT value FROM json_each(?))`)
+        .all(JSON.stringify(sessionIds)) as Array<{ sha: string; subject: string; repo: string | null; authoredAt: string | null }>);
+  const allPrs = sessionIds.length === 0
+    ? []
+    : (db
+        .prepare(`SELECT DISTINCT repo, pr_number AS prNumber, pr_title AS title, pr_url AS url,
+                         pr_state AS state, merged_at AS mergedAt
+                  FROM session_prs WHERE session_id IN (SELECT value FROM json_each(?))`)
+        .all(JSON.stringify(sessionIds)) as Array<{ repo: string; prNumber: number; title: string; url: string; state: string; mergedAt: string | null }>);
+
+  const dedup = dedupeCommits(allCommits);
+  const prByNumber = new Map<number, ShippedPr>(
+    allPrs.map((p) => [p.prNumber, { repo: p.repo, prNumber: p.prNumber, title: p.title, url: p.url }])
+  );
+  const releases = deriveShipped(allCommits, prByNumber);
+
+  const mergedPrs = allPrs.filter((p) => p.state === 'merged' && p.mergedAt);
+  const mergedPrCount = new Set(mergedPrs.map((p) => `${p.repo}#${p.prNumber}`)).size;
+  const commitCount = dedup.workItemCount;
+  const total = round2(head.totalUsd);
+  const costPerPr = mergedPrCount > 0 ? round2(total / mergedPrCount) : null;
+  const costPerCommit = commitCount > 0 ? round2(total / commitCount) : null;
+
+  // Discrete events for the timeline: plain commits (ticks), merged PRs
+  // (diamonds), releases (flags). Day-resolution so they line up with the axis.
+  const dayOf = (ts: string | null): string | null => (ts ? ts.slice(0, 10) : null);
+  const events: FeatureDetailVM['events'] = [];
+  for (const c of dedup.changeCommits) {
+    const d = dayOf(c.authoredAt);
+    if (d) events.push({ date: d, type: 'commit', label: c.subject, url: null });
+  }
+  for (const p of mergedPrs) {
+    const d = dayOf(p.mergedAt);
+    if (d) events.push({ date: d, type: 'pr', label: `#${p.prNumber} ${p.title}`, url: p.url || null });
+  }
+  for (const c of allCommits) {
+    const v = parseRelease(c.subject);
+    const d = dayOf(c.authoredAt);
+    if (v && d) events.push({ date: d, type: 'release', label: v, url: null });
+  }
+
+  // Lifecycle status: a merged PR means shipped (closed) regardless of window;
+  // else aged past STALE_DAYS is stale; else opened. Mirrors the project page.
+  const lastActive = dailySeries.length > 0 ? dailySeries[dailySeries.length - 1]!.date : '';
+  const staleBefore = (db
+    .prepare(`SELECT date('now', 'localtime', '-${STALE_DAYS} days') AS d`)
+    .get() as { d: string }).d;
+  const status: 'opened' | 'closed' | 'stale' =
+    mergedPrCount > 0 ? 'closed' : (lastActive && lastActive < staleBefore ? 'stale' : 'opened');
+
+  // A session's `cost` is its GLOBAL spend, which can exceed the feature total
+  // when the session also touched other features. Scale each session's cost so
+  // the ledger sums to the feature total (share ∝ global spend) — otherwise the
+  // "share of total" waterfall bar overflows and the numbers contradict the
+  // header. Scaling preserves the cost-desc ordering.
+  const globalSum = sessionsWithDateFallback.reduce((s, x) => s + x.cost, 0);
+  const scale = globalSum > 0 ? total / globalSum : 1;
+  // Ledger commits: drop squash twins + release commits so the drill-down is the
+  // real work, with the merged PRs shown separately on the row.
+  const ledgerSessions = sessionsWithDateFallback.map((s) => ({
+    ...s,
+    cost: round2(s.cost * scale),
+    commits: dedupeCommits(
+      s.commits.map((c) => ({ sha: c.sha, subject: c.subject, authoredAt: null, repo: c.repo }))
+    ).changeCommits.map((c) => ({ sha: c.sha, subject: c.subject, repo: c.repo })),
+  }));
+
   return {
     featureKey: opts.featureKey,
     featureName: head.featureName ?? opts.featureKey,
-    totalUsd: round2(head.totalUsd),
+    totalUsd: total,
+    status,
     deltaPct,
     sessionCount: distinctSessionCount,
     branches: uniqueBranches,
+    mergedPrCount,
+    commitCount,
+    releaseCount: dedup.releaseCount,
+    costPerPr,
+    costPerCommit,
+    activeDays: dailySeries.length,
     dailySeries,
+    events,
+    releases,
     clusters,
-    sessions: sessionsWithDateFallback,
+    sessions: ledgerSessions,
   };
 }
 

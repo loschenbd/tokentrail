@@ -143,14 +143,18 @@ function renderBranchTable(bg: NonNullable<ProjectDetailVM['branchGraph']>): str
     const tick = b.status === 'merged' ? '<span class="bwork-tick">✓</span>' : '';
     // Full timestamps (lastEventAt/mergedAt) → take the date part for formatting.
     const lastDate = formatMonDay((b.mergedAt || b.lastEventAt).slice(0, 10));
-    return `
-      <div class="bwork-row bwork-${b.status}">
+    const inner = `
         <span class="bwork-dot"></span>
         <span class="bwork-name">${escapeHtml(b.branch)}${tick}</span>
         <span class="bwork-last">last ${lastDate}</span>
         <span class="bwork-spend"><span class="bwork-bar"><span class="bwork-fill" style="width:${barPct.toFixed(1)}%"></span></span><span class="bwork-amt">$${b.totalUsd.toFixed(0)}</span></span>
-        <span class="bwork-sess">${b.sessionCount}</span>
-      </div>`;
+        <span class="bwork-sess">${b.sessionCount}</span>`;
+    // The branch maps to a feature bucket — make the row open that feature's
+    // page. Branches with no feature attribution stay a plain (non-link) row.
+    const cls = `bwork-row bwork-${b.status}`;
+    return b.featureKey
+      ? `<a class="${cls}" href="/feature/${encodeURIComponent(b.featureKey)}">${inner}</a>`
+      : `<div class="${cls}">${inner}</div>`;
   };
 
   const HEAD = 10;

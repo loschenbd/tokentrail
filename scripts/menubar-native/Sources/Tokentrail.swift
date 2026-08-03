@@ -590,6 +590,10 @@ struct TrendChart: View {
 
 struct PanelView: View {
     @ObservedObject var store: Store
+    // Live app caps the panel height and scrolls the overflow (the breakdown +
+    // top-projects lists can run taller than the screen). The headless
+    // --render-png path passes false so the whole panel renders to one image.
+    var bounded: Bool = true
     // Which project is focused (dimming every other chart band). Driven by
     // hovering either the chart or a row in the breakdown list. TT_FOCUS seeds
     // it for the headless preview, which can't hover.
@@ -600,9 +604,34 @@ struct PanelView: View {
     @State private var sourceTab: SourceTab =
         SourceTab(rawValue: ProcessInfo.processInfo.environment["TT_SOURCE"] ?? "") ?? .all
 
+    // Budget detail (forecast, cycle line, per-source rows) folds away so the
+    // panel stays short; the header + main bar stay for an at-a-glance read.
+    // Persisted so the choice sticks across relaunches.
+    @AppStorage("tt.budgetCollapsed") private var budgetCollapsed = false
+
     enum SourceTab: String, CaseIterable { case all = "All", claude = "Claude", copilot = "Copilot", cursor = "Cursor" }
 
     var body: some View {
+        // Content scrolls; the actions row stays pinned so Quit/Settings are
+        // always reachable no matter how long the lists get.
+        VStack(alignment: .leading, spacing: 0) {
+            if bounded {
+                ScrollView { scrollBody }
+                    .frame(maxHeight: maxScrollHeight)
+            } else {
+                scrollBody
+            }
+            Divider()
+            actions()
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+        }
+        .frame(width: 320)
+    }
+
+    // Everything above the pinned actions row. Its own padding so the ScrollView
+    // clips at the panel edges, not inside an outer pad.
+    private var scrollBody: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let t = store.today {
                 if hasCursor(t) || hasCopilot(t) {
@@ -631,19 +660,23 @@ struct PanelView: View {
                     Divider(); worthALook(t)
                     if !t.topProjects.isEmpty { Divider(); projects(t) }
                 }
-                Divider()
-                actions()
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Tokentrail").font(.headline)
                     Text(store.error ?? "loading…")
                         .font(.callout).foregroundStyle(.secondary)
                 }
-                actions()
             }
         }
         .padding(14)
-        .frame(width: 320)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // Cap the scroll area to the screen (leaving room for the pinned footer and
+    // the menu-bar gap), clamped so it's sane on both laptop and large displays.
+    private var maxScrollHeight: CGFloat {
+        let screenH = NSScreen.main?.visibleFrame.height ?? 900
+        return min(max(screenH - 200, 400), 780)
     }
 
     private func hasCursor(_ t: TodayResponse) -> Bool {
@@ -764,13 +797,22 @@ struct PanelView: View {
         // global figure/bar/projection/cycle-day line, but keep a plain
         // header so the per-source rows below aren't headerless.
         return VStack(alignment: .leading, spacing: 4) {
-            if b.budgetUsd > 0 {
-                HStack {
-                    Text("Budget").font(.system(size: 12, weight: .semibold))
-                    Spacer()
+            // Tappable header — chevron folds the detail below. Header + main bar
+            // always show; the forecast, cycle line, and per-source rows fold.
+            HStack(spacing: 5) {
+                Image(systemName: budgetCollapsed ? "chevron.right" : "chevron.down")
+                    .font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+                Text("Budget").font(.system(size: 12, weight: .semibold))
+                Spacer()
+                if b.budgetUsd > 0 {
                     Text("\(Fmt.usd(b.spentUsd)) / \(Fmt.usd(b.budgetUsd))")
                         .font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
                 }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { budgetCollapsed.toggle() } }
+
+            if b.budgetUsd > 0 {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.secondary.opacity(0.18))
@@ -784,23 +826,26 @@ struct PanelView: View {
                     }
                 }
                 .frame(height: 6)
-                HStack {
-                    Text(b.projectionReliable
-                         ? "Projected \(Fmt.usd(b.projectedUsd)) · \(Int(b.projectedPct.rounded()))%"
-                         : "Too early to forecast")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                    Spacer()
-                    if b.state != "ok" {
-                        Text(b.state == "over" ? "over" : "trending over")
-                            .font(.system(size: 11, weight: .medium)).foregroundStyle(tint)
-                    }
-                }
-                Text("\(Fmt.monthDay(b.cycleStart)) – \(Fmt.monthDay(b.cycleEnd)) · day \(b.daysElapsed)/\(b.daysInCycle)")
-                    .font(.system(size: 10)).foregroundStyle(.tertiary)
-            } else {
-                Text("Budget").font(.system(size: 12, weight: .semibold))
             }
-            ForEach((b.sources ?? [])) { s in sourceBudgetRow(s) }
+
+            if !budgetCollapsed {
+                if b.budgetUsd > 0 {
+                    HStack {
+                        Text(b.projectionReliable
+                             ? "Projected \(Fmt.usd(b.projectedUsd)) · \(Int(b.projectedPct.rounded()))%"
+                             : "Too early to forecast")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                        Spacer()
+                        if b.state != "ok" {
+                            Text(b.state == "over" ? "over" : "trending over")
+                                .font(.system(size: 11, weight: .medium)).foregroundStyle(tint)
+                        }
+                    }
+                    Text("\(Fmt.monthDay(b.cycleStart)) – \(Fmt.monthDay(b.cycleEnd)) · day \(b.daysElapsed)/\(b.daysInCycle)")
+                        .font(.system(size: 10)).foregroundStyle(.tertiary)
+                }
+                ForEach((b.sources ?? [])) { s in sourceBudgetRow(s) }
+            }
         }
     }
 
@@ -1095,7 +1140,7 @@ enum Main {
     static func renderPNG(to path: String) {
         let data = Api.fetchSync()
         let store = Store(preloaded: data)
-        let view = PanelView(store: store)
+        let view = PanelView(store: store, bounded: false)
             .background(Color(nsColor: .windowBackgroundColor))
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2

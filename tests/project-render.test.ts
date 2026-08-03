@@ -216,7 +216,7 @@ describe('renderProject active-work section', () => {
     branches: [
       { branch: 'onboarding-wizard', firstEventAt: '2026-06-01', lastEventAt: '2026-06-09', mergedAt: '2026-06-09', status: 'merged', totalUsd: 0, sessionCount: 0, prNumber: null, prUrl: null, featureKey: null },
       { branch: 'coherence-pass', firstEventAt: '2026-06-01', lastEventAt: '2026-06-05', mergedAt: null, status: 'stale', totalUsd: 0, sessionCount: 0, prNumber: null, prUrl: null, featureKey: null },
-      { branch: 'worktree-local-semantic-search', firstEventAt: '2026-06-01', lastEventAt: '2026-06-29', mergedAt: null, status: 'open', totalUsd: 12, sessionCount: 0, prNumber: null, prUrl: null, featureKey: null },
+      { branch: 'worktree-local-semantic-search', firstEventAt: '2026-06-01', lastEventAt: '2026-06-29', mergedAt: null, status: 'open', totalUsd: 12, sessionCount: 0, prNumber: null, prUrl: null, featureKey: 'semantic-search' },
     ],
   };
 
@@ -240,6 +240,14 @@ describe('renderProject active-work section', () => {
     assert.match(seg, /last Jun 29/);       // open worktree branch, lastEventAt 2026-06-29
     assert.match(seg, /last Jun 9/);         // merged onboarding-wizard, mergedAt 2026-06-09
     assert.doesNotMatch(seg, /bwork-seg/);   // no activity-window segment anymore
+  });
+
+  test('a branch mapped to a feature links to that feature; unmapped branches stay non-link rows', () => {
+    const seg = extractSection(renderProject(baseVm({ branchGraph })), 'active-work');
+    // worktree-local-semantic-search → featureKey 'semantic-search'
+    assert.match(seg, /<a class="bwork-row bwork-open" href="\/feature\/semantic-search"/);
+    // onboarding-wizard has no featureKey → plain div, not a link
+    assert.match(seg, /<div class="bwork-row bwork-merged"/);
   });
 
   test('the SVG branch-graph mount and JSON payload are gone', () => {

@@ -837,6 +837,7 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
 .project-page .bwork-hlabel { font-family: var(--font-serif); font-size: 10px; color: var(--color-ink-subtle); text-align: right; }
 .project-page .bwork-hlabel-l { font-family: var(--font-serif); font-size: 10px; color: var(--color-ink-subtle); text-align: left; }
 .project-page .bwork-row { padding: 8px 6px; border-radius: 8px; }
+.project-page a.bwork-row { text-decoration: none; color: inherit; cursor: pointer; }
 .project-page .bwork-row:hover { background: var(--color-hover-bg); }
 .project-page .bwork-stale { opacity: 0.55; }
 .project-page .bwork-dot { width: 9px; height: 9px; border-radius: 50%; justify-self: center; }

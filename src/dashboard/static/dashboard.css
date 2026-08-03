@@ -1224,16 +1224,7 @@ a.fp-pr-row:hover { background: var(--color-hover-bg); }
   border-radius: 20px; padding: 2px 9px; flex: none; }
 .fp-rel-extra { font-size: 11px; color: var(--color-ink-subtle); padding: 2px 8px 8px 16px; font-style: italic; }
 
-/* ③ Cost & activity — chart / event strip (rendered by dashboard.js) */
-.fp-strip { position: relative; height: 64px; margin: 6px 0 2px; border-bottom: 1px solid var(--color-hairline); }
-.fp-strip-axis { position: absolute; bottom: -18px; transform: translateX(-50%); font-size: 10px;
-  color: var(--color-ink-muted); font-family: var(--font-mono); white-space: nowrap; }
-.fp-ev { position: absolute; bottom: 0; transform: translateX(-50%); }
-.fp-ev-commit { width: 2px; height: 14px; background: var(--color-ink-subtle); opacity: 0.55; bottom: 1px; }
-.fp-ev-pr { bottom: 22px; width: 9px; height: 9px; background: var(--color-accent); transform: translateX(-50%) rotate(45deg); border-radius: 1px; }
-.fp-ev-rel { height: 40px; width: 1px; background: var(--color-warm); bottom: 1px; }
-.fp-ev-flag { position: absolute; top: -2px; left: 3px; font-family: var(--font-mono); font-size: 9px;
-  color: var(--color-warm-deep); white-space: nowrap; }
+/* ③ Cost & activity — chart legend (event strip retired for the per-day list). */
 .fp-strip-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 26px; font-size: 11px; color: var(--color-ink-muted); }
 .fp-strip-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .fp-lg-commit { width: 2px; height: 12px; background: var(--color-ink-subtle); opacity: 0.6; display: inline-block; }
@@ -1246,6 +1237,15 @@ a.fp-pr-row:hover { background: var(--color-hover-bg); }
 .fp-chart-di { fill: var(--color-accent); }
 .fp-chart-rel { stroke: var(--color-warm); stroke-width: 1; }
 .fp-chart-tick { stroke: var(--color-ink-subtle); stroke-width: 2; opacity: 0.55; }
+
+/* Sparse-feature per-day breakdown (replaces the old event strip). */
+.fp-days { display: flex; flex-direction: column; gap: 12px; }
+.fp-day-head { display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: center; }
+.fp-day-date { font-family: var(--font-mono); font-size: 11px; color: var(--color-ink-muted); }
+.fp-day-bar { height: 8px; background: var(--color-fill-track); border-radius: 4px; overflow: hidden; }
+.fp-day-bar > i { display: block; height: 100%; background: var(--color-accent); border-radius: 4px; }
+.fp-day-amt { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 13px; }
+.fp-day-events { font-size: 11px; color: var(--color-ink-subtle); padding-left: 62px; margin-top: 3px; }
 
 /* ④ Sessions ledger — trace waterfall */
 .fp-ses-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: center;

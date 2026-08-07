@@ -277,11 +277,17 @@
     // monotone — it never overshoots, so stacked bands stay ordered and no
     // band dips below the one under it.
     const splinePaths = uPlot.paths.spline ? uPlot.paths.spline() : undefined;
+    // No per-band stroke: the stacked bands are pure fills, matching the native
+    // menu-bar chart's stroke-less AreaMark. A 1px stroke in each band's own
+    // color used to trace the stack's top silhouette — and since the topmost
+    // band is usually the gray "Other" project, that read as a light-gray
+    // outline on the chart in dark mode. Only the focused overlay (below) draws
+    // a crisp top line, exactly like the menu-bar chart's LineMark.
     const series = [{}].concat(stackOrder.map((proj) => ({
       label: proj.name,
-      stroke: () => (activeKey ? hexToRgba(proj.color, 0.15) : proj.color),
+      stroke: () => 'rgba(0,0,0,0)',
       fill: () => (activeKey ? hexToRgba(proj.color, 0.12) : hexToRgba(proj.color, 0.92)),
-      width: 1,
+      width: 0,
       paths: splinePaths,
       points: { show: false },
     })));

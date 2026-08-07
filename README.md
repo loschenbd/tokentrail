@@ -36,7 +36,7 @@ git clone https://github.com/loschenbd/tokentrail
 cd tokentrail
 npm install
 npm run build
-node dist/src/index.js init        # SwiftBar + daemon + Claude skills + hook + Tokentrail.app
+node dist/src/index.js init        # daemon + Claude skills + hook + Tokentrail.app menu-bar app
 ```
 
 After `brew install` (or `npm install`) finishes, open the dashboard and
@@ -47,22 +47,23 @@ tokentrail dashboard
 # first run opens http://127.0.0.1:4920/welcome (later runs open the Overview)
 ```
 
-The checklist installs the SwiftBar plugin, registers the launchd daemon,
+The checklist installs the native menu-bar app, registers the launchd daemon,
 links the Claude Code skills, and shows you the per-repo session-end hook
 command to run. Power users can skip the wizard with `tokentrail init`,
 which does all of that non-interactively.
 
-`init` walks the full setup in one shot on macOS: symlinks the SwiftBar
-plugin into `~/Library/Application Support/SwiftBar/`, writes a
+`init` walks the full setup in one shot on macOS: writes a
 `com.tokentrail.daemon` launchd plist so the dashboard auto-starts at
 login, symlinks the Claude Code skill and `/today` + `/rollup` +
 `/anomalies` slash commands into `~/.claude/`, adds Tokentrail's Stop
-hook to this repo's `.claude/settings.json`, and symlinks
-`Tokentrail.app` into `~/Applications/` so the launcher is one click
-away from Spotlight / LaunchPad. Re-runnable; pass `--dry-run` to
-preview or `--force` to replace existing entries. Skip individual
-steps with `--skip-swiftbar`, `--skip-daemon`, `--skip-hook`, or
-`--skip-app`.
+hook to this repo's `.claude/settings.json`, and installs the native
+`Tokentrail.app` menu-bar app into `~/Applications/` — a real copied
+bundle (so it survives brew upgrades, where a Cellar symlink would
+dangle) plus a LaunchAgent that keeps it running across logins.
+Re-runnable; pass `--dry-run` to preview or `--force` to replace
+existing entries. Skip individual steps with `--skip-daemon`,
+`--skip-hook`, or `--skip-app` (`--skip-swiftbar` is kept as a
+back-compat alias for `--skip-app`).
 
 Once `init` finishes, the menu bar widget shows today's running total
 within a minute and the dashboard is live at `http://127.0.0.1:4920`.
@@ -152,7 +153,7 @@ land, so you don't want it committed.
 ## Commands
 
 ```
-tokentrail init        # One-shot setup: SwiftBar + daemon + Claude skills + hook + Tokentrail.app.
+tokentrail init        # One-shot setup: daemon + Claude skills + hook + Tokentrail.app menu-bar app.
 tokentrail ingest      # Load new usage events into the local ledger.
 tokentrail cursor      # Track Cursor AI usage (local lines + cloud account spend).
 tokentrail copilot     # Ingest GitHub Copilot CLI usage into the ledger.
@@ -452,7 +453,7 @@ line on start and end.
 ```
 
 Set `TOKENTRAIL_FLAGS=--skip-sync` in the crontab line for a local-only
-refresh. If you're running the SwiftBar widget and want near-realtime
+refresh. If you're running the menu-bar app and want near-realtime
 totals, drop the cron interval to `*/1` (every minute) and set
 `TOKENTRAIL_FLAGS=--skip-sync --skip-enrich` so each tick stays cheap.
 

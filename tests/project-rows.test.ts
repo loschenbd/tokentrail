@@ -103,6 +103,8 @@ describe('renderToday project rows', () => {
     assert.match(html, /class="hour-bar" data-hour="9"/);
     assert.doesNotMatch(html, /hour-bar" title=/);    // native title gone
     assert.doesNotMatch(html, /<div class="hour-bar" data-hour="\d+" title/);
+    // hour 9 is a stacked column with a project-colored segment
+    assert.match(html, /class="hour-seg" style="flex:5;background:#8b6f47"/);
   });
 
   test('pace omitted when null', () => {

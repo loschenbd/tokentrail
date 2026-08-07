@@ -924,13 +924,19 @@ canvas.chart-dimmed { opacity: 0.55; transition: opacity 80ms ease-out; }
   margin-top: var(--space-s);
 }
 .hour-bar { height: 100%; display: flex; align-items: flex-end; background: var(--color-fill-track); border-radius: 2px; }
-.hour-bar span {
+.hour-col {
+  width: 100%;
+  display: flex;
+  flex-direction: column-reverse;
+  border-radius: 2px 2px 0 0;
+  overflow: hidden;
+  min-height: 0;
+}
+.hour-seg {
   display: block;
   width: 100%;
-  background: var(--color-accent);
-  border-radius: 2px 2px 0 0;
-  opacity: 0.7;
   min-height: 0;
+  opacity: 0.85;
 }
 .hour-labels {
   display: grid;

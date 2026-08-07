@@ -270,11 +270,19 @@
     // hook (applyFocusFills) covers that path. Between the two, no uPlot redraw
     // can clobber the effect. When a project is focused, EVERY stacked band
     // ghosts to ~12% (the focused project is redrawn on the overlay below).
+    //
+    // Monotone-cubic spline paths (matching the native menubar chart's
+    // `.interpolationMethod(.monotone)`) round the day-to-day peaks into
+    // flowing bands instead of jagged linear segments. uPlot's spline is
+    // monotone — it never overshoots, so stacked bands stay ordered and no
+    // band dips below the one under it.
+    const splinePaths = uPlot.paths.spline ? uPlot.paths.spline() : undefined;
     const series = [{}].concat(stackOrder.map((proj) => ({
       label: proj.name,
       stroke: () => (activeKey ? hexToRgba(proj.color, 0.15) : proj.color),
       fill: () => (activeKey ? hexToRgba(proj.color, 0.12) : hexToRgba(proj.color, 0.92)),
       width: 1,
+      paths: splinePaths,
       points: { show: false },
     })));
     // Focus overlay: the active project's own daily $ (un-stacked, from zero),
@@ -285,6 +293,7 @@
       stroke: () => (activeKey ? hexToRgba(colorByKey[activeKey] || '#888888', 0.95) : 'rgba(0,0,0,0)'),
       fill: () => (activeKey ? hexToRgba(colorByKey[activeKey] || '#888888', 0.85) : 'rgba(0,0,0,0)'),
       width: 1.5,
+      paths: splinePaths,
       points: { show: false },
     });
     // Bands: each band fills between series idx and idx-1 (stacked area). The

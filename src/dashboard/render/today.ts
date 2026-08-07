@@ -47,10 +47,19 @@ ${renderStrip(vm)}
 function renderStrip(vm: TodayVM): string {
   const max = Math.max(...vm.hourly.map((h) => h.usd), 0.01);
   const bars = vm.hourly
-    .map(
-      (h) =>
-        `<div class="hour-bar" data-hour="${h.hour}"><span style="height:${Math.round((h.usd / max) * 100)}%"></span></div>`
-    )
+    .map((h) => {
+      // Column height encodes the hour's total; each stacked segment is a
+      // project, sized by its share of the hour and painted its project color
+      // (segments arrive sorted desc, biggest sits at the base via column-reverse).
+      const colHeight = Math.round((h.usd / max) * 100);
+      const segs =
+        h.usd > 0 && h.projects.length > 0
+          ? h.projects
+              .map((p) => `<span class="hour-seg" style="flex:${p.usd};background:${p.color}"></span>`)
+              .join('')
+          : '';
+      return `<div class="hour-bar" data-hour="${h.hour}"><div class="hour-col" style="height:${colHeight}%">${segs}</div></div>`;
+    })
     .join('');
   const pace = vm.paceUsd !== null ? ` · pace ~$${vm.paceUsd.toFixed(0)}` : '';
   const usual = vm.usualDayUsd > 0 ? ` · usual day $${vm.usualDayUsd.toFixed(0)}` : '';

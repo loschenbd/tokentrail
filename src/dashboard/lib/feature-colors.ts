@@ -1,14 +1,37 @@
 // Midori MD "Color Dot" palette — series read as notebook color dots on
 // cream paper. Low chroma on purpose; distinguish by hue, not saturation.
+//
+// All eight are now canonical benjaminloschen.com tokens. The last two used to
+// be local inventions ('#4a6a6b' teal-slate, '#8a6a8c' plum) made before the
+// site had mint and purple tokens; adopting the real ones raised the palette's
+// worst pairwise Oklab distance from dE 3.98 to 4.81 and the mean from 13.5 to
+// 15.1, because the invented plum sat at C 6.4 where the real purple sits at
+// 10.9.
+//
+// KNOWN GAP — these are the LIGHT values and the dashboard serves them on both
+// grounds. Contrast against the dark paper (#1a1917): purple 2.15:1, indigo
+// 2.28:1, wine 2.43:1 all read dim, while olive/mint/terracotta happen to land
+// near 4:1 on both and are fine. Adopting the canonical purple traded light for
+// dark on that one series (plum was 4.11:1 light / 3.78:1 dark; purple is
+// 7.23:1 / 2.15:1) — the palette cannot win both grounds from a single set.
+//
+// The fix is not a compromise hex, which is how the two local inventions got
+// here in the first place. Every accent already HAS a dark value that clears
+// 4.2:1 (indigo #6c87a4, wine #b8868a, purple #a079be). They can't be selected
+// here because colorFor() runs server-side and the theme is resolved in the
+// client from prefers-color-scheme, so a server-emitted hex can never be
+// theme-correct. Emitting series colours as custom properties the way
+// tokens.ts already does for every other colour is the real repair; it also
+// needs shadeForFeature to stop assuming it receives a parseable hex.
 export const PALETTE: readonly string[] = [
-  '#3a5572', // indigo
-  '#b88a3a', // ochre
-  '#6c7d52', // olive
-  '#7a4a4a', // wine
-  '#5f6f5e', // sage
-  '#b06d4a', // terracotta
-  '#4a6a6b', // teal-slate
-  '#8a6a8c', // plum
+  '#3a5572', // indigo     --midori-indigo
+  '#b88a3a', // ochre      --midori-ochre
+  '#6c7d52', // olive      --midori-olive
+  '#7a4a4a', // wine       --midori-wine
+  '#5f6f5e', // sage       --midori-sage
+  '#b06d4a', // terracotta --accent-warm-strong
+  '#548373', // mint       --midori-mint   (was #4a6a6b, a local invention)
+  '#653f7f', // purple     --midori-purple (was #8a6a8c, a local invention)
 ] as const;
 
 export const OTHER_KEY = '__other__' as const;

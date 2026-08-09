@@ -8,21 +8,21 @@
 // 15.1, because the invented plum sat at C 6.4 where the real purple sits at
 // 10.9.
 //
-// KNOWN GAP — these are the LIGHT values and the dashboard serves them on both
-// grounds. Contrast against the dark paper (#1a1917): purple 2.15:1, indigo
-// 2.28:1, wine 2.43:1 all read dim, while olive/mint/terracotta happen to land
-// near 4:1 on both and are fine. Adopting the canonical purple traded light for
-// dark on that one series (plum was 4.11:1 light / 3.78:1 dark; purple is
-// 7.23:1 / 2.15:1) — the palette cannot win both grounds from a single set.
+// These are the LIGHT values, and they are correct as authored. colorFor() runs
+// server-side while the theme resolves in the client, so a server-emitted hex
+// can never be theme-correct on its own; dashboard.js closes that with
+// liftForDark(), which raises HSL lightness ~0.24 at paint time for BOTH the
+// uPlot canvas and the DOM swatches. Do not add a dark column here — the lift
+// is the mechanism, and a second source of truth would drift from it.
 //
-// The fix is not a compromise hex, which is how the two local inventions got
-// here in the first place. Every accent already HAS a dark value that clears
-// 4.2:1 (indigo #6c87a4, wine #b8868a, purple #a079be). They can't be selected
-// here because colorFor() runs server-side and the theme is resolved in the
-// client from prefers-color-scheme, so a server-emitted hex can never be
-// theme-correct. Emitting series colours as custom properties the way
-// tokens.ts already does for every other colour is the real repair; it also
-// needs shadeForFeature to stop assuming it receives a parseable hex.
+// The lift is well calibrated against the site: it takes purple #653f7f to
+// #a379bf, where benjaminloschen.com's hand-tuned dark token is #a079be — a
+// 3/255 difference. On the dark ground every series clears 5:1 (purple 5.06,
+// indigo 5.41, wine 5.73, up to ochre 10.01).
+//
+// The corollary is that a colour-bearing element only gets lifted if
+// liftDomBands can see it. Anything painting one of these hues must either
+// carry a class in that selector or be marked data-lift — see the note there.
 export const PALETTE: readonly string[] = [
   '#3a5572', // indigo     --midori-indigo
   '#b88a3a', // ochre      --midori-ochre

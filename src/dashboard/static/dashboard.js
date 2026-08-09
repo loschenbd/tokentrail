@@ -55,7 +55,12 @@
   // The chart tooltip is skipped — renderTrend already source-lifts those.
   function liftDomBands() {
     const dark = isDark();
-    document.querySelectorAll('.swatch, .subbar-segment').forEach((el) => {
+    // background-color carriers. .pfeat-fill (project feature bars), .hour-seg
+    // (today's hour strip) paint a project hue exactly like a swatch does; they
+    // were missing here, so they stayed at the cream-tuned value on dark —
+    // 2.15-4.44:1 against the dark paper depending on hue, against 5.29-9.22:1
+    // once lifted.
+    document.querySelectorAll('.swatch, .subbar-segment, .pfeat-fill, .hour-seg').forEach((el) => {
       if (el.closest('.chart-tooltip')) return;         // handled by renderTrend
       let base = el.getAttribute('data-base');
       if (base == null) {
@@ -64,6 +69,24 @@
       }
       if (!base) return;                                // striped/empty segment
       el.style.backgroundColor = dark ? liftForDark(rgbToHex(base)) : base;
+    });
+    // SVG carriers. A <rect fill="…"> has no backgroundColor, so the loop above
+    // cannot reach it; data-lift names which property to rewrite. Mark any new
+    // colour-bearing SVG node with data-lift rather than adding another class
+    // to the selector above.
+    document.querySelectorAll('[data-lift]').forEach((el) => {
+      const prop = el.getAttribute('data-lift');        // 'fill' | 'stroke'
+      let base = el.getAttribute('data-base');
+      if (base == null) {
+        base = (prop === 'stroke' ? el.style.stroke : el.getAttribute('fill')) || '';
+        el.setAttribute('data-base', base);
+      }
+      if (!base) return;
+      // liftForDark passes non-#rrggbb through untouched, so a caller handing
+      // in var(--color-…) — as the sparkline does — is left alone.
+      const next = dark ? liftForDark(rgbToHex(base)) : base;
+      if (prop === 'stroke') el.style.stroke = next;
+      else el.setAttribute('fill', next);
     });
     // Sub-bar hover tips read data-swatch — keep it in step with the segment.
     document.querySelectorAll('.subbar-segment[data-swatch]').forEach((el) => {

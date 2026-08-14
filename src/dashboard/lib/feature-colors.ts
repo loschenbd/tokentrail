@@ -1,14 +1,37 @@
 // Midori MD "Color Dot" palette — series read as notebook color dots on
 // cream paper. Low chroma on purpose; distinguish by hue, not saturation.
+//
+// All eight are now canonical benjaminloschen.com tokens. The last two used to
+// be local inventions ('#4a6a6b' teal-slate, '#8a6a8c' plum) made before the
+// site had mint and purple tokens; adopting the real ones raised the palette's
+// worst pairwise Oklab distance from dE 3.98 to 4.81 and the mean from 13.5 to
+// 15.1, because the invented plum sat at C 6.4 where the real purple sits at
+// 10.9.
+//
+// These are the LIGHT values, and they are correct as authored. colorFor() runs
+// server-side while the theme resolves in the client, so a server-emitted hex
+// can never be theme-correct on its own; dashboard.js closes that with
+// liftForDark(), which raises HSL lightness ~0.24 at paint time for BOTH the
+// uPlot canvas and the DOM swatches. Do not add a dark column here — the lift
+// is the mechanism, and a second source of truth would drift from it.
+//
+// The lift is well calibrated against the site: it takes purple #653f7f to
+// #a379bf, where benjaminloschen.com's hand-tuned dark token is #a079be — a
+// 3/255 difference. On the dark ground every series clears 5:1 (purple 5.06,
+// indigo 5.41, wine 5.73, up to ochre 10.01).
+//
+// The corollary is that a colour-bearing element only gets lifted if
+// liftDomBands can see it. Anything painting one of these hues must either
+// carry a class in that selector or be marked data-lift — see the note there.
 export const PALETTE: readonly string[] = [
-  '#3a5572', // indigo
-  '#b88a3a', // ochre
-  '#6c7d52', // olive
-  '#7a4a4a', // wine
-  '#5f6f5e', // sage
-  '#b06d4a', // terracotta
-  '#4a6a6b', // teal-slate
-  '#8a6a8c', // plum
+  '#3a5572', // indigo     --midori-indigo
+  '#b88a3a', // ochre      --midori-ochre
+  '#6c7d52', // olive      --midori-olive
+  '#7a4a4a', // wine       --midori-wine
+  '#5f6f5e', // sage       --midori-sage
+  '#b06d4a', // terracotta --accent-warm-strong
+  '#548373', // mint       --midori-mint   (was #4a6a6b, a local invention)
+  '#653f7f', // purple     --midori-purple (was #8a6a8c, a local invention)
 ] as const;
 
 export const OTHER_KEY = '__other__' as const;

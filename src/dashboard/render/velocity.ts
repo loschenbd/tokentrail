@@ -38,7 +38,10 @@ export function renderVelocityChart(opts: {
     const x = padLeft + i * slot + (slot - barW) / 2;
     const y = padTop + (drawH - barH);
     const fill = opts.peakDate === d.date ? peakFill : opts.color;
-    bars.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" fill="${escapeAttr(fill)}" rx="1" />`);
+    // data-lift="fill" — these bars carry the project hue, and a fill attribute
+    // has no backgroundColor for liftDomBands to rewrite. Each rect stashes its
+    // own base, so the peak keeps its darkened variant across theme flips.
+    bars.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" fill="${escapeAttr(fill)}" rx="1" data-lift="fill" />`);
   }
 
   // X-axis: label every ~7th day, always including the first and last day.

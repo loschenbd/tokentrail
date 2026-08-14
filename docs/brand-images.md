@@ -40,7 +40,7 @@ guide is stale. Update this guide rather than diverging.
 | Mint dot | `#9ebfb4` | The Midori dot grid — texture only, never a fill |
 | Sage (accent) | `#5f6f5e` | Accent only — used sparingly. Highlights, hover states, "good" signals |
 | Terracotta / clay | `#c9916b` / `#8f4f38` | Warm counterpoint; coins, warnings, "down" deltas |
-| Color dots (data) | `#3a5572` `#b88a3a` `#6c7d52` `#7a4a4a` | Midori Color-Dot series hues for charts |
+| Color dots (data) | `#3a5572` `#b88a3a` `#6c7d52` `#7a4a4a` `#653f7f` `#548373` | Midori Color-Dot series hues for charts — indigo, ochre, olive, wine, purple, mint |
 
 **Backgrounds are flat cream `#f3f1eb`** (optionally with the mint dot
 grid at 24px pitch), never white, never a saturated color, never cream
@@ -128,6 +128,8 @@ EXACT PALETTE (use only these colors):
 - Mint dot grid (texture only, 24px pitch, optional): #9ebfb4
 - Clay / coin faces: #c9916b (deep terracotta rims: #8f4f38)
 - Sage accent (use sparingly, can be omitted): #5f6f5e
+- Color-dot series hues (charts/data only): #3a5572 indigo, #b88a3a ochre,
+  #6c7d52 olive, #7a4a4a wine, #653f7f purple, #548373 mint
 
 TYPOGRAPHY (if any text):
 Georgia serif. Never sans-serif. Never script.

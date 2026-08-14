@@ -44,6 +44,9 @@ body::after {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* gap, not just space-between: keeps the three zones from touching when the
+     window narrows (the tagline used to run straight into the first tab). */
+  gap: var(--space-l);
   padding: var(--space-m) var(--space-l);
   position: sticky; top: 0;
   background: var(--color-paper);
@@ -60,13 +63,17 @@ body::after {
   :root:not([data-theme="light"]) .brand-mark { mix-blend-mode: normal; }
 }
 .brand { font-family: var(--font-serif); font-size: var(--size-h1); font-weight: 400; }
-.brand-tag { color: var(--color-ink-muted); font-style: italic; margin-left: var(--space-s); }
-.header-left { display: flex; align-items: center; gap: var(--space-s); }
+.brand-tag { color: var(--color-ink-muted); font-style: italic; margin-left: var(--space-s); white-space: nowrap; }
+.header-left { display: flex; align-items: center; gap: var(--space-s); flex-shrink: 0; }
 .back { color: var(--color-ink-muted); text-decoration: none; margin-right: var(--space-m); border-bottom: 2px solid var(--color-border); }
 .back:hover { color: var(--color-ink); border-bottom-color: var(--color-accent); }
-.header-center { display: flex; justify-content: center; flex: 1; }
-.nav-tabs { display: flex; gap: var(--space-m); align-items: center; }
+.header-center { display: flex; justify-content: center; flex: 1 1 auto; min-width: 0; }
+.header-right { flex-shrink: 0; }
+.nav-tabs { display: flex; gap: var(--space-m); align-items: center; flex-wrap: nowrap; }
 .nav-tab {
+  /* Never break a tab mid-phrase — "Worth a look" stacking into two lines was
+     what made the header grow a second row on mid-width windows. */
+  white-space: nowrap;
   /* Wayfinding = naming voice → Spectral, mixed-case (matches the site). */
   font-family: var(--font-serif);
   font-size: var(--size-h2);
@@ -93,9 +100,25 @@ body::after {
 .bottom-nav-item.active { color: var(--color-accent); }
 .bottom-nav-item.active svg { opacity: 1; }
 
-@media (max-width: 700px) {
-  .header { flex-wrap: wrap; }
-  .header-center { order: 3; flex-basis: 100%; justify-content: flex-start; }
+/* The squeeze band: too narrow for the full three-zone header, still too wide
+   for the mobile bottom bar (which takes over at 700px). Shed ornament first,
+   then chrome, so the header stays one row the whole way down. */
+@media (max-width: 1080px) {
+  .brand-tag { display: none; }              /* "· the trail so far" */
+}
+/* Bounded below at 701 so none of this leaks into the mobile header, which
+   lays the same elements out its own way further down. */
+@media (min-width: 701px) and (max-width: 940px) {
+  .nav-tabs { gap: var(--space-s); }
+  .header { gap: var(--space-m); padding-inline: var(--space-m); }
+  /* Both selects name their own dimension ("All sources", "30d"), so the
+     labels go before the tabs do. The pickers keep stacking — side by side
+     they'd cost more width than the nav can spare — but they tighten up so
+     the bar doesn't grow tall to hold them. */
+  .header-right .label { display: none; }
+  .header-right { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+  .header-right .range-form { justify-content: flex-end; }  /* both pickers hug the edge */
+  .range-form select { padding: 3px 6px; font-size: var(--size-small); }
 }
 
 /* Theme control lives on the Settings page (Appearance fieldset), not here. */

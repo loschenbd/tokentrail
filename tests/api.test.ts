@@ -9,6 +9,8 @@ import { buildToday, type TodayResponse } from '../src/dashboard/data/api.js';
 import { buildServer } from '../src/dashboard/server.js';
 import { closeDb } from '../src/db/db.js';
 
+const BASE = 'http://127.0.0.1:4920';
+
 function makeDb() {
   const db = new Database(':memory:');
   runMigrations(db);
@@ -62,7 +64,7 @@ describe('buildToday', () => {
     insertAnomaly(db, { date: today, dismissed: false, featureKey: 'feat-anom-1' });
     insertAnomaly(db, { date: today, dismissed: true, featureKey: 'feat-anom-2' });   // dismissed → not counted
 
-    const r = buildToday(db);
+    const r = buildToday(db, { baseUrl: BASE });
 
     assert.equal(r.todayUsd, 2.40);
     assert.equal(r.topProjects.length, 2);
@@ -89,7 +91,7 @@ describe('buildToday', () => {
 
   test('handles empty day: zero totals, empty array, zero anomalies', () => {
     const db = makeDb();
-    const r = buildToday(db);
+    const r = buildToday(db, { baseUrl: BASE });
 
     assert.equal(r.todayUsd, 0);
     assert.equal(r.topProjects.length, 0);
@@ -109,7 +111,7 @@ describe('buildToday', () => {
       insertRollup(db, { date: today, featureKey: `big-${i}`, featureName: `Big ${i}`, repo: 'loschenbd/big', cost: 100 + i, sessionIds: `b${i}`, sessions: 1 });
     }
 
-    const r = buildToday(db);
+    const r = buildToday(db, { baseUrl: BASE });
 
     assert.equal(r.topProjects.length, 3);
     const big = r.topProjects[0]!;
@@ -125,7 +127,7 @@ describe('buildToday', () => {
     // No repo → bucketProject uses `feature:<key>` as the project key.
     insertRollup(db, { date: today, featureKey: 'has/slash:colon', featureName: 'Has slash', repo: null, cost: 1, sessionIds: 's', sessions: 1 });
 
-    const r = buildToday(db);
+    const r = buildToday(db, { baseUrl: BASE });
 
     assert.equal(r.topProjects[0]!.href, 'http://127.0.0.1:4920/project/feature%3Ahas%2Fslash%3Acolon');
     assert.equal(r.topProjects[0]!.features[0]!.href, 'http://127.0.0.1:4920/feature/has%2Fslash%3Acolon');
@@ -140,7 +142,7 @@ describe('buildToday', () => {
     insertEvent('e2', '2026-06-17T08:30:00Z');
     insertEvent('e3', '2026-06-16T22:00:00Z');
 
-    const r = buildToday(db);
+    const r = buildToday(db, { baseUrl: BASE });
     assert.equal(r.lastEventAt, '2026-06-17T08:30:00Z');
   });
 });
@@ -153,7 +155,7 @@ describe('GET /api/today', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'tokentrail-api-test-'));
     process.env.TRACKER_DB_PATH = join(tmpDir, 'test.db');
 
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     try {
       const res = await app.inject({ method: 'GET', url: '/api/today' });
       assert.equal(res.statusCode, 200);
@@ -181,7 +183,7 @@ describe('buildToday — menubar summary', () => {
       const date = (db.prepare(`SELECT date('now', '${offset} days', 'localtime') AS d`).get() as { d: string }).d;
       insertRollup(db, { date, featureKey: `f-${i}`, featureName: `F ${i}`, repo: 'x/y', cost, sessionIds: `s-${i}`, sessions: 1 });
     });
-    const res = buildToday(db);
+    const res = buildToday(db, { baseUrl: BASE });
     assert.equal(res.menubar.sparkline.length, 14);
     assert.equal(res.menubar.sparkline[13], 7);
     assert.equal(res.menubar.sparkline[12], 10);
@@ -195,7 +197,7 @@ describe('buildToday — menubar summary', () => {
       const date = (db.prepare(`SELECT date('now', '${offset} days', 'localtime') AS d`).get() as { d: string }).d;
       insertRollup(db, { date, featureKey: `f-${i}`, featureName: `F ${i}`, repo: 'x/y', cost, sessionIds: `s-${i}`, sessions: 1 });
     });
-    const res = buildToday(db);
+    const res = buildToday(db, { baseUrl: BASE });
     assert.equal(res.menubar.last7Usd, 12);
     assert.equal(res.menubar.last30Usd, 42);
   });
@@ -206,7 +208,7 @@ describe('buildToday — menubar summary', () => {
     const yest = (db.prepare(`SELECT date('now','-1 days','localtime') AS d`).get() as { d: string }).d;
     insertRollup(db, { date: yest, featureKey: 'a', featureName: 'A', repo: 'x/y', cost: 10, sessionIds: 's1', sessions: 1 });
     insertRollup(db, { date: today, featureKey: 'b', featureName: 'B', repo: 'x/y', cost: 25, sessionIds: 's2', sessions: 1 });
-    const res = buildToday(db);
+    const res = buildToday(db, { baseUrl: BASE });
     assert.equal(res.menubar.yesterdayUsd, 10);
     assert.equal(res.menubar.deltaVsYesterday, 150);
   });
@@ -215,14 +217,14 @@ describe('buildToday — menubar summary', () => {
     const db = makeDb();
     const today = (db.prepare(`SELECT date('now','localtime') AS d`).get() as { d: string }).d;
     insertRollup(db, { date: today, featureKey: 'a', featureName: 'A', repo: 'x/y', cost: 10, sessionIds: 's1', sessions: 1 });
-    const res = buildToday(db);
+    const res = buildToday(db, { baseUrl: BASE });
     assert.equal(res.menubar.yesterdayUsd, 0);
     assert.equal(res.menubar.deltaVsYesterday, Infinity);
   });
 
   test('empty: all menubar fields zero, sparkline is 14 zeros', () => {
     const db = makeDb();
-    const res = buildToday(db);
+    const res = buildToday(db, { baseUrl: BASE });
     assert.deepEqual(res.menubar.sparkline, Array(14).fill(0));
     assert.equal(res.menubar.last7Usd, 0);
     assert.equal(res.menubar.last30Usd, 0);
@@ -241,7 +243,7 @@ describe('buildToday — menubar summary', () => {
       const date = (db.prepare(`SELECT date('now', '${offset} days', 'localtime') AS d`).get() as { d: string }).d;
       insertRollup(db, { date, featureKey: `f-${i}`, featureName: `F ${i}`, repo, cost, sessionIds: `s-${i}`, sessions: 1 });
     });
-    const res = buildToday(db);
+    const res = buildToday(db, { baseUrl: BASE });
     const trend = res.menubar.trend;
 
     assert.equal(trend.days.length, 30);
@@ -267,7 +269,7 @@ describe('buildToday — menubar summary', () => {
     for (let i = 0; i < 8; i++) {
       insertRollup(db, { date: today, featureKey: `p${i}-f`, featureName: `P${i} F`, repo: `loschenbd/proj${i}`, cost: 80 - i * 10, sessionIds: `s${i}`, sessions: 1 });
     }
-    const trend = buildToday(db).menubar.trend;
+    const trend = buildToday(db, { baseUrl: BASE }).menubar.trend;
     assert.equal(trend.projects.length, 7); // top 6 + __other__
     assert.ok(trend.projects.some((p) => p.key === '__other__'));
     assert.equal(trend.others.length, 2);
@@ -282,7 +284,7 @@ describe('buildToday — menubar summary', () => {
 
   test('trend on an empty DB: 30 zeroed days, no projects', () => {
     const db = makeDb();
-    const res = buildToday(db);
+    const res = buildToday(db, { baseUrl: BASE });
     assert.equal(res.menubar.trend.days.length, 30);
     assert.equal(res.menubar.trend.projects.length, 0);
   });
@@ -293,7 +295,7 @@ describe('buildToday — menubar summary', () => {
     insertAnomaly(db, { date: today, dismissed: false, featureKey: 'a1', amount: 12 });
     insertAnomaly(db, { date: today, dismissed: false, featureKey: 'a2', amount: 399 });
     insertAnomaly(db, { date: today, dismissed: true, featureKey: 'a3', amount: 900 }); // dismissed → ignored
-    const res = buildToday(db);
+    const res = buildToday(db, { baseUrl: BASE });
     assert.equal(res.anomalyCount, 2);
     assert.equal(res.topAnomaly!.amount, 399);
     assert.equal(res.topAnomaly!.reason, '10x baseline');
@@ -301,7 +303,7 @@ describe('buildToday — menubar summary', () => {
 
   test('topAnomaly is null when nothing is active', () => {
     const db = makeDb();
-    const res = buildToday(db);
+    const res = buildToday(db, { baseUrl: BASE });
     assert.equal(res.topAnomaly, null);
   });
 

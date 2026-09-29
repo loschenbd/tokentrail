@@ -6,8 +6,8 @@ import { hiddenFeatureKeys, rollupVisiblePredicate, shownAnomalyPredicate } from
 import { buildSources, type SourcesResponse } from './sources.js';
 import { buildBudget, type BudgetReport } from './budget.js';
 import { getConfig } from '../../lib/config.js';
+import { dashboardBaseUrl } from '../../lib/daemon-identity.js';
 
-const DASHBOARD_BASE_URL = 'http://127.0.0.1:4920';
 const MAX_PROJECTS = 3;
 const MAX_FEATURES_PER_PROJECT = 5;
 
@@ -97,14 +97,15 @@ function todayCacheKey(db: DatabaseType.Database): string {
 
 export function buildToday(
   db: DatabaseType.Database,
-  opts: { hidden?: string[] } = {}
+  opts: { hidden?: string[]; baseUrl?: string } = {}
 ): TodayResponse {
   const hidden = opts.hidden ?? [];
+  const baseUrl = opts.baseUrl ?? dashboardBaseUrl();
   const cfg = getConfig();
   // Hidden patterns + budget config join the cache key so editing settings.json
   // takes effect on the next poll without waiting for a DB write.
   const sb = cfg.sourceBudgets;
-  const cacheKey = `${todayCacheKey(db)};hidden=${hidden.join(',')};budget=${cfg.monthlyBudgetUsd}:${cfg.budgetCycleStartDay}:${sb.claude},${sb.copilot},${sb.cursor}`;
+  const cacheKey = `${todayCacheKey(db)};base=${baseUrl};hidden=${hidden.join(',')};budget=${cfg.monthlyBudgetUsd}:${cfg.budgetCycleStartDay}:${sb.claude},${sb.copilot},${sb.cursor}`;
   const cached = todayCache.get(db);
   if (cached && cached.key === cacheKey) return cached.value;
 
@@ -155,7 +156,7 @@ export function buildToday(
       key: r.featureKey,
       name: r.featureName,
       usd: r.totalUsd,
-      href: `${DASHBOARD_BASE_URL}/feature/${encodeURIComponent(r.featureKey)}`,
+      href: `${baseUrl}/feature/${encodeURIComponent(r.featureKey)}`,
     });
   }
 
@@ -166,7 +167,7 @@ export function buildToday(
       key: p.key,
       name: p.name,
       usd: p.totalUsd,
-      href: `${DASHBOARD_BASE_URL}/project/${encodeURIComponent(p.key)}`,
+      href: `${baseUrl}/project/${encodeURIComponent(p.key)}`,
       features: (projectFeaturesMap.get(p.key) ?? []).slice(0, MAX_FEATURES_PER_PROJECT),
     })),
     anomalyCount,

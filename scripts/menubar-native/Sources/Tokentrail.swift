@@ -1,7 +1,7 @@
 // Tokentrail — native macOS menu-bar widget (prototype).
 //
 // A thin SwiftUI client over the local dashboard daemon. Polls
-// `GET /api/today` on 127.0.0.1:4920 every 60s and renders the same
+// `GET /api/today` on this user's 127.0.0.1 port every 60s and renders the same
 // numbers + stacked-area trend the SwiftBar plugin does — but natively,
 // with Swift Charts, in one persistent ~20 MB process instead of
 // spawning an 85 MB Node process every minute.
@@ -133,10 +133,46 @@ struct TrendOther: Decodable {
 
 // MARK: - Networking
 
+enum ApiError: Error {
+    /// The port answered, but the daemon belongs to another macOS user.
+    case foreignDaemon
+}
+
 enum Api {
+    // Loopback is shared by every macOS user, so each user's daemon gets its
+    // own port. Must match defaultDashboardPort() in src/lib/daemon-identity.ts.
+    static let port: Int = {
+        if let raw = ProcessInfo.processInfo.environment["TOKENTRAIL_PORT"],
+           let n = Int(raw), n > 0, n < 65536 { return n }
+        let uid = Int(getuid())
+        return uid < 501 ? 4920 : 4920 + ((uid - 501) % 1000)
+    }()
     static let base = ProcessInfo.processInfo.environment["TT_DASHBOARD_URL"]
-        ?? "http://127.0.0.1:4920"
+        ?? "http://127.0.0.1:\(port)"
     static var todayURL: URL { URL(string: "\(base)/api/today")! }
+
+    // Per-user secret the daemon writes (0600) on first start. Read fresh each
+    // time: the daemon may create it after this app launched.
+    static var token: String? {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Tokentrail/daemon-token")
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
+
+    // Dashboard links carry a one-time ?tt= token; the daemon swaps it for a
+    // cookie so edits made in the browser are accepted as this user's.
+    static func link(_ url: URL) -> URL {
+        guard let t = token, url.absoluteString.hasPrefix(base),
+              var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        c.queryItems = (c.queryItems ?? []) + [URLQueryItem(name: "tt", value: t)]
+        return c.url ?? url
+    }
+
+    static func link(_ path: String) -> URL {
+        link(URL(string: base + path)!)
+    }
 
     // The dashboard's per-project page. The key holds ":" and "/"
     // (e.g. "repo:loschenbd/tokentrail"), which must be percent-encoded —
@@ -144,7 +180,7 @@ enum Api {
     static func projectURL(_ key: String) -> URL {
         let allowed = CharacterSet(charactersIn: "-._~").union(.alphanumerics)
         let enc = key.addingPercentEncoding(withAllowedCharacters: allowed) ?? key
-        return URL(string: "\(base)/project/\(enc)") ?? URL(string: base)!
+        return link(URL(string: "\(base)/project/\(enc)") ?? URL(string: base)!)
     }
 
     static func fetch() async throws -> TodayResponse {
@@ -153,6 +189,12 @@ enum Api {
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
+        }
+        // Never show another user's spend. A daemon too old to send the
+        // header is let through (upgrade window).
+        if let owner = http.value(forHTTPHeaderField: "X-Tokentrail-Uid"),
+           owner != String(getuid()) {
+            throw ApiError.foreignDaemon
         }
         return try JSONDecoder().decode(TodayResponse.self, from: data)
     }
@@ -227,6 +269,9 @@ final class Store: ObservableObject {
             today = t
             error = nil
             maybeNotify(t)
+        } catch ApiError.foreignDaemon {
+            today = nil
+            self.error = "port \(Api.port) belongs to another Mac user's Tokentrail"
         } catch {
             self.error = "dashboard not running"
         }
@@ -886,7 +931,7 @@ struct PanelView: View {
     }
 
     private func budgetEmptyView() -> some View {
-        Link(destination: URL(string: Api.base + "/settings#budget")!) {
+        Link(destination: Api.link("/settings#budget")) {
             HStack(spacing: 6) {
                 Image(systemName: "target").font(.system(size: 11)).foregroundStyle(.secondary)
                 Text("Set a budget in Settings").font(.system(size: 12)).foregroundStyle(.secondary)
@@ -899,7 +944,7 @@ struct PanelView: View {
     private func worthALook(_ t: TodayResponse) -> some View {
         // The whole callout links to the dashboard's anomaly page, so a
         // click goes straight to "what needs a look".
-        Link(destination: URL(string: Api.base + "/worth-a-look")!) {
+        Link(destination: Api.link("/worth-a-look")) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Image(systemName: t.anomalyCount > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle")
@@ -933,7 +978,7 @@ struct PanelView: View {
             Text("TOP PROJECTS · TODAY")
                 .font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
             ForEach(t.topProjects.prefix(3)) { p in
-                Link(destination: URL(string: p.href)!) {
+                Link(destination: Api.link(URL(string: p.href)!)) {
                     HStack {
                         Text(p.name).font(.system(size: 13, weight: .medium))
                         Spacer()
@@ -946,7 +991,7 @@ struct PanelView: View {
                 // projects would just duplicate the parent row, so skip them.
                 if p.features.count > 1 {
                     ForEach(Array(p.features.enumerated()), id: \.element.id) { idx, f in
-                        Link(destination: URL(string: f.href)!) {
+                        Link(destination: Api.link(URL(string: f.href)!)) {
                             HStack {
                                 Text((idx == p.features.count - 1 ? "└ " : "├ ") + f.name)
                                     .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -965,10 +1010,10 @@ struct PanelView: View {
 
     private func actions() -> some View {
         HStack(spacing: 4) {
-            Link("Open dashboard", destination: URL(string: Api.base + "/")!)
+            Link("Open dashboard", destination: Api.link("/"))
                 .hoverHighlight()
             Text("·").foregroundStyle(.secondary)
-            Link("Settings", destination: URL(string: Api.base + "/settings")!)
+            Link("Settings", destination: Api.link("/settings"))
                 .hoverHighlight()
             Spacer()
             Button("Quit") { NSApplication.shared.terminate(nil) }

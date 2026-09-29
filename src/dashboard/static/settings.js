@@ -1,3 +1,9 @@
+// A 403 carries the server's explanation (edits need this user's session).
+async function failText(r) {
+  const o = await r.json().catch(() => ({}));
+  return o.error || r.status;
+}
+
 // --- Hidden projects: add/remove applies immediately (no Save needed) ---
 async function postHiddenProjects(next) {
   const r = await fetch('/api/settings', {
@@ -6,7 +12,7 @@ async function postHiddenProjects(next) {
     body: JSON.stringify({ hiddenProjects: next }),
   });
   if (r.ok) location.reload();
-  else alert('Update failed: ' + r.status);
+  else alert('Update failed: ' + await failText(r));
 }
 
 const hideSelect = document.getElementById('hide-project-select');
@@ -58,7 +64,7 @@ form.addEventListener('submit', async (e) => {
     body: JSON.stringify(body),
   });
   if (r.ok) location.reload();
-  else alert('Save failed: ' + r.status);
+  else alert('Save failed: ' + await failText(r));
 });
 
 // Populate the Ollama model dropdown from the local install. Falls back to a
@@ -171,7 +177,7 @@ if (removeBtn && confirmDiv && confirmInput && confirmSubmit && confirmCancel) {
       body: JSON.stringify(body),
     });
     if (r.ok) location.reload();
-    else alert('Remove failed: ' + r.status);
+    else alert('Remove failed: ' + await failText(r));
   });
 
   confirmCancel.addEventListener('click', () => {
@@ -202,6 +208,6 @@ if (budgetForm) {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
     });
     if (r.ok) location.reload();
-    else { const o = await r.json().catch(() => ({})); alert('Save failed: ' + (o.error || r.status)); }
+    else alert('Save failed: ' + await failText(r));
   });
 }

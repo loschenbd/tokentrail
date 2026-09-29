@@ -921,6 +921,8 @@
           const d = e.data ? JSON.parse(e.data) : null;
           if (d && d.message) status.textContent = 'Error: ' + d.message;
           else if (lastCurrent > 0) status.textContent = `Connection dropped at session ${lastCurrent}/${lastTotal}. Reload and try again.`;
+          // Refused before the stream opened — most likely a 403 (no edit session).
+          else status.textContent = 'Could not start. Edits need your own session — open the dashboard from the menu-bar app, or run `tokentrail dashboard`.';
         } catch { /* ignore */ }
         evt.close();
         btn.disabled = false;
@@ -1085,7 +1087,7 @@
       const res = await fetch('/api/anomalies/' + encodeURIComponent(id) + '/' + action, { method: 'POST' });
       // 204: state flipped. 409: another tab already flipped it — treat as
       // success so the visual state catches up rather than nagging the user.
-      if (!res.ok && res.status !== 409) throw new Error('HTTP ' + res.status);
+      if (!res.ok && res.status !== 409) throw new Error(res.status === 403 ? 'forbidden' : 'HTTP ' + res.status);
 
       // Flip the row's visual state.
       row.classList.toggle('dismissed');
@@ -1110,7 +1112,9 @@
       if (parent) {
         const errSpan = document.createElement('span');
         errSpan.className = 'anomaly-error';
-        errSpan.textContent = ' (failed — try again)';
+        errSpan.textContent = err && err.message === 'forbidden'
+          ? ' (needs your session — open the dashboard from the menu bar)'
+          : ' (failed — try again)';
         parent.appendChild(errSpan);
         setTimeout(function () { errSpan.remove(); }, 4000);
       }

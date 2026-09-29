@@ -38,7 +38,7 @@ function seedRollup(db: DatabaseType.Database, featureKey: string, repo: string 
 
 describe('dashboard /api/settings', () => {
   test('GET /api/settings returns defaults with no key', async () => {
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const r = await app.inject({ method: 'GET', url: '/api/settings' });
     assert.equal(r.statusCode, 200);
     const body = r.json();
@@ -56,7 +56,7 @@ describe('dashboard /api/settings', () => {
       },
       hiddenProjects: [],
     });
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const r = await app.inject({ method: 'GET', url: '/api/settings' });
     const body = r.json();
     assert.equal(body.llm.openrouter.hasKey, true);
@@ -65,7 +65,7 @@ describe('dashboard /api/settings', () => {
   });
 
   test('POST /api/settings persists', async () => {
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const r = await app.inject({
       method: 'POST',
       url: '/api/settings',
@@ -84,7 +84,7 @@ describe('dashboard /api/settings', () => {
   });
 
   test('POST /api/settings rejects malformed body', async () => {
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const r = await app.inject({ method: 'POST', url: '/api/settings', payload: { llm: { backend: 'nonsense' } } });
     assert.equal(r.statusCode, 400);
   });
@@ -98,7 +98,7 @@ describe('dashboard /api/settings', () => {
       },
       hiddenProjects: [],
     });
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     // Verify key is present before clearing.
     const before = await app.inject({ method: 'GET', url: '/api/settings' });
     assert.equal(before.json().llm.openrouter.hasKey, true);
@@ -130,7 +130,7 @@ describe('dashboard /api/settings', () => {
       },
       hiddenProjects: [],
     });
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const r = await app.inject({ method: 'GET', url: '/api/settings' });
     const body = r.json();
     assert.equal(body.llm.openrouter.hasKey, true);
@@ -143,7 +143,7 @@ describe('dashboard /api/settings', () => {
     seedRollup(testDb, 'archi-homepage', 'loschenbd/archi');
     seedRollup(testDb, 'pmg-application-pack', 'loschenbd/job-search');
     writeSettings({ ...readSettings(), hiddenProjects: ['job-search'] });
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const body = (await app.inject({ method: 'GET', url: '/api/settings' })).json();
     assert.deepEqual(body.hiddenProjects, ['job-search']);
     const byName = Object.fromEntries(body.projects.map((p: { name: string; hidden: boolean }) => [p.name, p.hidden]));
@@ -160,7 +160,7 @@ describe('dashboard /api/settings', () => {
       },
       hiddenProjects: [],
     });
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const r = await app.inject({
       method: 'POST',
       url: '/api/settings',
@@ -175,7 +175,7 @@ describe('dashboard /api/settings', () => {
 
   test('POST /api/settings with llm only preserves hiddenProjects', async () => {
     writeSettings({ ...readSettings(), hiddenProjects: ['job-search'] });
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const r = await app.inject({
       method: 'POST',
       url: '/api/settings',
@@ -193,7 +193,7 @@ describe('dashboard /api/settings', () => {
   });
 
   test('POST /api/settings rejects non-array hiddenProjects and empty updates', async () => {
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const bad = await app.inject({ method: 'POST', url: '/api/settings', payload: { hiddenProjects: 'job-search' } });
     assert.equal(bad.statusCode, 400);
     const empty = await app.inject({ method: 'POST', url: '/api/settings', payload: {} });
@@ -203,7 +203,7 @@ describe('dashboard /api/settings', () => {
   test('GET /settings HTML renders the hidden-projects section', async () => {
     seedRollup(testDb, 'archi-homepage', 'loschenbd/archi');
     writeSettings({ ...readSettings(), hiddenProjects: ['job-search'] });
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const r = await app.inject({ method: 'GET', url: '/settings' });
     assert.equal(r.statusCode, 200);
     assert.match(r.body, /Hidden projects/);
@@ -225,7 +225,7 @@ describe('dashboard /api/settings', () => {
         },
         hiddenProjects: [],
       });
-      const app = buildServer({ defaultDays: 30 });
+      const app = buildServer({ defaultDays: 30, authToken: null });
       const r = await app.inject({
         method: 'POST',
         url: '/api/settings/test',

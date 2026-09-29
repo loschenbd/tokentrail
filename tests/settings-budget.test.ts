@@ -49,7 +49,7 @@ describe('POST /api/budget', () => {
   });
 
   test('rejects out-of-range cycle day', async () => {
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const res = await app.inject({ method: 'POST', url: '/api/budget',
       payload: { budgetCycleStartDay: 40 } });
     assert.equal(res.statusCode, 400);
@@ -57,7 +57,7 @@ describe('POST /api/budget', () => {
   });
 
   test('rejects negative amounts', async () => {
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const res = await app.inject({ method: 'POST', url: '/api/budget',
       payload: { monthlyBudgetUsd: -5 } });
     assert.equal(res.statusCode, 400);
@@ -65,7 +65,7 @@ describe('POST /api/budget', () => {
   });
 
   test('saves and round-trips', async () => {
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const res = await app.inject({ method: 'POST', url: '/api/budget',
       payload: { monthlyBudgetUsd: 120, sourceBudgets: { cursor: 25 } } });
     assert.equal(res.statusCode, 200);
@@ -77,7 +77,7 @@ describe('POST /api/budget', () => {
   });
 
   test('treats monthlyBudgetUsd 0 as no budget (matches config normalize)', async () => {
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     const res = await app.inject({ method: 'POST', url: '/api/budget',
       payload: { monthlyBudgetUsd: 0 } });
     assert.equal(res.statusCode, 200);

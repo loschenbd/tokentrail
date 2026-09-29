@@ -44,7 +44,8 @@ walk through the onboarding checklist:
 
 ```bash
 tokentrail dashboard
-# first run opens http://127.0.0.1:4920/welcome (later runs open the Overview)
+# first run opens http://127.0.0.1:4920/welcome (later runs open the Overview);
+# other macOS users on the same Mac get their own port — see `tokentrail dashboard-url`
 ```
 
 The checklist installs the native menu-bar app, registers the launchd daemon,
@@ -268,7 +269,7 @@ Symlinks a skill and three slash commands into `~/.claude/`:
 
 Pass `--dry-run` to preview, `--force` to replace existing files. The
 skill and slash commands work in any Claude Code session — they query
-the dashboard at `127.0.0.1:4920`, so the dashboard server must be
+the dashboard at `tokentrail dashboard-url`, so the dashboard server must be
 running for them to return data.
 
 ### `tokentrail install-hook [--repo PATH]`
@@ -491,16 +492,27 @@ npm run tokentrail -- dashboard
 ```
 
 Starts a local Fastify server on `127.0.0.1:4920` and opens your browser to the
-Tokentrail overview. Flags:
+Tokentrail overview. If the dashboard daemon is already running, it opens that
+instead. Flags:
 
 ```
---port <n>     bind to a different port (default 4920)
+--port <n>     bind to a different port (default: $TOKENTRAIL_PORT, else per-user)
 --no-open      print the URL but don't auto-launch the browser
 --days <n>     initial time window (default 30)
 ```
 
 Anomalies on `/worth-a-look` can be dismissed and restored inline. Labeling
 and sync stay on the CLI for now. Stop the dashboard with Ctrl-C.
+
+**More than one Mac user.** `127.0.0.1` is shared by every account on the
+Mac, so each user's dashboard gets its own port: 4920 for the first account,
+a fixed offset for the others (`tokentrail dashboard-url` prints yours;
+`TOKENTRAIL_PORT` overrides it). The menu-bar app refuses to show a dashboard
+owned by another account. Reads are open, but edits (settings, budgets,
+dismissals, re-inference) need a per-user token kept in
+`~/Library/Application Support/Tokentrail/daemon-token`. The browser receives it
+as a cookie when you open the dashboard from the menu-bar app or with
+`tokentrail dashboard`.
 
 ### Light / dark theme
 
@@ -556,7 +568,8 @@ burn days. Click it for:
 - Today's top projects (features nested underneath), each clickable
   through to its dashboard page.
 
-It reads the dashboard daemon on port 4920. If the daemon isn't running the
+It reads this user's dashboard daemon (port 4920 for the first macOS account).
+If the daemon isn't running the
 title shows `$—` instead of crashing. (`init`'s launchd plist keeps the
 daemon up across reboots; manage it with `launchctl unload`/`load` on
 `~/Library/LaunchAgents/com.tokentrail.daemon.plist`.)

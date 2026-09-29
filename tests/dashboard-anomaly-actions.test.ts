@@ -42,7 +42,7 @@ function getDismissedAt(id: number): string | null | undefined {
 describe('POST /api/anomalies/:id/dismiss', () => {
   test('returns 204 and sets dismissed_at when anomaly is active', async () => {
     const t = withTempDb();
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     try {
       const id = insertAnomaly({ dismissed: false });
       assert.equal(getDismissedAt(id), null);
@@ -61,7 +61,7 @@ describe('POST /api/anomalies/:id/dismiss', () => {
 
   test('returns 404 when the anomaly id does not exist', async () => {
     const t = withTempDb();
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     try {
       const res = await app.inject({ method: 'POST', url: '/api/anomalies/9999/dismiss' });
       assert.equal(res.statusCode, 404);
@@ -73,7 +73,7 @@ describe('POST /api/anomalies/:id/dismiss', () => {
 
   test('returns 409 when the anomaly is already dismissed', async () => {
     const t = withTempDb();
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     try {
       const id = insertAnomaly({ dismissed: true });
       const before = getDismissedAt(id);
@@ -91,7 +91,7 @@ describe('POST /api/anomalies/:id/dismiss', () => {
 
   test('returns 400 for a malformed id', async () => {
     const t = withTempDb();
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     try {
       const res = await app.inject({ method: 'POST', url: '/api/anomalies/not-a-number/dismiss' });
       assert.equal(res.statusCode, 400);
@@ -105,7 +105,7 @@ describe('POST /api/anomalies/:id/dismiss', () => {
 describe('POST /api/anomalies/:id/restore', () => {
   test('returns 204 and clears dismissed_at when anomaly is dismissed', async () => {
     const t = withTempDb();
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     try {
       const id = insertAnomaly({ dismissed: true });
       assert.ok(getDismissedAt(id));
@@ -122,7 +122,7 @@ describe('POST /api/anomalies/:id/restore', () => {
 
   test('returns 404 when the anomaly id does not exist', async () => {
     const t = withTempDb();
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     try {
       const res = await app.inject({ method: 'POST', url: '/api/anomalies/9999/restore' });
       assert.equal(res.statusCode, 404);
@@ -134,7 +134,7 @@ describe('POST /api/anomalies/:id/restore', () => {
 
   test('returns 409 when the anomaly is already active', async () => {
     const t = withTempDb();
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     try {
       const id = insertAnomaly({ dismissed: false });
       assert.equal(getDismissedAt(id), null);
@@ -151,7 +151,7 @@ describe('POST /api/anomalies/:id/restore', () => {
 
   test('returns 400 for a malformed id', async () => {
     const t = withTempDb();
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     try {
       const res = await app.inject({ method: 'POST', url: '/api/anomalies/not-a-number/restore' });
       assert.equal(res.statusCode, 400);

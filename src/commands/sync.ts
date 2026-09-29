@@ -7,6 +7,7 @@ import {
 } from '../services/notion.js';
 import { buildDigestBody, type DigestContext } from '../services/notion-digest.js';
 import { chooseTopAnomaly, type DetectedAnomaly } from '../services/anomalies.js';
+import { dashboardBaseUrl } from '../lib/daemon-identity.js';
 
 export type SyncOptions = {
   days?: number;
@@ -192,7 +193,7 @@ export async function runSync(opts: SyncOptions = {}): Promise<SyncSummary> {
           prsForRollup,
         })
       : null;
-    const dashboardUrl = `http://127.0.0.1:4920/feature/${encodeURIComponent(r.feature_key)}?days=30`;
+    const dashboardUrl = `${dashboardBaseUrl()}/feature/${encodeURIComponent(r.feature_key)}?days=30`;
     const children = body ? buildRollupBody(body, { dashboardUrl }) : [];
 
     const result = await notion.upsertPage(

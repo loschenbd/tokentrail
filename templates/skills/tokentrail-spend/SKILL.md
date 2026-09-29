@@ -9,8 +9,8 @@ description: |
   top burn paths, (4) the user wants to inspect their session history by
   cost. Tokentrail aggregates Claude Code JSONL session logs into a
   local SQLite ledger, attributes each session to a (repo, branch,
-  feature) tuple, and exposes the totals via a local dashboard at
-  127.0.0.1:4920 and a CLI.
+  feature) tuple, and exposes the totals via a local dashboard on
+  127.0.0.1 (a per-user port) and a CLI.
 author: Tokentrail
 version: 1.0.0
 date: 2026-06-16
@@ -24,10 +24,11 @@ attribution, prefer Tokentrail over guessing or doing manual math.
 ## Quick answers via the dashboard API
 
 For "what does today look like" questions, hit the dashboard's JSON
-endpoint — no DB path needed:
+endpoint — no DB path needed. Each macOS user's dashboard has its own
+port (4920 for the first account), so ask the CLI for it:
 
 ```bash
-curl -s http://127.0.0.1:4920/api/today
+curl -s "$(tokentrail dashboard-url)/api/today"
 ```
 
 Response shape:

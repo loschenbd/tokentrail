@@ -354,16 +354,25 @@ program
 program
   .command('dashboard')
   .description('Open the local Tokentrail dashboard in your browser.')
-  .option('--port <n>', 'Port to bind (default 4920)', '4920')
+  .option('--port <n>', 'Port to bind (default: $TOKENTRAIL_PORT, else 4920 for the first macOS user and a per-user port for others)')
   .option('--no-open', "Don't launch the browser automatically.")
   .option('--days <n>', 'Default time window in days (default 30)', '30')
   .action(async (opts: { port?: string; open?: boolean; days?: string }) => {
     const { runDashboard } = await import('./commands/dashboard.js');
+    const { dashboardPort } = await import('./lib/daemon-identity.js');
     await runDashboard({
-      port: Number.parseInt(opts.port ?? '4920', 10),
+      port: opts.port ? Number.parseInt(opts.port, 10) : dashboardPort(),
       open: opts.open !== false,
       days: Number.parseInt(opts.days ?? '30', 10),
     });
+  });
+
+program
+  .command('dashboard-url')
+  .description("Print this user's dashboard base URL (the port differs per macOS user).")
+  .action(async () => {
+    const { dashboardBaseUrl } = await import('./lib/daemon-identity.js');
+    console.log(dashboardBaseUrl());
   });
 
 program

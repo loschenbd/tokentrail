@@ -1,7 +1,7 @@
 # Tokentrail — native menu-bar app (prototype)
 
 A SwiftUI `MenuBarExtra` client for the Tokentrail dashboard. Polls
-`GET /api/today` on `127.0.0.1:4920` every 60s and renders today's spend, a
+`GET /api/today` on this user's `127.0.0.1` port (4920 for the first account) every 60s and renders today's spend, a
 native **Swift Charts** stacked-area trend, anomalies, and top projects — in
 one persistent process, with no SwiftBar dependency and no per-poll Node spawn.
 

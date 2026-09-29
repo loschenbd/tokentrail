@@ -10,7 +10,7 @@ describe('GET /manifest.webmanifest', () => {
   test('returns a standalone PWA manifest with icons', async () => {
     const original = process.env.TRACKER_DB_PATH;
     process.env.TRACKER_DB_PATH = join(mkdtempSync(join(tmpdir(), 'tt-manifest-')), 'test.db');
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     try {
       const res = await app.inject({ method: 'GET', url: '/manifest.webmanifest' });
       assert.equal(res.statusCode, 200);

@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
@@ -30,13 +31,83 @@ import { hiddenProjectPatterns } from './lib/hidden-projects.js';
 import { getLLMClient } from '../lib/llm.js';
 import { saveBudgetConfig, type BudgetPatch, type SourceBudgets } from '../lib/config.js';
 import { serviceWorkerJs } from './sw.js';
+import {
+  TOKEN_HEADER,
+  TOKEN_QUERY,
+  UID_HEADER,
+  currentUid,
+  dashboardBaseUrl,
+  dashboardPort,
+  tokenCookieName,
+  tokensMatch,
+} from '../lib/daemon-identity.js';
 
 const STATIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'static');
 
-export type ServerOptions = { defaultDays: number };
+export type ServerOptions = {
+  defaultDays: number;
+  /**
+   * Per-user secret that mutating routes require (see lib/daemon-identity).
+   * null disables the check — tests only; runDashboard always passes one.
+   */
+  authToken: string | null;
+  /** Port the server is bound to; drives the links /api/today hands out. */
+  port?: number;
+};
+
+const EDIT_DENIED =
+  'Edits need your own Tokentrail session. Open the dashboard from the menu-bar app, or run `tokentrail dashboard`.';
 
 export function buildServer(opts: ServerOptions): FastifyInstance {
   const app = Fastify({ logger: false });
+  const port = opts.port ?? dashboardPort();
+  const baseUrl = dashboardBaseUrl(port);
+  const cookieName = tokenCookieName(port);
+  const uid = currentUid();
+
+  // Every response names the uid that owns this daemon, so the menu-bar app
+  // can tell when it has reached another macOS user's server on loopback.
+  app.addHook('onSend', async (_req, reply, payload) => {
+    if (uid !== null) reply.header(UID_HEADER, String(uid));
+    return payload;
+  });
+
+  app.addHook('onRequest', async (req, reply) => {
+    const token = opts.authToken;
+    if (!token) return;
+    const q = req.url.indexOf('?');
+    const path = q === -1 ? req.url : req.url.slice(0, q);
+    const params = new URLSearchParams(q === -1 ? '' : req.url.slice(q + 1));
+
+    // One-time link (`?tt=<token>`) from the menu-bar app or the CLI: trade
+    // it for a cookie, then redirect so the token never sits in the address
+    // bar or history. The browser re-applies any #fragment itself.
+    const given = params.get(TOKEN_QUERY);
+    if (given !== null && (req.method === 'GET' || req.method === 'HEAD')) {
+      params.delete(TOKEN_QUERY);
+      if (tokensMatch(token, given)) {
+        reply.header(
+          'set-cookie',
+          `${cookieName}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=34560000`,
+        );
+      }
+      const rest = params.toString();
+      return reply.code(302).header('location', path + (rest ? `?${rest}` : '')).send();
+    }
+
+    if (!needsAuth(req.method, path)) return;
+    const header = req.headers[TOKEN_HEADER];
+    if (tokensMatch(token, header) || tokensMatch(token, readCookie(req.headers.cookie, cookieName))) return;
+    return reply.code(403).send({ ok: false, error: EDIT_DENIED });
+  });
+
+  app.get('/api/whoami', async () => ({
+    app: 'tokentrail',
+    uid,
+    user: safeUsername(),
+    pid: process.pid,
+    port,
+  }));
 
   app.get('/', async (req, reply) => {
     const days = parseDays(req.query, opts.defaultDays);
@@ -112,7 +183,7 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.get('/api/today', async (_req, reply) => {
     freshenIfStale();
-    const payload = buildToday(getDb(), { hidden: hiddenProjectPatterns() });
+    const payload = buildToday(getDb(), { hidden: hiddenProjectPatterns(), baseUrl });
     reply.type('application/json; charset=utf-8');
     return payload;
   });
@@ -433,6 +504,30 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
   });
 
   return app;
+}
+
+// Reads are open to anything that can reach the port; writes need the token.
+// The inference stream is a GET but rewrites attribution, so it counts as one.
+function needsAuth(method: string, path: string): boolean {
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') return true;
+  return path === '/api/infer-mainline/stream';
+}
+
+function readCookie(header: string | undefined, name: string): string | null {
+  if (!header) return null;
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq !== -1 && part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
+  }
+  return null;
+}
+
+function safeUsername(): string | null {
+  try {
+    return userInfo().username;
+  } catch {
+    return null;
+  }
 }
 
 function parseDays(query: unknown, fallback: number): number {

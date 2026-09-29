@@ -8,7 +8,7 @@ import { closeDb } from '../../src/db/db.js';
 function makeApp() {
   const db = new Database(':memory:');
   runMigrations(db);
-  return buildServer({ defaultDays: 7 });
+  return buildServer({ defaultDays: 7, authToken: null });
 }
 
 describe('/api/setup/*', () => {

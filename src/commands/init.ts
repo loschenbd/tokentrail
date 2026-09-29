@@ -13,6 +13,7 @@ import { findGitRoot, runInstallHook } from './install-hook.js';
 import { runInstallSkills } from './install-skills.js';
 import { pkgRoot } from '../lib/pkg-root.js';
 import { resolveTrackerDbPath } from '../lib/tracker-db-path.js';
+import { dashboardBaseUrl } from '../lib/daemon-identity.js';
 
 export type InitOptions = {
   dryRun?: boolean;
@@ -138,7 +139,7 @@ export function installDaemon(opts: InitOptions, repoRoot: string): void {
   writeFileSync(DAEMON_PLIST_PATH, plist);
   console.log(`    [wrote] ${DAEMON_PLIST_PATH}`);
   launchctlLoad(DAEMON_PLIST_PATH);
-  console.log(`    [loaded] ${DAEMON_LABEL} — dashboard on 127.0.0.1:4920`);
+  console.log(`    [loaded] ${DAEMON_LABEL} — dashboard on ${dashboardBaseUrl()}`);
 }
 
 function installSkills(opts: InitOptions): void {
@@ -233,7 +234,7 @@ function printNextSteps(opts: InitOptions): void {
     return;
   }
   console.log('  · Check your menu bar in the next ~60 seconds for the running total.');
-  console.log('  · Open the dashboard:  open http://127.0.0.1:4920');
+  console.log('  · Open the dashboard:  tokentrail dashboard');
   console.log('  · See the trail:       tokentrail report');
 }
 

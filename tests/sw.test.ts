@@ -26,7 +26,7 @@ describe('GET /sw.js', () => {
   test('serves the worker at root scope with no-cache and the versioned cache name', async () => {
     const original = process.env.TRACKER_DB_PATH;
     process.env.TRACKER_DB_PATH = join(mkdtempSync(join(tmpdir(), 'tt-sw-')), 'test.db');
-    const app = buildServer({ defaultDays: 30 });
+    const app = buildServer({ defaultDays: 30, authToken: null });
     try {
       const res = await app.inject({ method: 'GET', url: '/sw.js' });
       assert.equal(res.statusCode, 200);

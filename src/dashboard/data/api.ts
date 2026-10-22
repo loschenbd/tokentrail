@@ -7,6 +7,7 @@ import { buildSources, type SourcesResponse } from './sources.js';
 import { buildBudget, type BudgetReport } from './budget.js';
 import { getConfig } from '../../lib/config.js';
 import { dashboardBaseUrl } from '../../lib/daemon-identity.js';
+import type { ClaudeLimits } from '../../services/claude-limits.js';
 
 const MAX_PROJECTS = 3;
 const MAX_FEATURES_PER_PROJECT = 5;
@@ -68,6 +69,12 @@ export type TodayResponse = {
   // budget is configured (monthlyBudgetUsd unset).
   budget: BudgetReport | null;
 };
+
+// What GET /api/today actually sends: the cached DB-derived payload plus the
+// Claude subscription limits, which come from the network on their own clock
+// (services/claude-limits) and so stay out of buildToday's cache. Null when
+// there's no Claude subscription login on this Mac.
+export type TodayPayload = TodayResponse & { limits: ClaudeLimits | null };
 
 // Cache the full payload between menubar polls (every 60 s). Between
 // pipeline runs nothing in the DB changes, so rebuilding two

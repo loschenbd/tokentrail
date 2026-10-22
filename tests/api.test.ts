@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { runMigrations } from '../src/db/migrations.js';
-import { buildToday, type TodayResponse } from '../src/dashboard/data/api.js';
+import { buildToday, type TodayResponse, type TodayPayload } from '../src/dashboard/data/api.js';
 import { buildServer } from '../src/dashboard/server.js';
 import { closeDb } from '../src/db/db.js';
 
@@ -160,12 +160,41 @@ describe('GET /api/today', () => {
       const res = await app.inject({ method: 'GET', url: '/api/today' });
       assert.equal(res.statusCode, 200);
       assert.match(res.headers['content-type'] as string, /^application\/json/);
-      const body = res.json() as TodayResponse;
+      const body = res.json() as TodayPayload;
       assert.equal(typeof body.todayUsd, 'number');
       assert.ok(Array.isArray(body.topProjects));
       assert.equal(typeof body.anomalyCount, 'number');
       // Empty DB — no events ingested yet, so lastEventAt is null.
       assert.equal(body.lastEventAt, null);
+      // No limits source wired in — tests never touch the Keychain.
+      assert.equal(body.limits, null);
+    } finally {
+      await app.close();
+      closeDb();
+      if (originalPath === undefined) delete process.env.TRACKER_DB_PATH;
+      else process.env.TRACKER_DB_PATH = originalPath;
+    }
+  });
+
+  test('includes the Claude usage limits from the limits source', async () => {
+    const originalPath = process.env.TRACKER_DB_PATH;
+    const tmpDir = mkdtempSync(join(tmpdir(), 'tokentrail-api-test-'));
+    process.env.TRACKER_DB_PATH = join(tmpDir, 'test.db');
+
+    const limits = {
+      plan: 'Max 20x',
+      session: { label: '5-hour', pct: 12, resetsAt: '2026-10-22T19:40:00Z', severity: 'normal' },
+      weekly: { label: 'Weekly', pct: 19, resetsAt: '2026-10-26T09:00:00Z', severity: 'normal' },
+      models: [],
+      fetchedAt: '2026-10-22T17:00:00.000Z',
+      stale: false,
+      note: null,
+    };
+    const app = buildServer({ defaultDays: 30, authToken: null, limits: async () => limits });
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/today' });
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual((res.json() as TodayPayload).limits, limits);
     } finally {
       await app.close();
       closeDb();

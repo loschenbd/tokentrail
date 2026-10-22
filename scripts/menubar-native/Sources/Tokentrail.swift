@@ -28,6 +28,28 @@ struct TodayResponse: Decodable {
     let sourcesToday: SourcesResponse?
     let sources30d: SourcesResponse?
     let budget: Budget?
+    // Nil when this Mac has no Claude subscription login, or the daemon
+    // predates limits.
+    let limits: ClaudeLimits?
+}
+
+// Claude subscription usage windows (src/services/claude-limits.ts). When
+// `stale`, the latest refresh failed and the numbers are from fetchedAt.
+struct ClaudeLimits: Decodable {
+    let plan: String?
+    let session: LimitWindow?
+    let weekly: LimitWindow?
+    let models: [LimitWindow]
+    let fetchedAt: String?
+    let stale: Bool
+    let note: String?
+}
+
+struct LimitWindow: Decodable {
+    let label: String
+    let pct: Double
+    let resetsAt: String?
+    let severity: String?
 }
 
 struct Budget: Decodable {
@@ -334,6 +356,69 @@ final class Store: ObservableObject {
         let median = prior[prior.count / 2]
         return t.todayUsd >= 2 * median
     }
+
+    // Twin bars ahead of the dollar figure: the 5-hour window on top, the
+    // week below. Nil hides them (no Claude subscription login).
+    var limitsGlyph: NSImage? {
+        guard let l = today?.limits, l.session != nil || l.weekly != nil else { return nil }
+        return LimitGlyph.image(session: l.session?.pct, weekly: l.weekly?.pct, stale: l.stale)
+    }
+
+    var limitsSummary: String? {
+        guard let l = today?.limits else { return nil }
+        let windows: [LimitWindow] = [l.session, l.weekly].compactMap { $0 }
+        let parts = windows.map { "\($0.label) \(Fmt.pct($0.pct)) used" }
+        return parts.isEmpty ? nil : "Claude limits: " + parts.joined(separator: ", ")
+    }
+}
+
+// MARK: - Limits glyph
+
+// Bar color by how much of a window is used: sage, then amber at 75%, clay
+// at 90%. Shared by the menu-bar glyph and the panel's rings.
+enum LimitTone {
+    static func level(_ pct: Double) -> Int { pct >= 90 ? 2 : pct >= 75 ? 1 : 0 }
+    static func color(_ pct: Double) -> Color {
+        [Color(hex: "#5f6f5e"), Color(hex: "#b88a3a"), Color(hex: "#b5533f")][level(pct)]
+    }
+}
+
+enum LimitGlyph {
+    // Colored, so it can't be a template image; each color resolves against
+    // the menu bar's own light or dark appearance when it's drawn.
+    private static func dynamic(_ light: NSColor, _ dark: NSColor) -> NSColor {
+        NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light }
+    }
+    private static func hex(_ s: String) -> NSColor { NSColor(Color(hex: s)) }
+    private static let fills = [
+        dynamic(hex("#5f6f5e"), hex("#9aab97")),
+        dynamic(hex("#9c7126"), hex("#d6a24e")),
+        dynamic(hex("#a8462f"), hex("#e0765b")),
+    ]
+    private static let track = dynamic(NSColor(white: 0, alpha: 0.22), NSColor(white: 1, alpha: 0.25))
+
+    static let width: CGFloat = 18
+
+    static func image(session: Double?, weekly: Double?, stale: Bool) -> NSImage {
+        let img = NSImage(size: NSSize(width: width, height: 10), flipped: true) { _ in
+            NSGraphicsContext.current?.cgContext.setAlpha(stale ? 0.45 : 1)
+            bar(session, y: 0, height: 4)
+            bar(weekly, y: 6, height: 3)
+            return true
+        }
+        img.isTemplate = false
+        return img
+    }
+
+    private static func bar(_ pct: Double?, y: CGFloat, height: CGFloat) {
+        let r = height / 2
+        track.setFill()
+        NSBezierPath(roundedRect: NSRect(x: 0, y: y, width: width, height: height), xRadius: r, yRadius: r).fill()
+        guard let pct else { return }
+        let w = max(height, width * min(1, max(0, pct / 100)))
+        fills[LimitTone.level(pct)].setFill()
+        NSBezierPath(roundedRect: NSRect(x: 0, y: y, width: w, height: height), xRadius: r, yRadius: r).fill()
+    }
 }
 
 // MARK: - Formatting
@@ -349,6 +434,27 @@ enum Fmt {
     }
     static func usd0(_ n: Double) -> String {
         "$" + Int(n.rounded()).formatted()
+    }
+    static func pct(_ n: Double) -> String { "\(Int(n.rounded()))%" }
+    // Time left until `iso`: "in 3h 39m", "in 12m".
+    static func countdown(to iso: String?, now: Date = Date()) -> String? {
+        guard let iso, let d = isoDate(iso) else { return nil }
+        let m = max(0, Int(d.timeIntervalSince(now) / 60))
+        if m < 1 { return "resetting" }
+        return m < 60 ? "in \(m)m" : "in \(m / 60)h \(m % 60)m"
+    }
+    private static let weekdayTimeFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE h:mm a"
+        f.timeZone = TimeZone.current
+        return f
+    }()
+    // "Mon 2:00 AM" in local time. Rounded to the minute: Anthropic reports
+    // the same reset as 08:59:59.7 one minute and 09:00:00.1 the next.
+    static func weekdayTime(_ iso: String?) -> String? {
+        guard let iso, let d = isoDate(iso) else { return nil }
+        let rounded = Date(timeIntervalSinceReferenceDate: (d.timeIntervalSinceReferenceDate / 60).rounded() * 60)
+        return weekdayTimeFmt.string(from: rounded)
     }
     static func delta(_ d: Double?) -> (text: String, up: Bool)? {
         guard let d else { return ("first day", true) }
@@ -710,6 +816,7 @@ struct PanelView: View {
                 } else if sourceTab == .copilot {
                     copilotView(t)
                 } else {
+                    if let l = t.limits { limitsView(l); Divider() }
                     header(t)
                     Divider()
                     statBlock(t)
@@ -909,6 +1016,56 @@ struct PanelView: View {
                         .font(.system(size: 10)).foregroundStyle(.tertiary)
                 }
                 ForEach((b.sources ?? [])) { s in sourceBudgetRow(s) }
+            }
+        }
+    }
+
+    // Claude subscription windows: a ring per window (5-hour, weekly) with
+    // the time to reset, plan and per-model weekly caps in the header. When
+    // the latest refresh failed, a footnote says how old the numbers are.
+    private func limitsView(_ l: ClaudeLimits) -> some View {
+        let header = ([l.plan] + l.models.map { "\($0.label) wk \(Fmt.pct($0.pct))" })
+            .compactMap { $0 }.joined(separator: " · ")
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Limits").font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text(header).font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            if l.session != nil || l.weekly != nil {
+                HStack(spacing: 18) {
+                    if let s = l.session {
+                        limitRing(s, detail: Fmt.countdown(to: s.resetsAt) ?? "new window")
+                    }
+                    if let w = l.weekly {
+                        limitRing(w, detail: Fmt.weekdayTime(w.resetsAt) ?? "new window")
+                    }
+                }
+            }
+            if l.stale, let note = l.note {
+                let asOf = l.fetchedAt.flatMap(Fmt.isoDate).map { "As of \(agoText($0)). " } ?? ""
+                Text(asOf + note)
+                    .font(.system(size: 10)).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .opacity(l.stale ? 0.75 : 1)
+    }
+
+    private func limitRing(_ w: LimitWindow, detail: String) -> some View {
+        let frac = min(1.0, max(0.0, w.pct / 100))
+        return HStack(spacing: 8) {
+            ZStack {
+                Circle().stroke(Color.secondary.opacity(0.18), lineWidth: 4)
+                Circle().trim(from: 0, to: max(0.02, frac))
+                    .stroke(LimitTone.color(w.pct), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text(Fmt.pct(w.pct)).font(.system(size: 10, weight: .semibold, design: .rounded))
+            }
+            .frame(width: 38, height: 38)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(w.label).font(.system(size: 12, weight: .medium))
+                Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
     }
@@ -1151,12 +1308,18 @@ struct TokentrailApp: App {
         } label: {
             // Today's number in the menu bar, with a flame when it's an
             // unusual burn day (hot wins over the panel's live dot). An
-            // offline/loading state shows a bare "$—".
-            if store.isHot {
-                Text("\(Image(systemName: "flame.fill")) \(store.menuTitle)")
-            } else {
-                Text(store.menuTitle)
+            // offline/loading state shows a bare "$—". The Claude limits
+            // glyph leads when there's a subscription login.
+            HStack(spacing: 5) {
+                if let glyph = store.limitsGlyph { Image(nsImage: glyph) }
+                if store.isHot {
+                    Text("\(Image(systemName: "flame.fill")) \(store.menuTitle)")
+                } else {
+                    Text(store.menuTitle)
+                }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel([store.menuTitle, store.limitsSummary].compactMap { $0 }.joined(separator: ". "))
         }
         .menuBarExtraStyle(.window)
     }

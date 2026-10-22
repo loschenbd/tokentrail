@@ -1,6 +1,7 @@
 import open from 'open';
 import { buildServer } from '../dashboard/server.js';
 import { readSetupStatus, type SetupStatus } from '../dashboard/data/setup-status.js';
+import { claudeLimitsMonitor } from '../services/claude-limits.js';
 import {
   TOKEN_QUERY,
   currentUid,
@@ -27,7 +28,12 @@ export function pickOpenPath(status: SetupStatus): '/' | '/welcome' {
 
 export async function runDashboard(opts: DashboardOptions): Promise<void> {
   const authToken = ensureDaemonToken();
-  const app = buildServer({ defaultDays: opts.days, authToken, port: opts.port });
+  const limits = claudeLimitsMonitor();
+  limits.start();
+  const app = buildServer({
+    defaultDays: opts.days, authToken, port: opts.port,
+    limits: () => limits.snapshot(),
+  });
   try {
     await app.listen({ port: opts.port, host: '127.0.0.1' });
   } catch (err) {

@@ -15,7 +15,8 @@ import { buildProjectDetail } from './data/project.js';
 import { renderProject } from './render/project.js';
 import { buildWorthALook } from './data/worth-a-look.js';
 import { renderWorthALook } from './render/worth-a-look.js';
-import { buildToday } from './data/api.js';
+import { buildToday, type TodayPayload } from './data/api.js';
+import type { ClaudeLimits } from '../services/claude-limits.js';
 import { buildTodayVM } from './data/today.js';
 import { renderToday } from './render/today.js';
 import { renderTrailMap } from './render/trail-map.js';
@@ -53,6 +54,11 @@ export type ServerOptions = {
   authToken: string | null;
   /** Port the server is bound to; drives the links /api/today hands out. */
   port?: number;
+  /**
+   * Claude subscription limits for /api/today. runDashboard wires the
+   * Keychain-backed monitor; left unset (tests) the payload carries null.
+   */
+  limits?: () => Promise<ClaudeLimits | null>;
 };
 
 const EDIT_DENIED =
@@ -183,7 +189,9 @@ export function buildServer(opts: ServerOptions): FastifyInstance {
 
   app.get('/api/today', async (_req, reply) => {
     freshenIfStale();
-    const payload = buildToday(getDb(), { hidden: hiddenProjectPatterns(), baseUrl });
+    const today = buildToday(getDb(), { hidden: hiddenProjectPatterns(), baseUrl });
+    const limits = opts.limits ? await opts.limits().catch(() => null) : null;
+    const payload: TodayPayload = { ...today, limits };
     reply.type('application/json; charset=utf-8');
     return payload;
   });

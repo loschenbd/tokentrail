@@ -3,6 +3,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -14,6 +15,7 @@ import { runInstallSkills } from './install-skills.js';
 import { pkgRoot } from '../lib/pkg-root.js';
 import { resolveTrackerDbPath } from '../lib/tracker-db-path.js';
 import { dashboardBaseUrl } from '../lib/daemon-identity.js';
+import { settingsDir } from '../lib/settings.js';
 
 export type InitOptions = {
   dryRun?: boolean;
@@ -26,7 +28,7 @@ export type InitOptions = {
   nodePath?: string;
 };
 
-const DAEMON_LABEL = 'com.tokentrail.daemon';
+export const DAEMON_LABEL = 'com.tokentrail.daemon';
 const DAEMON_PLIST_PATH = join(
   homedir(),
   'Library',
@@ -34,16 +36,16 @@ const DAEMON_PLIST_PATH = join(
   `${DAEMON_LABEL}.plist`
 );
 const DAEMON_LOG_PATH = join(homedir(), 'Library', 'Logs', 'tokentrail-daemon.log');
-const APP_NAME = 'Tokentrail.app';
+export const APP_NAME = 'Tokentrail.app';
 const APP_DEST_DIR = join(homedir(), 'Applications');
 
 // Native menu-bar app (SwiftUI). Built by scripts/menubar-native/build.sh
 // into dist/Tokentrail.app; the formula runs that build so on brew installs
 // it's waiting in libexec. A LaunchAgent (mirroring the daemon) keeps it
 // running across logins without needing a login-item / SMAppService dance.
-const MENUBAR_APP_SRC_REL = join('scripts', 'menubar-native', 'dist', APP_NAME);
-const MENUBAR_APP_BINARY = 'Tokentrail'; // Contents/MacOS/<CFBundleExecutable>
-const MENUBAR_LABEL = 'com.benjaminloschen.tokentrail.menubar';
+export const MENUBAR_APP_SRC_REL = join('scripts', 'menubar-native', 'dist', APP_NAME);
+export const MENUBAR_APP_BINARY = 'Tokentrail'; // Contents/MacOS/<CFBundleExecutable>
+export const MENUBAR_LABEL = 'com.benjaminloschen.tokentrail.menubar';
 const MENUBAR_PLIST_PATH = join(
   homedir(),
   'Library',
@@ -91,12 +93,23 @@ export function resolveTokentrailBin(argv1: string = process.argv[1] ?? ''): str
   return argv1;
 }
 
-// The daemon's WorkingDirectory is pkgRoot() — on brew installs that's the
-// Cellar libexec, where a cwd-relative `data/tracker.db` would spawn a fresh
-// empty DB that gets wiped on every upgrade. The plist therefore pins an
-// absolute TRACKER_DB_PATH, resolved by the same shared search every other
-// entry point uses.
+// The plist pins an absolute TRACKER_DB_PATH, resolved by the same shared
+// search every other entry point uses, so the daemon never opens a
+// cwd-relative `data/tracker.db`.
 export { resolveTrackerDbPath };
+
+const CELLAR_DIR = /\/Cellar\/tokentrail\/[^/]+(\/|$)/;
+
+/**
+ * The daemon's WorkingDirectory. On brew installs pkgRoot() is the versioned
+ * Cellar libexec, which `brew upgrade` deletes: launchd then can't chdir and
+ * the daemon never starts again. Those installs use the per-account settings
+ * dir instead, which is also where the daemon reads its `.env`. A dev checkout
+ * keeps its repo root, so the daemon reads the repo's `.env`.
+ */
+export function daemonWorkingDir(repoRoot: string, stableDir: string = settingsDir()): string {
+  return CELLAR_DIR.test(repoRoot) ? stableDir : repoRoot;
+}
 
 export function installDaemon(opts: InitOptions, repoRoot: string): void {
   console.log('• Dashboard daemon (launchd)');
@@ -108,12 +121,18 @@ export function installDaemon(opts: InitOptions, repoRoot: string): void {
     return;
   }
 
-  const plist = renderDaemonPlist({ tokentrailBin, repoRoot, trackerDbPath: resolveTrackerDbPath() });
+  const workingDir = daemonWorkingDir(repoRoot);
+  const plist = renderDaemonPlist({ tokentrailBin, workingDir, trackerDbPath: resolveTrackerDbPath() });
 
   const plistDir = dirname(DAEMON_PLIST_PATH);
   const exists = existsSync(DAEMON_PLIST_PATH);
 
-  if (exists && !opts.force) {
+  const stale = exists && workingDirStale(DAEMON_PLIST_PATH);
+  if (stale) {
+    console.log(`    [fix] ${DAEMON_PLIST_PATH} names a WorkingDirectory that is gone or that brew upgrade deletes; rewriting it.`);
+  }
+
+  if (exists && !opts.force && !stale) {
     if (isLoaded(DAEMON_LABEL)) {
       console.log(`    [ok] daemon already loaded (${DAEMON_LABEL}).`);
     } else {
@@ -131,8 +150,9 @@ export function installDaemon(opts: InitOptions, repoRoot: string): void {
 
   mkdirSync(plistDir, { recursive: true });
   mkdirSync(dirname(DAEMON_LOG_PATH), { recursive: true });
+  mkdirSync(workingDir, { recursive: true, mode: 0o700 });
 
-  if (exists && opts.force && isLoaded(DAEMON_LABEL)) {
+  if (exists && isLoaded(DAEMON_LABEL)) {
     launchctlUnload(DAEMON_PLIST_PATH);
   }
 
@@ -140,6 +160,21 @@ export function installDaemon(opts: InitOptions, repoRoot: string): void {
   console.log(`    [wrote] ${DAEMON_PLIST_PATH}`);
   launchctlLoad(DAEMON_PLIST_PATH);
   console.log(`    [loaded] ${DAEMON_LABEL} — dashboard on ${dashboardBaseUrl()}`);
+}
+
+/**
+ * True when launchd can't rely on the plist's WorkingDirectory: it's gone, or
+ * it's a versioned Cellar folder the next `brew upgrade` deletes (plists from
+ * 0.19.0 and earlier).
+ */
+export function workingDirStale(plistPath: string): boolean {
+  try {
+    const xml = readFileSync(plistPath, 'utf8');
+    const dir = /<key>WorkingDirectory<\/key>\s*<string>([^<]*)<\/string>/.exec(xml)?.[1];
+    return dir !== undefined && (CELLAR_DIR.test(dir) || !existsSync(dir));
+  } catch {
+    return false;
+  }
 }
 
 function installSkills(opts: InitOptions): void {
@@ -240,7 +275,7 @@ function printNextSteps(opts: InitOptions): void {
 
 export function renderDaemonPlist(args: {
   tokentrailBin: string;
-  repoRoot: string;
+  workingDir: string;
   trackerDbPath: string;
 }): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -256,7 +291,7 @@ export function renderDaemonPlist(args: {
     <string>--no-open</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>${args.repoRoot}</string>
+  <string>${args.workingDir}</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>TRACKER_DB_PATH</key>

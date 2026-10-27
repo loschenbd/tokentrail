@@ -72,6 +72,13 @@ within a minute and the dashboard is live at `http://127.0.0.1:4920`.
 Want Notion sync or richer PR data? `cp .env.example .env`, add
 `GITHUB_TOKEN` and/or `NOTION_TOKEN` + `NOTION_DATABASE_ID`, then run
 `tokentrail enrich` and `tokentrail sync` (see **Notion sync** below).
+On a Homebrew install the dashboard daemon reads its `.env` from
+`~/Library/Application Support/Tokentrail/`, one per Mac account.
+
+**Upgrading from 0.19.0 or earlier:** run `tokentrail init` once in each Mac
+account that uses Tokentrail. Older versions pointed the daemon at a Homebrew
+folder that `brew upgrade` deletes, so the daemon stopped starting and the
+menu bar showed "dashboard not running". `init` rewrites that setting.
 
 ## What Tokentrail does
 
@@ -513,6 +520,11 @@ dismissals, re-inference) need a per-user token kept in
 `~/Library/Application Support/Tokentrail/daemon-token`. The browser receives it
 as a cookie when you open the dashboard from the menu-bar app or with
 `tokentrail dashboard`.
+
+Upgrades reach every account. After `brew upgrade` (run from any account),
+each account's daemon restarts onto the new version within a minute and
+replaces that account's copy of the menu-bar app. An account that's logged
+out catches up at its next login.
 
 ### Light / dark theme
 

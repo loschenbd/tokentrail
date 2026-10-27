@@ -3,13 +3,19 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { renderDaemonPlist, resolveTokentrailBin, resolveTrackerDbPath } from '../src/commands/init.js';
+import {
+  daemonWorkingDir,
+  renderDaemonPlist,
+  resolveTokentrailBin,
+  resolveTrackerDbPath,
+  workingDirStale,
+} from '../src/commands/init.js';
 
 describe('renderDaemonPlist', () => {
   test('plist invokes the installed tokentrail bin and drops the tsx loader', () => {
     const plist = renderDaemonPlist({
       tokentrailBin: '/opt/homebrew/bin/tokentrail',
-      repoRoot: '/tmp/repo',
+      workingDir: '/tmp/repo',
       trackerDbPath: '/tmp/repo/data/tracker.db',
     });
     assert.match(plist, /<string>\/opt\/homebrew\/bin\/tokentrail<\/string>/);
@@ -23,12 +29,65 @@ describe('renderDaemonPlist', () => {
   test('plist pins TRACKER_DB_PATH so a brew daemon never opens a Cellar-local DB', () => {
     const plist = renderDaemonPlist({
       tokentrailBin: '/opt/homebrew/bin/tokentrail',
-      repoRoot: '/opt/homebrew/Cellar/tokentrail/0.2.6/libexec',
+      workingDir: '/Users/dev/Library/Application Support/Tokentrail',
       trackerDbPath: '/Users/dev/Projects/tokentrail/data/tracker.db',
     });
     assert.match(plist, /<key>EnvironmentVariables<\/key>/);
     assert.match(plist, /<key>TRACKER_DB_PATH<\/key>/);
     assert.match(plist, /<string>\/Users\/dev\/Projects\/tokentrail\/data\/tracker\.db<\/string>/);
+  });
+});
+
+describe('daemonWorkingDir', () => {
+  const stable = '/Users/dev/Library/Application Support/Tokentrail';
+
+  test('a brew install never puts the versioned Cellar folder in the plist', () => {
+    // `brew upgrade` deletes the old Cellar folder; launchd then can't chdir.
+    assert.equal(daemonWorkingDir('/opt/homebrew/Cellar/tokentrail/0.19.0/libexec', stable), stable);
+    assert.equal(daemonWorkingDir('/usr/local/Cellar/tokentrail/0.19.0', stable), stable);
+  });
+
+  test('a dev checkout keeps its repo root, so the daemon reads the repo .env', () => {
+    assert.equal(daemonWorkingDir('/Users/dev/Projects/tokentrail', stable), '/Users/dev/Projects/tokentrail');
+  });
+
+  test('the rendered plist names the directory it is given', () => {
+    const plist = renderDaemonPlist({
+      tokentrailBin: '/opt/homebrew/bin/tokentrail',
+      workingDir: daemonWorkingDir('/opt/homebrew/Cellar/tokentrail/0.19.0/libexec', stable),
+      trackerDbPath: '/x/tracker.db',
+    });
+    assert.match(plist, /<key>WorkingDirectory<\/key>\s*<string>\/Users\/dev\/Library\/Application Support\/Tokentrail<\/string>/);
+    assert.doesNotMatch(plist, /Cellar/);
+  });
+});
+
+describe('workingDirStale', () => {
+  const plistAt = (workingDir: string) => {
+    const path = join(mkdtempSync(join(tmpdir(), 'tt-plist-')), 'daemon.plist');
+    writeFileSync(path, renderDaemonPlist({ tokentrailBin: '/opt/homebrew/bin/tokentrail', workingDir, trackerDbPath: '/x/tracker.db' }));
+    return path;
+  };
+
+  test('true when the WorkingDirectory was deleted (an old Cellar folder)', () => {
+    assert.equal(workingDirStale(plistAt('/opt/homebrew/Cellar/tokentrail/0.0.0-gone/libexec')), true);
+  });
+
+  test('true for a Cellar folder that still exists: the next upgrade deletes it', () => {
+    const cellar = join(mkdtempSync(join(tmpdir(), 'tt-brew-')), 'Cellar', 'tokentrail', '0.19.0', 'libexec');
+    mkdirSync(cellar, { recursive: true });
+    assert.equal(workingDirStale(plistAt(cellar)), true);
+  });
+
+  test('false when the WorkingDirectory exists', () => {
+    assert.equal(workingDirStale(plistAt(mkdtempSync(join(tmpdir(), 'tt-wd-')))), false);
+  });
+
+  test('false when the plist is missing or names no WorkingDirectory', () => {
+    assert.equal(workingDirStale(join(tmpdir(), 'tt-no-such-plist.plist')), false);
+    const bare = join(mkdtempSync(join(tmpdir(), 'tt-plist-')), 'bare.plist');
+    writeFileSync(bare, '<plist><dict><key>Label</key><string>x</string></dict></plist>');
+    assert.equal(workingDirStale(bare), false);
   });
 });
 

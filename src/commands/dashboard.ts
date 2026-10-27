@@ -2,6 +2,7 @@ import open from 'open';
 import { buildServer } from '../dashboard/server.js';
 import { readSetupStatus, type SetupStatus } from '../dashboard/data/setup-status.js';
 import { claudeLimitsMonitor } from '../services/claude-limits.js';
+import { followInstalledVersion, isLaunchdDaemon } from './self-update.js';
 import {
   TOKEN_QUERY,
   currentUid,
@@ -49,6 +50,11 @@ export async function runDashboard(opts: DashboardOptions): Promise<void> {
     }
     console.error(holder.message);
     process.exit(1);
+  }
+  if (isLaunchdDaemon()) {
+    followInstalledVersion(() => app.close()).catch((err) => {
+      console.error('[daemon] could not follow the installed version:', err instanceof Error ? err.message : err);
+    });
   }
   const url = dashboardBaseUrl(opts.port);
   const openUrl = url + pickOpenPath(readSetupStatus());

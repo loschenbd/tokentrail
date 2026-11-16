@@ -32,11 +32,11 @@ spine, with enriched two-column content below.
 ├────────────────────────────┬──────────────┤
 │ TODAY'S BURN PATHS         │ TODAY  $28   │
 │  1 ▪ Research    $17 · 60% │  ▲13% vs yd  │
-│  2 ▪ side-project  $10 · 34% │              │
+│  2 ▪ side-proj   $10 · 34% │              │
 │                            ├──────────────┤
 │ SESSIONS TODAY · 4         │ SHIPPED      │
 │  09:02  deep-research  $11 │  2 PRs       │
-│  10:30  draft notes   $6  │  9 commits   │
+│  10:30  draft notes    $6  │  9 commits   │
 │                            ├──────────────┤
 │                            │ WORTH A LOOK │
 └────────────────────────────┴──────────────┘
